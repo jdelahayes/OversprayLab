@@ -1007,7 +1007,7 @@
     <legend>Effets des couches</legend>
     <div class="check"><input type="checkbox" id="fxAll" checked><label for="fxAll">Appliquer les effets</label></div>
     <div class="fxopts">
-      <div class="check" title="Empilement exclusif : ce qu'un effet ajoute à une couche (gonflement, ombre, halo peint…) est retiré des couches plus foncées, qui sinon le recouvriraient. Le Recouvrement n'est pas concerné (il passe dessous exprès)."><input type="checkbox" id="fxSync" checked><label for="fxSync">Les ajouts d'un effet passent devant les couches plus foncées</label></div>
+      <div class="check" title="Empilement exclusif : ce qu'un effet ajoute à une couche (gonflement, ombre, halo peint…) est retiré des couches plus foncées, qui sinon le recouvriraient. Décoché : les couches plus foncées gardent leurs zones et l'ajout n'est découpé que là où elles ne peignent pas. Le Recouvrement n'est pas concerné (il passe dessous exprès)."><input type="checkbox" id="fxSync" checked><label for="fxSync">Les ajouts d'un effet passent devant les couches plus foncées</label></div>
       <label class="full" for="fxFreed" title="Empilement exclusif : ce que deviennent les zones qu'un effet retire d'une couche (entre les points d'une trame, à l'intérieur d'un contour seul…). Couche qui entoure la zone : chaque zone de la couche prend la teinte qu'on trouve le plus le long de son bord (ou reste nue si c'est le support).">Zones retirées par un effet</label>
         <select id="fxFreed">
           <option value="support">support nu</option>
@@ -1602,6 +1602,34 @@ function layoutCalc() {
 // computation resolution (px_per_mm, 12 at most). Below it, the image is enlarged (blurred
 // edges); far above even the maximum, the extra pixels are lost and only slow things down.
 const RES_MAX_USEFUL = 24;   // px/mm: 2 × the maximum computation resolution
+const RES_TARGET = 18;       // px/mm kept by "Reduce": 1.5 × the maximum computation resolution
+// Size of the whole source image once reduced to RES_TARGET px/mm on the support (null = no gain).
+// Never under 1100 px on the longest side: the painted mask canvases keep their size.
+function downscaleSize() {
+  if (!IMG) return null;
+  const L = layoutCalc(), c = cropPx();
+  const hi = Math.max(c.w / L.w, c.h / L.h);
+  const k = Math.max(RES_TARGET / hi, 1100 / Math.max(IMG.w, IMG.h));
+  if (!(k < 0.95)) return null;
+  return { w: Math.round(IMG.w * k), h: Math.round(IMG.h * k) };
+}
+async function downscaleImage() {
+  const t = downscaleSize();
+  if (!t || !SID) return;
+  status("Réduction de l'image…");
+  let j;
+  try {
+    const r = await fetch("/api/downscale", { method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ id: SID, width: t.w, height: t.h }) });
+    j = await r.json();
+    if (!r.ok) return status(j.error || "Réduction impossible", true);
+  } catch (e) { return status("Serveur injoignable : " + e.message, true); }
+  const was = `${IMG.w} × ${IMG.h}`;
+  IMG = { ...IMG, w: j.width, h: j.height, src: j.original };
+  dropInfo(); cropInfo(); syncWidth();
+  status(`Image réduite de ${was} à ${j.width} × ${j.height} px (c'est cette image qui sera enregistrée dans le projet)`);
+  render(); recommend(false); process();
+}
 function resolutionWarning() {
   if (!IMG) return null;
   const L = layoutCalc(), c = cropPx(), ppm = val("px_per_mm");
@@ -1615,9 +1643,19 @@ function resolutionWarning() {
   return null;
 }
 function showResolutionWarning() {
-  const w = resolutionWarning(), e = $("resWarn");
+  const w = resolutionWarning(), e = $("resWarn"), t = w && downscaleSize();
   e.hidden = !w;
-  e.textContent = w ? "⚠ " + w : "";
+  e.replaceChildren();
+  if (!w) return;
+  e.append("⚠ " + w);
+  if (t) {
+    const b = document.createElement("button");
+    b.type = "button"; b.className = "vt-small"; b.style.cssText = "display:block; margin-top:6px";
+    b.textContent = `Réduire l'image à ${t.w} × ${t.h} px`;
+    b.title = "Remplace l'image chargée par une version réduite à la résolution utile pour sa taille sur le support (les masques peints suivent). Le fichier d'origine sur le disque n'est pas modifié ; le projet enregistré contiendra l'image réduite.";
+    b.onclick = downscaleImage;
+    e.append(b);
+  }
 }
 function syncWidth() {
   if (!IMG) return;
@@ -3235,14 +3273,17 @@ async function upload(file) {
 function setSession(j, name) {
   SID = j.id;
   DIRTY = false; updateCalcBtn();
-  IMG = { w: j.width, h: j.height, src: j.original };
+  IMG = { w: j.width, h: j.height, src: j.original, name, gray: j.gray };
   CROP = { x: 0, y: 0, w: 1, h: 1 };
   createMask(); createSubj(); createSil();
   $("crop_ratio").value = "free";
   $("image_scale").value = 100; $("image_pos_x").value = 50; $("image_pos_y").value = 50;
   setHF(1); $("keep_ratio").checked = true;
   showValues(); cropInfo();
-  $("dropInner").innerHTML = `<img src="${j.original}"><b>${name}</b><br>${j.width}×${j.height} px · ${j.gray ? "noir & blanc" : "couleur"}`;
+  dropInfo();
+}
+function dropInfo() {
+  $("dropInner").innerHTML = `<img src="${IMG.src}"><b>${IMG.name}</b><br>${IMG.w}×${IMG.h} px · ${IMG.gray ? "noir & blanc" : "couleur"}`;
 }
 
 // ---------------- Project: export / reopen ----------------

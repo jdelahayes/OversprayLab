@@ -189,7 +189,10 @@ ratio can be free, the support's, or fixed (1:1, 4:3, 3:4, 16:9, 9:16).
 A warning appears when the image resolution does not suit its size on the support: below the
 computation resolution (default 6 px/mm, e.g. 2 460 × 1 980 px for a 6F canvas filled), the
 image is enlarged and its edges are blurred; above 24 px/mm (twice the maximum computation
-resolution), the extra pixels are useless and only slow things down.
+resolution), the extra pixels are useless and only slow things down; its **Reduce the image**
+button then resamples the loaded image to 18 px/mm on the support (never under 1100 px), the
+painted masks follow, and the saved project contains the reduced image (the file on the disk is
+not changed).
 
 Anything outside the support is trimmed (full bleed). With the **Mat** button on, the cutting mat is
 drawn with its inch grid, so you immediately see whether the sheet fits.
@@ -484,7 +487,7 @@ The effects are grouped by category in the **+ Add…** list.
 | | **Pattern** | Repeated diamonds, hexagons, bricks or stars, cut by the shape (size, joint). |
 | Structure | **Outline only** | Keeps a band along the edge of each shape: a flat area becomes an outlined stroke. |
 | | **Drop shadow** | Adds a shifted copy of the layer to another layer (0 = the darkest). |
-| | **Halo / border** | Band around the shapes, at a given distance: left as bare support (layer 0, white sticker border) or painted by another layer. |
+| | **Halo / border** | Band around the shapes, at a given distance: left as bare support (layer 0, white sticker border) or painted by another layer. *Breaks every* (0 = continuous) alternates cuts in the halo and tabs joining it to the shape across the distance, so the halo isolates no material and needs no bridges. |
 | | **Blend between layers** | Halftone transition (dots, bands along the border or interlocking comb) in a band across the border with the neighbouring layers and/or the bare support. What the layer takes is removed from the other layer, what it gives up goes to it. |
 | | **Mosaic / stained glass** | Cuts the openings into irregular shards separated by material joints; a large stencil gets stiffer. |
 | | **Decorative bridges** | Strips of material forming parallel lines, a grid or rays: the bridges become part of the style. |
@@ -508,7 +511,10 @@ the same settings line up from one layer to the next.
   section pass the changes made by the effects on to the other layers:
   - *What an effect adds goes in front of the darker layers* (on by default): what an effect adds
     to a layer (grow, drop shadow, painted halo…) is removed from the darker layers, which would
-    otherwise paint over it. Overlap is not concerned, it goes under on purpose.
+    otherwise paint over it. Unticked, the darker layers keep their areas and the addition is only
+    cut where they do not paint. Overlap is not concerned, it goes under on purpose.
+  - In any case, what an effect adds to a layer is removed from the lighter layers (painted before
+    and hidden by it): each spot of the support stays painted by a single layer.
   - *Areas removed by an effect*: **bare support** (default), **layer surrounding the area** (each
     area of the layer gives what was freed in it to the tone found most along its border, or
     leaves it bare when the support surrounds it) or

@@ -229,6 +229,12 @@ EFFECTS: dict[str, dict] = {
             _f("width_mm", "Largeur", 0.3, 30, 0.1, 2, "mm", "Largeur de la bande du halo"),
             _i("layer", "Couche du halo", 0, 10, 0,
                "0 = support nu (le halo est retiré de toutes les autres couches) ; sinon numéro de la couche qui peint le halo"),
+            _f("break_every_mm", "Interruptions tous les", 0, 300, 1, 0, "mm",
+               "Évite que le halo isole de la matière (îlots à tenir par des ponts) : à intervalles réguliers le "
+               "long du contour, coupures dans le halo peint par une couche, et attaches qui relient le halo à "
+               "la forme quand une distance les sépare (0 = halo continu)"),
+            _f("break_mm", "Largeur des interruptions", 0.3, 20, 0.1, 2, "mm",
+               "Largeur de chaque coupure ou attache (sans effet si le halo est continu)"),
         ],
     },
     "blend": {
@@ -609,6 +615,9 @@ def fx_drips(mask, ctx, a):
     for k in order:
         x, y = int(xs[k]), int(ys[k])
         cx, cy = int(x // dmin), int(y // dmin)
+        below = m[y + 1:y + 1 + int(4 * w0), x]   # the shape again just below (hole of a letter,
+        if below.any():                             # narrow gap): a drip would only fill it
+            continue
         if any((x - px) ** 2 + (y - py) ** 2 < dmin * dmin
                for i in (-1, 0, 1) for j in (-1, 0, 1) for px, py in cell.get((cx + i, cy + j), ())):
             continue
@@ -616,20 +625,49 @@ def fx_drips(mask, ctx, a):
         picked.append((x, y))
     drips = np.zeros_like(mask)
     for x, y in sorted(picked):
-        r = rng.random(3)
-        ln = lmax * (1 - var * r[0])
-        w = w0 * (1 + var * 0.6 * (r[1] - 0.5))
-        if ln < w:
-            continue
-        x2 = x + int(round(var * w * 0.3 * (r[2] - 0.5)))        # slight slant
-        y2 = int(round(y + ln - w * 0.6))
-        cv2.line(drips, (x, int(round(y - w))), (x2, y2), 255, max(1, int(round(w))), cv2.LINE_8)
-        cv2.circle(drips, (x2, y2), max(1, int(round(w * 0.65))), 255, -1, cv2.LINE_8)   # end drop
+        _draw_drip(drips, x, y, lmax, w0, var, rng)
     out = mask | drips
-    # fillets where a drip leaves the shape (paint gathering), only around the drips
+    # paint gathering where a drip leaves the shape (wide fillet), then soft organic outlines,
+    # only around the drips
     closed = cv2.morphologyEx(out, cv2.MORPH_CLOSE, _disk(w0 * 0.8))
     near = cv2.dilate(drips, _disk(w0 * 1.5))
-    return out | (closed & near)
+    out = out | (closed & near)
+    soft = cv2.GaussianBlur(out, (0, 0), max(0.7, w0 * 0.25)) >= 128
+    return np.where(near > 0, _u8(soft), out)
+
+
+def _draw_drip(dst, x0, y0, lmax, w0, var, rng):
+    """One paint drip hanging from (x0, y0): wide where the paint leaves the edge, thinning down,
+    wavy sides and path, ending in an elongated drop. Short ones are only a sag of the edge."""
+    r = rng.random(8)
+    # lengths: many short drips, a few long ones
+    ln = lmax * (1 - var * (1 - r[0] ** 2.2))
+    w = w0 * (1 + var * 0.7 * (r[1] - 0.5))
+    hw0 = w / 2
+    if ln < 2.5 * w or r[2] < 0.15 * var:           # a sag: paint gathered on the edge, no run
+        rx, ry = w * (1.0 + 0.8 * r[3]), w * (0.5 + 0.5 * r[4])
+        cv2.ellipse(dst, (int(x0 * 4), int((y0 + ry * 0.4) * 4)), (int(rx * 4), int(ry * 4)),
+                    0, 0, 360, 255, -1, cv2.LINE_8, 2)
+        return
+    n = max(8, int(ln))
+    d = np.linspace(-w, ln, n)                       # distance below the edge (starts inside the shape)
+    dd = np.clip(d, 0, None)
+    # smooth 1D noise: two sines with random phases and wavelengths of a few widths
+    def wob(a, b):
+        return (np.sin(2 * np.pi * d / (w * (3 + 3 * a)) + 6.3 * b)
+                + 0.6 * np.sin(2 * np.pi * d / (w * (8 + 6 * b)) + 6.3 * a)) / 1.6
+    hw = hw0 * (1 + 1.0 * np.exp(-dd / (0.6 * w)))   # meniscus at the edge
+    hw *= 1 - 0.3 * dd / ln                          # thinner downwards
+    hw *= 1 + 0.15 * var * wob(r[3], r[4])
+    cx = x0 + (r[5] - 0.5) * var * w * 1.2 * dd / ln + 0.25 * var * w * wob(r[6], r[7]) * dd / ln
+    left = np.stack([cx - hw, y0 + d], 1)
+    right = np.stack([cx + hw, y0 + d], 1)[::-1]
+    poly = np.round(np.vstack([left, right]) * 4).astype(np.int32)
+    cv2.fillPoly(dst, [poly], 255, cv2.LINE_8, 2)
+    # end drop: elongated, a little wider than the run
+    rb = hw[-1] * (1.35 + 0.3 * r[2])
+    cv2.ellipse(dst, (int(cx[-1] * 4), int((y0 + ln - rb * 0.3) * 4)), (int(rb * 4), int(rb * 1.3 * 4)),
+                0, 0, 360, 255, -1, cv2.LINE_8, 2)
 
 
 def fx_offset(mask, ctx, a):
@@ -801,6 +839,36 @@ def fx_shadow(mask, ctx, a):
     return mask
 
 
+def _outline_phase(mask, every_px: float):
+    """For every pixel, the position along the nearest outline of the shapes, in periods (whole
+    number of periods per outline, at least one), and the period length (px) on that outline."""
+    cnts, _ = cv2.findContours(mask, cv2.RETR_LIST, cv2.CHAIN_APPROX_NONE)
+    if not cnts:
+        return None, None
+    H, W = mask.shape
+    src = np.ones((H, W), np.uint8)
+    pos = np.zeros((H, W), np.float32)            # position on its outline, in "period" units
+    per = np.zeros((H, W), np.float32)            # length of one period on that outline (px)
+    for c in cnts:
+        p = c[:, 0, :]
+        seg = np.hypot(*np.diff(np.vstack([p, p[:1]]), axis=0).T)
+        length = float(seg.sum())
+        if length < 1:
+            continue
+        n = max(1, int(round(length / every_px)))
+        s = np.concatenate([[0.0], np.cumsum(seg)[:-1]])
+        src[p[:, 1], p[:, 0]] = 0
+        pos[p[:, 1], p[:, 0]] = s * n / length
+        per[p[:, 1], p[:, 0]] = length / n
+    _, lab = cv2.distanceTransformWithLabels(src, cv2.DIST_L2, 5, labelType=cv2.DIST_LABEL_PIXEL)
+    zy, zx = np.nonzero(src == 0)                  # labels number the zero pixels in raster order
+    lut_pos = np.zeros(len(zy) + 1, np.float32)
+    lut_per = np.ones(len(zy) + 1, np.float32)
+    lut_pos[lab[zy, zx]] = pos[zy, zx]
+    lut_per[lab[zy, zx]] = per[zy, zx]
+    return np.mod(lut_pos[lab], 1.0), lut_per[lab]
+
+
 def fx_halo(mask, ctx, a):
     if not mask.any():
         return mask
@@ -808,6 +876,19 @@ def fx_halo(mask, ctx, a):
     do = _dist_outside(mask)
     ring = _u8((do > a["gap_mm"] * ppm) & (do <= (a["gap_mm"] + a["width_mm"]) * ppm))
     j = ctx.target(int(a["layer"]), default_last=False)
+    if a["break_every_mm"] > 0:
+        # A continuous halo isolates material: the halo painted by a layer encloses the inside in
+        # that layer's stencil (-> cuts in the halo), and a halo away from the shape is an island in
+        # the stencil of the layer painting the gap (-> tabs joining it to the shape across the
+        # gap). Cuts and tabs alternate along the outline.
+        ph, per = _outline_phase(mask, a["break_every_mm"] * ppm)
+        if ph is not None:
+            b = a["break_mm"] * ppm
+            if j is not None:
+                ring = ring & ~_u8(ph * per < b) & 255
+            if a["gap_mm"] > 0:
+                tab = (np.abs(ph - 0.5) * per < b / 2) & (do > 0) & (do <= a["gap_mm"] * ppm + 1)
+                ring = ring | _u8(tab)
     if j is None:                                  # bare support: the ring is removed from the others
         for k in range(len(ctx.masks)):
             if k != ctx.index and (ctx.masks[k] & ring).any():
@@ -1053,14 +1134,34 @@ def pass_on(orig: list, out: list, ctx: Context, changed: set, opts: dict) -> se
         if ctx.bare is not None:                      # halo left as bare support on purpose
             lost[i] &= ~ctx.bare & 255
     touched = set()
-    if opts["sync"]:
-        for i in sorted(gained):
-            if not gained[i].any():
-                continue
+    for i in sorted(gained):
+        if not gained[i].any():
+            continue
+        if opts["sync"]:
             for k in range(i + 1, n):                 # darker layers, painted later: they would hide it
                 if (out[k] & gained[i]).any():
                     out[k] = out[k] & ~gained[i] & 255
                     touched.add(k)
+        else:                                         # the darker layers keep their areas: what they
+            hidden = np.zeros_like(gained[i])         # would hide is not cut in this layer
+            for k in range(i + 1, n):
+                hidden |= out[k]
+            hidden &= gained[i]
+            if hidden.any():
+                out[i] = out[i] & ~hidden & 255
+                touched.add(i)
+    # each spot of the support painted by one layer only: what a layer gained (and still has after
+    # the step above) is removed from the lighter layers, painted before and hidden by it anyway.
+    # Overlap is kept: it goes under the darker layers on purpose.
+    for i in sorted(gained):
+        g = gained[i] & out[i]
+        if not g.any():
+            continue
+        for k in range(i):
+            rm = g & ~ctx.under[k] & 255 if k in ctx.under else g
+            if (out[k] & rm).any():
+                out[k] = out[k] & ~rm & 255
+                touched.add(k)
     if opts["freed"] != "support":
         for i in sorted(lost):
             free = lost[i].copy()

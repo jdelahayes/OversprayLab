@@ -180,6 +180,43 @@ def new_session(img: np.ndarray, raw: bytes, filename: str) -> dict:
                 filename=Path(filename).name)
 
 
+@app.post("/api/downscale")
+def api_downscale():
+    """Reduces the session image (too large for its size on the support) to width x height:
+    painted masks and subject cut-out follow, caches are dropped, and the reduced image replaces
+    the original in the project export."""
+    data = request.get_json(force=True)
+    sess = SESSIONS.get(data.get("id", ""))
+    if not sess:
+        return jsonify(error="Session inconnue, rechargez l'image"), 404
+    h0, w0 = sess["img"].shape[:2]
+    try:
+        w, h = int(data.get("width")), int(data.get("height"))
+    except (TypeError, ValueError):
+        return jsonify(error="Taille invalide"), 400
+    if not (1 <= w < w0 and 1 <= h < h0):
+        return jsonify(error="La nouvelle taille doit être plus petite que l'image"), 400
+    with LOCK:
+        img = cv2.resize(sess["img"], (w, h), interpolation=cv2.INTER_AREA)
+        sess["img"] = img
+        def fit(m):
+            return cv2.resize(m, (w, h), interpolation=cv2.INTER_NEAREST)
+        for k in ("mask", "silmask", "subject"):
+            if sess.get(k) is not None:
+                sess[k] = fit(sess[k])
+        for zid, m in (sess.get("zmasks") or {}).items():
+            sess["zmasks"][zid] = fit(m)
+        if sess.get("fg") is not None:
+            sess["fg"] = fit(sess["fg"].astype(np.uint8)) > 0
+            sess["fg_ver"] = sess.get("fg_ver", 0) + 1
+        for k in ("prep", "prep_key", "reco", "sem"):
+            sess.pop(k, None)
+        jpeg = sess.get("ext") in (".jpg", ".jpeg")
+        ok, buf = cv2.imencode(".jpg" if jpeg else ".png", img, [cv2.IMWRITE_JPEG_QUALITY, 95] if jpeg else [])
+        sess["raw"], sess["ext"] = buf.tobytes(), (sess["ext"] if jpeg else ".png")
+    return jsonify(width=w, height=h, original=png_b64(img))
+
+
 @app.post("/api/recommend")
 def api_recommend():
     data = request.get_json(force=True)
