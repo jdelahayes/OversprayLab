@@ -40,6 +40,29 @@ Hard-won constraints, verified by the author in Silhouette Studio – do not "cl
   (git-ignored), pinned by size + SHA-256. Never commit the `.onnx` files.
 - Embedding cached per session (`sess["sem"]`); a subject mask containing an object selection is
   "exact" (`subject_exact`, project key `masque_sujet_exact`): used as is, no GrabCut.
+- Exception: `stencilit/edge_model/teed_biped7.onnx` (TEED, 250 kB, MIT, licence file next to it)
+  is committed on purpose (author's choice: no official ONNX exists to download). Regenerate it
+  with `tools/export_teed_onnx.py` (needs PyTorch in a separate environment, never in `.venv`).
+
+## Key-detail selection
+
+- Every method selects with a hysteresis along the lines. Canny and ridges start from fewer points
+  (`hyst_seed_share`, `HYST_SEED_DIV`): the divisors set how much line a sensitivity keeps (the
+  author chose about 2 to 3 times more than the former point-by-point selection at sensitivity 50);
+  re-measure before changing either.
+- DoG: the strength is averaged along the contours (`_along_contours`), which needs a longer
+  hysteresis reach: the zone setting `outline_follow_mm` (zone key `follow_mm`, default
+  `HYST_MM_DOG` = 12, also for zones saved before it existed). With the 4 mm of the other methods,
+  long clean lines (logos) come out with wide gaps at medium sensitivity. Tried and rejected for the DoG: several scales and
+  hue channels (double lines on sharp contours), denoising (no visible gain).
+- FDoG (`fdog`, `_fdog_strength`): DoG averaged along curved streamlines of the structure-tensor
+  flow (2 mm, 2 px steps); needs only 4 mm of following. Slow (~3 s on a 3 Mpx zone), so its
+  strength map is cached (LRU of 4, keyed by a hash of the channels). An iterative ETF flow gave
+  the same lines, rounded T-junctions and was 3x slower: not used.
+- TEED (`teed`, `stencilit/teed.py`): strength = network logits (not the sigmoid, which
+  saturates at 1 on every line and leaves the sensitivity without effect); lines = crest of the
+  smoothed logits (a skeleton gave the same lines 5x slower). Uses `outline_follow_mm`
+  (advised 8 mm); the zone's channel setting is ignored (hidden in the UI).
 
 ## Testing in the browser
 

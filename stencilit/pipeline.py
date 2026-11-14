@@ -11,15 +11,19 @@ import json
 import math
 import re
 import os
+import threading
+from collections import OrderedDict
+from hashlib import blake2b
 from dataclasses import dataclass, field, fields, replace
 
 import cv2
 import numpy as np
 
 from . import effects as fxmod
+from . import teed
 
 
-OUTLINE_METHODS = ("canny", "xdog", "ridge")
+OUTLINE_METHODS = ("canny", "xdog", "fdog", "ridge", "teed")
 OUTLINE_TARGETS = ("stencil", "darkest", "nearest")
 OUTLINE_REFS = ("layers", "effects", "image")
 CLOSE_LINES = ("", "median", "outer", "inner")
@@ -92,6 +96,10 @@ class Params:
     # what the lines are looked for in: light = lightness (L*); colour = colourfulness (chroma),
     # where a shadow hardly shows while a black / grey line stays sharp; both = either
     outline_channel: str = "light"
+    # drawn lines (DoG, FDoG) and TEED: how far, in mm, a kept line is followed along itself where it stays nearly
+    # as marked (hysteresis); 0 = point by point. Longer = lines in one piece, but also faint ones
+    # extended from a strong start (default = HYST_MM_DOG)
+    outline_follow_mm: float = 12.0
     outline_subject: bool = False       # also draw the outline of a mask (silhouette of the subject)
     outline_subject_mask: str = "subject"   # mask whose outline is drawn: subject | outline | silhouette
     outline_subject_weak: bool = False      # silhouette only where the edge stands out poorly in the render
@@ -183,6 +191,7 @@ class Params:
         if 0 < p.outline_subject_gap_every_mm < 5:
             p.outline_subject_gap_every_mm = 5.0
         p.outline_subject_gap_mm = float(np.clip(p.outline_subject_gap_mm, 0.3, 20))
+        p.outline_follow_mm = float(np.clip(p.outline_follow_mm, 0, 50))
         p.px_per_mm = float(np.clip(p.px_per_mm, 2, 16))
         p.support_w_mm = float(np.clip(p.support_w_mm, 20, 3000))
         p.support_h_mm = float(np.clip(p.support_h_mm, 20, 3000))
@@ -1580,7 +1589,7 @@ def outline_plan(p: Params) -> tuple[list, dict, str]:
     zones = [dict(id="z1", name="Zone 1", on=True, method=p.outline_method, sensitivity=p.outline_sensitivity,
                   width_mm=p.outline_width_mm, min_length_mm=p.outline_min_length_mm, dest=legacy,
                   ref=p.outline_ref, whole=bool(p.outline_whole_lines), line_sens=p.outline_line_sens,
-                  close=p.outline_close_lines, channel=p.outline_channel)]
+                  close=p.outline_close_lines, channel=p.outline_channel, follow_mm=p.outline_follow_mm)]
     sil = legacy
     try:
         data = json.loads(p.outline_zones) if p.outline_zones else None
@@ -1614,7 +1623,8 @@ def outline_plan(p: Params) -> tuple[list, dict, str]:
                           dest=dest, ref=z.get("ref") if z.get("ref") in OUTLINE_REFS else "layers",
                           close=z.get("close") if z.get("close") in CLOSE_LINES else "",
                           channel=z.get("channel") if z.get("channel") in OUTLINE_CHANNELS else "light",
-                          whole=z.get("whole") is True, line_sens=num("line_sens", 0, 100, 50.0)))
+                          whole=z.get("whole") is True, line_sens=num("line_sens", 0, 100, 50.0),
+                          follow_mm=num("follow_mm", 0, 50, HYST_MM_DOG)))
     if not zones:
         return outline_plan(replace(p, outline_zones=""))
     sil = data.get("sil_dest") if ok_dest(data.get("sil_dest")) else zones[0]["dest"]
@@ -1631,6 +1641,7 @@ def zone_params(p: Params, z: dict) -> Params:
                    outline_sensitivity=z["sensitivity"], outline_width_mm=z["width_mm"],
                    outline_min_length_mm=z["min_length_mm"], outline_ref=z["ref"], outline_whole_lines=z["whole"],
                    outline_line_sens=z["line_sens"], outline_close_lines=z["close"], outline_channel=z["channel"],
+                   outline_follow_mm=z["follow_mm"],
                    outline_target="stencil" if _GROUP.match(z["dest"]) else z["dest"])
 
 
@@ -1714,7 +1725,7 @@ def _line_response(L: np.ndarray, ppm: float, method: str, dark: bool,
     if method == "xdog":
         sig = max(0.8, 0.15 * ppm)
         d = cv2.GaussianBlur(L, (0, 0), 1.6 * sig) - cv2.GaussianBlur(L, (0, 0), sig)
-        return np.maximum(sign * d, 0)
+        return _along_contours(np.maximum(sign * d, 0), L, ppm)
     resp = np.zeros(L.shape, np.float32)
     for smm in scales:                           # default: line widths of ~0.3 to ~1.2 mm
         sig = max(0.8, smm * ppm)
@@ -1733,10 +1744,131 @@ def _line_response(L: np.ndarray, ppm: float, method: str, dark: bool,
     return resp
 
 
+def _along_contours(resp: np.ndarray, L: np.ndarray, ppm: float, length_mm: float = 1.5,
+                    n: int = 12) -> np.ndarray:
+    """Line strength averaged along the local direction of the contours (structure tensor of `L`,
+    Gaussian weights over ~`length_mm`): the strength of a line no longer flickers from point to
+    point, so it is kept in one piece, while isolated responses (texture, grain) fade."""
+    sig = max(1.0, 0.3 * ppm)
+    g = cv2.GaussianBlur(L, (0, 0), sig)
+    gx = cv2.Sobel(g, cv2.CV_32F, 1, 0, ksize=3)
+    gy = cv2.Sobel(g, cv2.CV_32F, 0, 1, ksize=3)
+    jxx = cv2.GaussianBlur(gx * gx, (0, 0), 2 * sig)
+    jyy = cv2.GaussianBlur(gy * gy, (0, 0), 2 * sig)
+    jxy = cv2.GaussianBlur(gx * gy, (0, 0), 2 * sig)
+    ang = 0.5 * np.arctan2(2 * jxy, jxx - jyy) + np.pi / 2           # direction along the contour
+    pos = (ang / (np.pi / n)) % n                                    # ... among n directions
+    half = max(2, int(round(length_mm * ppm / 2)))
+    out = np.zeros_like(resp)
+    for k in range(n):
+        th = k * np.pi / n
+        ker = np.zeros((2 * half + 3, 2 * half + 3), np.float32)
+        for t in np.linspace(-half, half, 8 * half + 1):             # line kernel, bilinear splat
+            x, y = half + 1 + t * np.cos(th), half + 1 + t * np.sin(th)
+            x0, y0 = int(np.floor(x)), int(np.floor(y))
+            fx, fy, w = x - x0, y - y0, np.exp(-(t / (half / 1.5)) ** 2 / 2)
+            ker[y0, x0] += w * (1 - fx) * (1 - fy); ker[y0, x0 + 1] += w * fx * (1 - fy)
+            ker[y0 + 1, x0] += w * (1 - fx) * fy; ker[y0 + 1, x0 + 1] += w * fx * fy
+        # each point blends its two nearest directions (a hard choice breaks curved lines where
+        # the direction changes bin)
+        d = np.abs(pos - k)
+        wk = np.maximum(0.0, 1.0 - np.minimum(d, n - d)).astype(np.float32)
+        out += wk * cv2.filter2D(resp, cv2.CV_32F, ker / ker.sum())
+    return out
+
+
+def _contrast_factor(L: np.ndarray, region: np.ndarray | None) -> float:
+    """Factor (0.3..1) applied to the noise floor of the DoG: 1 for an image of ordinary contrast
+    (5th to 95th percentile of L* 70 units apart or more), lower for a flatter one, down to 0.3.
+    Measured inside the zone when one is painted."""
+    v = L[region.astype(bool)] if region is not None and region.any() else L
+    return float(np.clip((np.percentile(v, 95) - np.percentile(v, 5)) / 70.0, 0.3, 1.0))
+
+
+FDOG_SMOOTH_MM = 2.0     # FDoG: length (sigma) of the averaging along the flow of the contours
+FDOG_STEP_PX = 2.0       # ... step of the streamlines (1 px: hardly better, twice as slow)
+_FDOG_CACHE: OrderedDict = OrderedDict()     # FDoG strength maps of the last images (slow to compute)
+_FDOG_LOCK = threading.Lock()
+
+
+def _fdog_strength(chans: list, ppm: float, dark: bool) -> np.ndarray:
+    """Line strength of the flow-based DoG (FDoG, after Kang, Lee & Chui 2007): the DoG of each
+    channel (max over the channels), averaged along the streamlines of the contours over
+    ~FDOG_SMOOTH_MM on each side. Unlike `_along_contours` (straight segments), the streamlines
+    bend with the contours, so curved lines (curls, rounded ends, letters) stay continuous with a
+    short hysteresis. The direction comes from the smoothed structure tensor of the first channel
+    (an iterative Edge Tangent Flow gave the same lines, rounded the T-junctions and was 3x
+    slower). Cached: the detection preview recomputes it at each change of sensitivity."""
+    h = blake2b(digest_size=16)
+    for c in chans:
+        h.update(np.ascontiguousarray(c, np.float32).tobytes())
+    key = (h.hexdigest(), chans[0].shape, round(ppm, 3), dark)
+    with _FDOG_LOCK:
+        if key in _FDOG_CACHE:
+            _FDOG_CACHE.move_to_end(key)
+            return _FDOG_CACHE[key]
+    sign = 1.0 if dark else -1.0
+    sc = max(0.8, 0.15 * ppm)
+    resp = None
+    for c in chans:
+        c = c.astype(np.float32)
+        d = np.maximum(sign * (cv2.GaussianBlur(c, (0, 0), 1.6 * sc) - cv2.GaussianBlur(c, (0, 0), sc)), 0)
+        resp = d if resp is None else np.maximum(resp, d)
+    # tangent of the contours (structure tensor of the first channel)
+    L = chans[0].astype(np.float32)
+    sig = max(1.0, 0.3 * ppm)
+    g = cv2.GaussianBlur(L, (0, 0), max(0.8, 0.15 * ppm))
+    gx = cv2.Sobel(g, cv2.CV_32F, 1, 0, ksize=3)
+    gy = cv2.Sobel(g, cv2.CV_32F, 0, 1, ksize=3)
+    jxx = cv2.GaussianBlur(gx * gx, (0, 0), sig)
+    jyy = cv2.GaussianBlur(gy * gy, (0, 0), sig)
+    jxy = cv2.GaussianBlur(gx * gy, (0, 0), sig)
+    ang = 0.5 * np.arctan2(2 * jxy, jxx - jyy) + np.pi / 2
+    tx, ty = np.cos(ang).astype(np.float32), np.sin(ang).astype(np.float32)
+    H, W = L.shape
+    X, Y = np.meshgrid(np.arange(W, dtype=np.float32), np.arange(H, dtype=np.float32))
+    samp = lambda img, mx, my: cv2.remap(img, mx, my, cv2.INTER_LINEAR, borderMode=cv2.BORDER_REPLICATE)
+    sm = max(1.0, FDOG_SMOOTH_MM * ppm)
+    acc, wsum = resp.copy(), 1.0
+    for sgn in (1.0, -1.0):              # both ways along the streamline through each pixel
+        px, py = X.copy(), Y.copy()
+        dx, dy = sgn * tx, sgn * ty
+        for i in range(1, int(np.ceil(2 * sm / FDOG_STEP_PX)) + 1):
+            px += FDOG_STEP_PX * dx; py += FDOG_STEP_PX * dy
+            ntx, nty = samp(tx, px, py), samp(ty, px, py)
+            flip = (ntx * dx + nty * dy) < 0          # the tangent has no sign: keep going forward
+            ntx[flip] *= -1; nty[flip] *= -1
+            n = cv2.magnitude(ntx, nty)
+            ok = n > 1e-6                            # undefined direction: keep the previous one
+            dx = np.where(ok, ntx / np.maximum(n, 1e-6), dx)
+            dy = np.where(ok, nty / np.maximum(n, 1e-6), dy)
+            u = i * FDOG_STEP_PX
+            w = float(np.exp(-u * u / (2 * sm * sm)))
+            acc += w * samp(resp, px, py); wsum += w
+    out = (acc / np.float32(wsum)).astype(np.float32)
+    with _FDOG_LOCK:
+        _FDOG_CACHE[key] = out
+        while len(_FDOG_CACHE) > 4:
+            _FDOG_CACHE.popitem(last=False)
+    return out
+
+
+# methods whose hysteresis reach is the zone setting `outline_follow_mm` (others: HYST_MM)
+FOLLOW_METHODS = ("xdog", "fdog", "teed")
+# TEED: logit above which a pixel is on a line (background ~ -0.2), strength = logit x this
+TEED_EDGE, TEED_SCALE = 0.5, 10.0
 # noise floor of each method (L* units): weaker responses are never candidates
-_LINE_FLOOR = {"xdog": 1.5, "ridge": 2.0}
+_LINE_FLOOR = {"xdog": 1.5, "fdog": 1.5, "ridge": 2.0}
 # hysteresis of the key-detail selection (see detect_key_details)
 HYST_MM, HYST_LOSS, HYST_SCORE = 4.0, 0.6, 0.4
+# DoG: its line strength is averaged along the contours (_along_contours), so a line near the
+# selection limit is above or below it over long stretches: it is followed farther (default of
+# the zone setting `outline_follow_mm`; with 4 mm, long clean lines get wide gaps)
+HYST_MM_DOG = 12.0
+# Canny / ridges: seeds = share of the sensitivity / up to this (see hyst_seed_share). Measured on
+# test images: 9 / 5 keep about as much line at a sensitivity as without the hysteresis; 3 / 2
+# keep about 2 to 3 times more at sensitivity 50 (chosen: the same amount looked no different)
+HYST_SEED_DIV = {"canny": 3.0, "ridge": 2.0}
 
 
 def thin_features(L100: np.ndarray, ppm: float, floor: float = 6.0) -> np.ndarray:
@@ -1826,6 +1958,18 @@ def outline_keep_share(sensitivity: float) -> float:
     """Share of the candidate edge points kept by the outline sensitivity (0..100), progressive
     scale: 1 % at 0, 95 % at 100, each step multiplies it by ~1.05."""
     return 0.01 * 95.0 ** (float(np.clip(sensitivity, 0, 100)) / 100.0)
+
+
+def hyst_seed_share(method: str, keep_share: float) -> float:
+    """Share of the candidate points the selection starts from, before the hysteresis extends them
+    along their lines. DoG: the share of the sensitivity (its scale was calibrated with the
+    hysteresis). Canny / ridges: fewer (`HYST_SEED_DIV`), otherwise a sensitivity would keep far
+    more line than when they were selected point by point."""
+    d0 = HYST_SEED_DIV.get(method)
+    if d0 is None:
+        return keep_share
+    # the divisor fades out towards the top of the scale, where nearly every point is kept anyway
+    return keep_share / (1.0 + (d0 - 1.0) * (1.0 - keep_share) ** 3)
 
 
 def gap_lines(line: np.ndarray, p: Params) -> tuple[np.ndarray, np.ndarray | None]:
@@ -2204,7 +2348,9 @@ def detect_key_details(prep: Prepared, sim: np.ndarray, p: Params,
 
     1. Candidate lines of the original, by the chosen method (`p.outline_method`):
        canny = sharp edges (thresholds on L*, a*, b*); xdog = drawn line (difference of Gaussians);
-       ridge = centre line of thin strokes (Hessian). `dark`: polarity of the lines for xdog / ridge.
+       fdog = drawn line averaged along the flow of the contours; ridge = centre line of thin
+       strokes (Hessian); teed = learned edges (TEED network). `dark`: polarity of the lines
+       for xdog / fdog / ridge.
     2. Only those where the local contrast of the simulated render is clearly lower than the
        original's are kept (lost or faded detail).
     3. Lines that are too short are removed, then thickened to the line width.
@@ -2239,6 +2385,14 @@ def detect_key_details(prep: Prepared, sim: np.ndarray, p: Params,
     if not p.outline:
         edges = np.zeros(ref.shape[:2], bool)
         strength = g_ref
+    elif method == "teed":
+        # learned edges (TEED): one centre line per edge (crest of the network's smoothed
+        # logits; a skeleton of its lines gave the same lines 5x slower); the strength is the
+        # network's confidence, so the sensitivity keeps the surest lines first. The channel
+        # setting is not used (the network looks at the colour image).
+        lg = teed.logits(ref)
+        strength = np.maximum(cv2.GaussianBlur(lg, (0, 0), 1.0), 0) * TEED_SCALE
+        edges = _crest(strength, TEED_EDGE * TEED_SCALE)
     elif method == "canny":
         # Canny on the luminance AND on the colour channels (a, b), to also catch details as
         # bright as their surroundings; "colour" only: on a and b (a shadow mostly changes L*).
@@ -2257,14 +2411,17 @@ def detect_key_details(prep: Prepared, sim: np.ndarray, p: Params,
         # chroma (C*): a black / grey line is a low-chroma line on coloured areas, whatever the
         # lighting, while the edge of a shadow over a colour is weak in it
         chroma = np.hypot(lab_ref[..., 1], lab_ref[..., 2]).astype(np.float32)
-        if p.outline_channel == "colour":
-            strength = _line_response(chroma, ppm, method, dark)
-        elif p.outline_channel == "both":
-            strength = np.maximum(_line_response(lab_ref[..., 0], ppm, method, dark),
-                                  _line_response(chroma, ppm, method, dark))
+        chans = {"colour": [chroma], "both": [lab_ref[..., 0], chroma]}.get(p.outline_channel, [lab_ref[..., 0]])
+        if method == "fdog":
+            strength = _fdog_strength(chans, ppm, dark)
         else:
-            strength = _line_response(lab_ref[..., 0], ppm, method, dark)
-        edges = _crest(strength, _LINE_FLOOR[method])
+            strength = _line_response(chans[0], ppm, method, dark)
+            for ch in chans[1:]:
+                strength = np.maximum(strength, _line_response(ch, ppm, method, dark))
+        floor = _LINE_FLOOR[method]
+        if method in ("xdog", "fdog"):   # faint lines of a low-contrast image stay candidates
+            floor *= _contrast_factor(lab_ref[..., 0], region)
+        edges = _crest(strength, floor)
     b = max(2, int(round(0.5 * ppm)))   # no line on the edge of the image itself
     edges[:b, :] = False; edges[-b:, :] = False; edges[:, :b] = False; edges[:, -b:] = False
     if region is not None:               # mask painted by the user: search only inside
@@ -2295,16 +2452,17 @@ def detect_key_details(prep: Prepared, sim: np.ndarray, p: Params,
             return result(z, z, z, np.zeros(ref.shape[:2], np.uint8))
         return result(z, sil, z, cv2.dilate(sil.astype(np.uint8) * 255, disk(width * ppm / 2)))
     score = strength * loss
-    thr = float(np.percentile(score[cand], 100 * (1 - keep_share)))
+    thr = float(np.percentile(score[cand], 100 * (1 - hyst_seed_share(method, keep_share))))
     sel = cand & (score >= thr)
-    # Hysteresis along the lines (DoG only): a selected point extends along its candidate line
-    # (up to HYST_MM) where the line stays nearly as important. The DoG pen line runs along an
-    # edge that the colour layers partly keep: its loss fluctuates around the limit, and without
-    # this it is selected in dashes that the minimum length removes (lines only at sensitivity
-    # ~100). Canny / ridges keep their calibrated scale.
+    # Hysteresis along the lines: a selected point extends along its candidate line (up to
+    # HYST_MM; DoG / FDoG / TEED: the zone setting outline_follow_mm) where the line stays nearly as
+    # important. The importance of a line fluctuates
+    # along it (the colour layers partly keep the edge it runs along): without this it is
+    # selected in dashes that the minimum length removes. Canny and ridges start from fewer
+    # points (`hyst_seed_share`), which sets how much line a sensitivity keeps.
     weak = edges & (loss >= HYST_LOSS * loss_min) & (score >= HYST_SCORE * thr)
     k3 = np.ones((3, 3), np.uint8)
-    for _ in range(int(round(HYST_MM * ppm)) if method == "xdog" else 0):
+    for _ in range(int(round((p.outline_follow_mm if method in FOLLOW_METHODS else HYST_MM) * ppm))):
         grown = ((cv2.dilate(sel.astype(np.uint8), k3) > 0) & weak) | sel
         if np.array_equal(grown, sel):
             break

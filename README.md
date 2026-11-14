@@ -86,7 +86,8 @@ the application. Nothing leaves your computer.
 
 The **Object** selection tool (Masks tab) downloads its model once, on first use: MobileSAM in
 ONNX format, about 45 MB, from Hugging Face, checked by its SHA-256 and kept in `models/`. The
-selection itself runs on your computer; your images are never sent anywhere.
+selection itself runs on your computer; your images are never sent anywhere. The **Learned edges (TEED)** detection method uses a 250 kB network that ships
+with StencilIt (`stencilit/edge_model/`): nothing to download.
 
 The interface is in **English** by default; the **⚙ Preferences** button at the top right holds the
 language selector (**French** is available; the exported files follow the selected language).
@@ -329,7 +330,9 @@ and that layer gets more islands and bridges. **Detection method**:
 |---|---|---|
 | **Sharp edges (Canny)** | the edges of shapes, in luminance and colour | general use; a thin line gives two parallel edges |
 | **Drawn line (DoG)** | one line along each contour, on its dark side, like a pen drawing | graphic, clean line art |
+| **Flowing drawn line (FDoG)** | the same line, averaged along the curves of the contours: more continuous, fewer crumbs; slower (a few seconds on a large image, then cached) | curls, letters, rounded shapes; photos with texture |
 | **Thin lines (ridges)** | the centre line of thin strokes | lashes, eyebrows, wrinkles, hair strands |
+| **Learned edges (TEED)** | the edges a small neural network draws, like a line drawing; the sensitivity keeps the surest ones first | clean shapes: logos, lettering, clothes, objects |
 
 **Detect on** (each zone): **lightness** (default; the edge of a shadow is a line too),
 **colour** – the colourfulness (chroma), where a shadow over a colour hardly shows while a black or
@@ -351,7 +354,14 @@ appears, and the label gives the lines kept / detected and the next step (e.g. *
 Lines shorter than the minimum length do not count.
 
 **Sensitivity** controls how many details are kept, on a progressive scale (1 % of the candidate
-lines at 0, about 10 % at 50, 95 % at 100: fine control when you want only a few lines); **Width** sets the thickness of the line
+lines at 0, about 10 % at 50, 95 % at 100: fine control when you want only a few lines). A line
+whose strongest points are kept is followed along itself while it stays nearly as marked, so that
+it comes out in one piece rather than in dashes that the minimum length would remove. The drawn
+line (DoG) also averages its strength along the contours, which fades the scattered responses of
+textures (hair, grain), and it lowers its noise floor on a low-contrast image, whose faint lines
+would otherwise never be found. **Line following (mm)** (each zone, drawn lines and learned edges only, 12 mm by
+default; advised 12 mm with DoG, 4 mm with the flowing drawn line, 8 mm with TEED, set when the method is chosen) sets how far a kept line is followed: longer gives lines in one piece with fewer gaps, but
+also extends faint lines from a marked start; 0 selects point by point; **Width** sets the thickness of the line
 (never less than the material's minimum opening). The line colour is automatic (the most
 contrasting tone) or chosen; with a line lighter than the support, DoG and ridges look for light
 lines.
@@ -707,6 +717,8 @@ StencilIt/
 │   ├── svg_export.py      SVG / Inkscape / PDF sheet / zip export
 │   ├── pdf_sheet.py       minimal PDF writer (spraying sheet)
 │   ├── semantic.py        object selection (MobileSAM, ONNX)
+│   ├── teed.py            learned edges (TEED, ONNX: onnxruntime, else OpenCV)
+│   ├── edge_model/        the TEED network (ONNX, 250 kB) and its MIT licence
 │   └── materials.json     built-in material presets
 ├── static/
 │   ├── index.html         the interface
@@ -714,7 +726,7 @@ StencilIt/
 ├── models/                object selection model (downloaded on first use, not in git)
 ├── samples/               test images
 ├── docs/screenshots/      images of this README
-└── tools/                 maintenance scripts (string and comment inventories)
+└── tools/                 maintenance scripts (string and comment inventories, TEED export)
 ```
 
 ---
@@ -722,3 +734,8 @@ StencilIt/
 ## License
 
 StencilIt is released under the [MIT License](LICENSE).
+
+The learned edges method uses TEED (*Tiny and Efficient Edge Detector*, X. Soria, Y. Li, M. Rouhani,
+A. D. Sappa, 2023, [github.com/xavysp/TEED](https://github.com/xavysp/TEED)), MIT License,
+Copyright (c) 2022 Xavier Soria Poma: see `stencilit/edge_model/LICENSE_TEED.txt`. The ONNX file was
+exported from its BIPED checkpoint by `tools/export_teed_onnx.py`.

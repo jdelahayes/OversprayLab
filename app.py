@@ -19,6 +19,7 @@ import io
 from stencilit import pipeline as pl
 from stencilit import effects as fxmod
 from stencilit import semantic
+from stencilit import teed
 from stencilit.svg_export import export_zip
 
 ROOT = Path(__file__).parent
@@ -496,7 +497,10 @@ def api_process():
     old = sess.get("geom")
     recolored = (sess.get("result") is not None and old is not None and pl.colors_only(p)
                  and old[0] == geom[0] and all(a is b for a, b in zip(old[1], geom[1])))
-    res = pl.recolor(sess["result"], p) if recolored else pl.build(sess["prep"], p, zone_regions=regions)
+    try:
+        res = pl.recolor(sess["result"], p) if recolored else pl.build(sess["prep"], p, zone_regions=regions)
+    except teed.TeedError as e:          # learned edges: model missing or unreadable
+        return jsonify(error=str(e)), 503
     sess["geom"] = geom
     if p.stencil_style == "line" and not res.layers:
         warnings.append("Trait seul : aucun trait (cochez les détails clés, la silhouette ou le coloriage)")
@@ -626,7 +630,10 @@ def api_outline_preview():
     H, W = res.prepared.labels.shape
     region = zone_regions(sess, lay, (H, W)).get(str(data.get("zone") or "z1"))
     res.prepared.subject = subject_area(sess, lay, (H, W), p.outline_subject_mask)
-    st = pl.outline_detection(res, p, region)
+    try:
+        st = pl.outline_detection(res, p, region)
+    except teed.TeedError as e:
+        return jsonify(error=str(e)), 503
     # size of the computed area in the source image preview (same scale as the mask canvas)
     h, w = sess["img"].shape[:2]
     s = min(1.0, 1100 / max(h, w))

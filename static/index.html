@@ -921,7 +921,9 @@
         <select id="outline_method">
           <option value="canny">Bords nets (Canny)</option>
           <option value="xdog">Trait dessiné (DoG)</option>
+          <option value="fdog">Trait dessiné fluide (FDoG)</option>
           <option value="ridge">Lignes fines (crêtes)</option>
+          <option value="teed">Contours appris (TEED)</option>
         </select></label>
       <p class="hint" id="outline_method_hint"></p>
       <label class="row sel" for="outline_channel" title="Ce dans quoi les traits sont cherchés. Luminosité : clair / foncé, mais le bord d'une ombre devient un trait. Couleur : la saturation, où une ombre se voit à peine alors qu'un trait noir ou gris reste net (utile quand une ombre couvre le dessin). Les deux : les traits de l'une ou de l'autre.">Détecter sur
@@ -941,6 +943,7 @@
         <label class="row" title="Bas : seulement les détails les plus marqués · haut : beaucoup de détails.">Sensibilité <span class="v" id="outline_sensitivity_v"></span>
           <input type="range" id="outline_sensitivity" min="0" max="100" step="1" value="50"></label>
       </div>
+      <label class="row" id="followBox" title="Traits dessinés (DoG, fluide) et contours appris (TEED) : distance sur laquelle un trait retenu est prolongé le long de lui-même, tant qu'il reste presque aussi marqué. Plus long : traits d'un seul tenant, moins de trous ; mais un trait faible partant d'un départ marqué est aussi prolongé. 0 : point par point. Conseillé : 12 mm en DoG, 4 mm en fluide, 8 mm en TEED.">Suivi des traits (mm) <input type="number" id="outline_follow_mm" value="12" min="0" max="50" step="1"></label>
       <label class="row" id="lineSensBox" hidden>Sensibilité de détection <span class="v" id="outline_line_sens_v" data-noi18n></span>
         <input type="range" id="outline_line_sens" min="0" max="100" step="1" value="50" list="lineSensTicks"></label>
       <datalist id="lineSensTicks"></datalist>
@@ -1250,7 +1253,7 @@ const PARAMS = ["support_w_mm", "support_h_mm", "support_color", "inner_margin_m
   "pre_auto_levels", "pre_clahe", "pre_gamma", "manual_thresholds", "thresholds", "pre_saturation", "pre_sharpen", "pre_remove_bg",
   "layer_colors", "layer_effects",
   "n_layers", "detail", "hue_weight", "color_vividness", "color_mode", "layering", "skip_support", "protect_lines",
-  "outline", "outline_target", "outline_method", "outline_sensitivity", "outline_width_mm", "outline_min_length_mm", "outline_subject", "outline_subject_mask", "outline_subject_weak", "outline_subject_de", "outline_subject_gap_every_mm", "outline_subject_gap_mm", "stencil_style", "line_zones", "line_zones_color", "line_sil_color", "outline_auto_color", "outline_color", "outline_zones", "outline_ref", "outline_whole_lines", "outline_line_sens", "outline_close_lines", "outline_channel",
+  "outline", "outline_target", "outline_method", "outline_sensitivity", "outline_width_mm", "outline_min_length_mm", "outline_subject", "outline_subject_mask", "outline_subject_weak", "outline_subject_de", "outline_subject_gap_every_mm", "outline_subject_gap_mm", "stencil_style", "line_zones", "line_zones_color", "line_sil_color", "outline_auto_color", "outline_color", "outline_zones", "outline_ref", "outline_whole_lines", "outline_line_sens", "outline_close_lines", "outline_channel", "outline_follow_mm",
   ...MAT_FIELDS, "merge_amount", "merge_channel_mm", "merge_channels", "merge_islands", "merge_line_islands",
   "tolerance_mm", "smooth_curves", "spray_mm", "px_per_mm"];
 const SUPPORT_COLORS = [["Blanc", "#ffffff"], ["Ivoire", "#f3ecd9"], ["Kraft", "#c8a26e"], ["Gris", "#9a9a9a"], ["Noir", "#1e1e1e"]];
@@ -2252,12 +2255,13 @@ const TIPS = {
   outline_target: "Pochoir séparé : un pochoir de plus, peint en dernier, de la couleur choisie. Dans une couche : pas de pochoir en plus, les traits sont découpés dans une couche de couleur (plus foncée que la zone qu'ils traversent).",
   skip_support: "La teinte de l'image la plus proche de la couleur du support n'a pas de pochoir : le support reste visible à la place.",
   outline: "Retrace d'un trait fin les détails estompés par la simplification et le flou de l'aérographe, dans un pochoir séparé ou dans une couche de couleur.",
-  outline_method: "Comment les détails sont trouvés : bords nets (Canny), trait dessiné le long des contours (DoG) ou ligne centrale des traits fins (crêtes).",
+  outline_method: "Comment les détails sont trouvés : bords nets (Canny), trait dessiné le long des contours (DoG), trait dessiné fluide qui suit les courbes (FDoG, plus propre mais plus lent), ligne centrale des traits fins (crêtes) ou contours appris par un réseau de neurones (TEED).",
   showDetect: "Ouvre l'onglet Masques avec l'aperçu de la détection : traits retenus, trop courts et non retenus, en direct.",
   mDetect: "Superpose les traits détectés pour le pochoir de contours (calculés avec les couches du dernier calcul et les réglages de contours actuels).",
   outline_sensitivity: "Quantité de détails retenus (bas = seulement les plus marqués). Échelle progressive : de 1 % des traits candidats à 0 jusqu'à 95 % à 100, environ 10 % à 50.",
   outline_width_mm: "Largeur du trait du pochoir de contours, en mm (jamais moins que l'ouverture mini du matériau).",
   outline_min_length_mm: "Les traits plus courts que cette longueur sont ignorés.",
+  outline_follow_mm: "Traits dessinés (DoG, fluide) et contours appris (TEED) : distance sur laquelle un trait retenu est prolongé le long de lui-même, tant qu'il reste presque aussi marqué. Plus long : traits d'un seul tenant, moins de trous ; mais un trait faible partant d'un départ marqué est aussi prolongé. 0 : point par point. Conseillé : 12 mm en DoG, 4 mm en fluide, 8 mm en TEED.",
   outline_subject: "Trace le contour d'un masque (le sujet sélectionné, un masque dédié à la silhouette ou le masque des détails clés), avec ou sans les détails clés. Utile quand le sujet se détache mal du fond. Le bord de l'image n'est pas tracé.",
   outline_subject_mask: "Masque dont le contour est tracé : le masque sujet (objet sélectionné ou zone détourée), le masque silhouette dédié (onglet Masques), ou le masque des détails clés.",
   stencil_style: "Couleurs pleines : une couche de peinture par teinte (aplats), avec des traits en option. Trait seul : pas d'aplat, seulement des pochoirs de traits — détails clés, silhouette et/ou limites entre zones (coloriage) — un pochoir par couleur de trait.",
@@ -2602,7 +2606,7 @@ function zoneCanvas(id) { if (!ZCV[id]) ZCV[id] = maskCanvas(); return ZCV[id]; 
 function zLegacy() {               // one zone made of the outline fields (earlier projects)
   const t = val("outline_target"), dest = t === "stencil" ? "A" : t;
   return { zones: [{ id: "z1", name: "Zone 1", on: true, method: val("outline_method"), sensitivity: val("outline_sensitivity"),
-                     width_mm: val("outline_width_mm"), min_length_mm: val("outline_min_length_mm"), dest, ref: val("outline_ref"), whole: val("outline_whole_lines"), line_sens: val("outline_line_sens"), close: val("outline_close_lines"), channel: val("outline_channel") }],
+                     width_mm: val("outline_width_mm"), min_length_mm: val("outline_min_length_mm"), dest, ref: val("outline_ref"), whole: val("outline_whole_lines"), line_sens: val("outline_line_sens"), close: val("outline_close_lines"), channel: val("outline_channel"), follow_mm: val("outline_follow_mm") }],
            groups: { A: { auto: val("outline_auto_color"), color: val("outline_color") } }, sil_dest: dest };
 }
 function zState() {
@@ -2634,7 +2638,7 @@ const destLabel = d => d === "darkest" ? "dans la couche la plus foncée" : d ==
 function fieldsToZone() {
   const s = zState(), z = zCur(s);
   Object.assign(z, { method: val("outline_method"), sensitivity: val("outline_sensitivity"),
-                     width_mm: val("outline_width_mm"), min_length_mm: val("outline_min_length_mm"), ref: val("outline_ref"), whole: val("outline_whole_lines"), line_sens: val("outline_line_sens"), close: val("outline_close_lines"), channel: val("outline_channel") });
+                     width_mm: val("outline_width_mm"), min_length_mm: val("outline_min_length_mm"), ref: val("outline_ref"), whole: val("outline_whole_lines"), line_sens: val("outline_line_sens"), close: val("outline_close_lines"), channel: val("outline_channel"), follow_mm: val("outline_follow_mm") });
   const g = colourGroup(s, z);
   if (g) s.groups[g] = { auto: val("outline_auto_color"), color: val("outline_color") };
   zSave(s);
@@ -2650,6 +2654,7 @@ function zoneToFields() {
   $("outline_channel").value = ["light", "colour", "both"].includes(z.channel) ? z.channel : "light";
   $("outline_whole_lines").checked = z.whole === true;
   $("outline_line_sens").value = Number.isFinite(+z.line_sens) ? z.line_sens : 50;
+  $("outline_follow_mm").value = z.follow_mm != null && Number.isFinite(+z.follow_mm) ? z.follow_mm : 12;   // zones of earlier versions: 12
   syncLineSens();
   $("outline_target").value = isGroup(z.dest) ? "stencil" : z.dest;
   const g = colourGroup(s, z), gc = g && (s.groups[g] || { auto: true, color: "#1e1e1e" });
@@ -2774,7 +2779,7 @@ function setupZones() {
   form.querySelector(".cancel").onclick = () => close(false);
   input.addEventListener("keydown", e => { if (e.key === "Enter") { e.preventDefault(); close(true); } else if (e.key === "Escape") close(false); });
   // the fields of the section edit the zone shown
-  ["outline_method", "outline_sensitivity", "outline_width_mm", "outline_min_length_mm", "outline_auto_color", "outline_color", "outline_ref", "outline_whole_lines", "outline_line_sens", "outline_close_lines", "outline_channel"]
+  ["outline_method", "outline_sensitivity", "outline_width_mm", "outline_min_length_mm", "outline_auto_color", "outline_color", "outline_ref", "outline_whole_lines", "outline_line_sens", "outline_close_lines", "outline_channel", "outline_follow_mm"]
     .forEach(k => { $(k).addEventListener("change", fieldsToZone); $(k).addEventListener("input", fieldsToZone); });
   ["outline_ref", "outline_whole_lines", "outline_line_sens", "outline_close_lines", "outline_channel"].forEach(k => $(k).addEventListener("change", () => { enableOutline(); detectPreview(); }));
   $("outline_whole_lines").addEventListener("change", syncLineSens);
@@ -3085,8 +3090,15 @@ async function init() {
   };
   // changing an outline setting = wanting the outline stencil (otherwise it has no effect on the layers)
   $("outline_method").addEventListener("change", enableOutline);
+  // line following: each drawn line has its own advised length (the user's own values are kept)
+  $("outline_method").addEventListener("change", () => {
+    const v = FOLLOW_ADVISED[$("outline_method").value];
+    if (v != null && Object.values(FOLLOW_ADVISED).includes(val("outline_follow_mm")) && val("outline_follow_mm") !== v) {
+      $("outline_follow_mm").value = v; fieldsToZone();
+    }
+  });
   $("outline_target").addEventListener("change", () => { syncOutlineTarget(); enableOutline(); detectPreview(); });
-  ["outline_sensitivity", "outline_width_mm", "outline_min_length_mm"].forEach(k => $(k).addEventListener("change", enableOutline));
+  ["outline_sensitivity", "outline_width_mm", "outline_min_length_mm", "outline_follow_mm"].forEach(k => $(k).addEventListener("change", enableOutline));
   ["outline_method", "outline_auto_color", "outline_color", "outline_subject", "outline_subject_mask", "outline_subject_weak", "outline_subject_de", "outline_subject_gap_every_mm", "outline_subject_gap_mm"].forEach(k => $(k).addEventListener("change", detectPreview));
   $("outline_subject_weak").addEventListener("change", syncSilhouetteSource);
   $("stencil_style").addEventListener("change", () => { syncStyle(); detectPreview(); });
@@ -3100,7 +3112,7 @@ async function init() {
   ["outline_subject", "outline_subject_mask"].forEach(k => $(k).addEventListener("change", () => { syncSilhouetteSource(); updateSummaries(); schedule(); }));
   $("paintSilhouette").onclick = () => { $("maskKind").value = val("outline_subject_mask"); VIEW = "mask"; SEL = null; render(); };
   $("mCopy").onchange = () => { const to = $("mCopy").value; $("mCopy").value = ""; copyMask(maskKind(), to); };
-  ["outline_sensitivity", "outline_width_mm", "outline_min_length_mm"].forEach(k => $(k).addEventListener("input", detectPreview));
+  ["outline_sensitivity", "outline_width_mm", "outline_min_length_mm", "outline_follow_mm"].forEach(k => $(k).addEventListener("input", detectPreview));
   $("mClear").onclick = () => {
     const kind = maskKind(), c = maskCv(kind);
     if (!c) return;
@@ -3125,7 +3137,7 @@ async function init() {
   // Outline stencil: automatic or chosen colour
   $("outline_auto_color").addEventListener("change", () => { $("outline_color").disabled = $("outline_auto_color").checked; });
   $("outline_color").addEventListener("input", schedule);
-  ["outline_width_mm", "outline_min_length_mm"].forEach(k => $(k).addEventListener("input", schedule));
+  ["outline_width_mm", "outline_min_length_mm", "outline_follow_mm"].forEach(k => $(k).addEventListener("input", schedule));
   $("outline_color").disabled = $("outline_auto_color").checked;
   renderOutlineSwatches();
   methodHint(); syncOutlineTarget();
@@ -3760,10 +3772,14 @@ async function sendMask(kind = maskKind()) {
 }
 // Outline detection preview: lines found by the chosen method over the source image (colour layers
 // of the last computation, current outline settings), refreshed live while settings change.
+// line following advised for each method that has the setting (mm)
+const FOLLOW_ADVISED = { xdog: 12, fdog: 4, teed: 8 };
 const METHOD_HINTS = {
   canny: "Bords nets ; un trait fin donne deux bords.",
   xdog: "Un trait par contour, comme à la plume.",
+  fdog: "Trait dessiné qui suit les courbes : traits plus continus, moins de miettes ; calcul plus long.",
   ridge: "Ligne centrale des traits fins (cils, mèches).",
+  teed: "Contours trouvés par un petit réseau de neurones, comme un dessin au trait : formes nettes, logos, vêtements.",
 };
 function enableOutline() {
   if ($("outline").checked) return;
@@ -3783,7 +3799,12 @@ function syncOutlineTarget() {
   $("olColorLbl").textContent = g ? `Couleur du trait — Contours ${g}` : "Couleur du trait";
   if ($("silDestBox")) $("silDestBox").hidden = val("stencil_style") === "line";
 }
-function methodHint() { $("outline_method_hint").textContent = METHOD_HINTS[$("outline_method").value] || ""; }
+function methodHint() {
+  $("outline_method_hint").textContent = METHOD_HINTS[$("outline_method").value] || "";
+  const m = $("outline_method").value;
+  $("followBox").hidden = !(m in FOLLOW_ADVISED);                    // only these methods have this setting
+  $("outline_channel").closest("label").hidden = m === "teed";      // the network looks at the colour image
+}
 let DET = null, DET_TIMER = null, DET_REQ = 0;
 const detectOn = () => VIEW === "mask" && SEL === null && maskKind() === "outline" && $("mDetect").checked;
 function showDet() {
