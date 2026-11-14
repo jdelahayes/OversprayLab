@@ -103,6 +103,20 @@ EFFECTS: dict[str, dict] = {
             _f("period_mm", "Période", 0.5, 50, 0.5, 4, "mm", "Longueur d'une ondulation le long du contour"),
         ],
     },
+    "drips": {
+        "label": "Coulures", "category": "Contour",
+        "tip": "Ajoute des coulures de peinture qui pendent sous les formes (aspect graffiti) : traits verticaux "
+               "terminés par une goutte, partant des bords tournés vers le bas.",
+        "params": [
+            _f("length_mm", "Longueur", 1, 200, 0.5, 15, "mm", "Longueur des plus longues coulures"),
+            _f("width_mm", "Largeur", 0.3, 20, 0.1, 1.5, "mm", "Largeur moyenne d'une coulure"),
+            _f("spacing_mm", "Espacement", 1, 200, 0.5, 10, "mm",
+               "Distance moyenne entre deux coulures le long du bord : plus petit = plus de coulures"),
+            _i("variation", "Variation", 0, 100, 70,
+               "Irrégularité des longueurs et des largeurs (0 = toutes pareilles)", unit="%"),
+            _i("seed", "Graine", 0, 9999, 1, "Change le tirage aléatoire des coulures"),
+        ],
+    },
     "offset": {
         "label": "Gonflement / amincissement", "category": "Contour",
         "tip": "Décale tout le contour de la couche vers l'extérieur (valeur positive : formes et traits plus "
@@ -143,6 +157,27 @@ EFFECTS: dict[str, dict] = {
             _f("angle", "Angle", 0, 180, 1, 45, "°", "Orientation des hachures"),
             _c("cross", "Type", [["single", "simples"], ["cross", "croisées"]], "single",
                "Croisées : une seconde série de hachures à angle droit"),
+        ],
+    },
+    "engrave": {
+        "label": "Gravure", "category": "Remplissage",
+        "tip": "Remplace l'aplat par des lignes dont la largeur suit les tons de l'image d'origine : épaisses "
+               "dans les zones sombres, fines (ou absentes) dans les claires, comme une gravure en taille-douce.",
+        "params": [
+            _f("pitch_mm", "Pas", 0.8, 30, 0.1, 2, "mm", "Distance entre deux lignes voisines"),
+            _f("wmin_mm", "Largeur mini", 0, 20, 0.1, 0, "mm",
+               "Largeur des lignes dans les zones les plus claires (0 = les lignes s'interrompent)"),
+            _f("wmax_mm", "Largeur maxi", 0.3, 30, 0.1, 1.6, "mm",
+               "Largeur des lignes dans les zones les plus sombres (égale au pas : les lignes se touchent)"),
+            _c("style", "Lignes", [["straight", "droites"], ["wave", "ondulées"], ["contour", "suivant le contour"]],
+               "straight", "Droites : parallèles, à l'angle choisi. Ondulées : parallèles et ondulantes. "
+               "Suivant le contour : de plus en plus à l'intérieur de la forme"),
+            _f("angle", "Angle", 0, 180, 1, 45, "°", "Orientation des lignes",
+               when={"style": ["straight", "wave"]}),
+            _f("amplitude_mm", "Amplitude", 0.1, 30, 0.1, 2, "mm", "Hauteur des ondulations",
+               when={"style": "wave"}),
+            _f("period_mm", "Période", 1, 200, 0.5, 20, "mm", "Longueur d'une ondulation",
+               when={"style": "wave"}),
         ],
     },
     "levels": {
@@ -194,6 +229,26 @@ EFFECTS: dict[str, dict] = {
             _f("width_mm", "Largeur", 0.3, 30, 0.1, 2, "mm", "Largeur de la bande du halo"),
             _i("layer", "Couche du halo", 0, 10, 0,
                "0 = support nu (le halo est retiré de toutes les autres couches) ; sinon numéro de la couche qui peint le halo"),
+        ],
+    },
+    "blend": {
+        "label": "Fondu entre couches", "category": "Structure",
+        "tip": "Le long de la frontière avec les couches voisines (ou le support nu), la couche passe "
+               "progressivement à l'autre couleur par une trame : dégradé au lieu d'une limite nette. Les pixels "
+               "cédés ou pris sont retirés ou donnés à la couche voisine.",
+        "params": [
+            _f("width_mm", "Largeur du fondu", 1, 200, 0.5, 10, "mm",
+               "Largeur de la bande de transition, centrée sur la frontière"),
+            _c("pattern", "Trame", [["dots", "points"], ["bands", "bandes parallèles au bord"],
+                                    ["comb", "peigne"]], "dots",
+               "Points : trame de points qui grossissent puis se rejoignent. Bandes : bandes qui suivent la "
+               "frontière, de plus en plus fines. Peigne : dents effilées qui s'emboîtent"),
+            _f("pitch_mm", "Pas", 0.8, 30, 0.1, 2.5, "mm", "Distance entre deux points, bandes ou dents voisins"),
+            _f("angle", "Angle", 0, 180, 1, 45, "°", "Orientation de la grille de points ou des dents du peigne",
+               when={"pattern": ["dots", "comb"]}),
+            _c("with", "Avec", [["layers", "les couches voisines"], ["support", "le support nu"],
+                                ["all", "couches et support nu"]], "layers",
+               "Frontières concernées : avec les autres couches, avec le support nu (la couche s'estompe), ou les deux"),
         ],
     },
     "mosaic": {
@@ -332,6 +387,7 @@ class Context:
     touched: set = field(default_factory=set)   # other layers changed by an effect (cleaned at the end)
     under: dict = field(default_factory=dict)   # layer -> what Overlap added (meant to stay under the next layers)
     bare: np.ndarray | None = None              # left as bare support on purpose (halo on the support)
+    cumulative: bool = False                    # cumulative stacking: layer n contains the darker ones
     _light: np.ndarray | None = field(default=None, repr=False)
 
     def lightness(self) -> np.ndarray:
@@ -524,6 +580,58 @@ def fx_wavy(mask, ctx, a):
     return _redraw(mask.shape, polys)
 
 
+def fx_drips(mask, ctx, a):
+    if not mask.any():
+        return mask
+    H, W = mask.shape
+    ppm = ctx.ppm
+    rng = np.random.default_rng(int(a["seed"]))
+    var = a["variation"] / 100.0
+    w0 = max(1.0, a["width_mm"] * ppm)
+    lmax = a["length_mm"] * ppm
+    # starting points: edge pixels of the shape facing down (pixel below outside, outward normal
+    # pointing down within ~45°)
+    m = mask > 0
+    edge = np.zeros_like(m)
+    edge[:-1] = m[:-1] & ~m[1:]
+    sm = cv2.GaussianBlur(mask.astype(np.float32), (0, 0), max(1.0, w0))
+    gx = cv2.Sobel(sm, cv2.CV_32F, 1, 0, ksize=3)
+    gy = cv2.Sobel(sm, cv2.CV_32F, 0, 1, ksize=3)
+    edge &= -gy > 0.7 * np.hypot(gx, gy) + 1e-3     # the gradient points inwards (up on a bottom edge)
+    ys, xs = np.nonzero(edge)
+    if not len(xs):
+        return mask
+    # random sequential choice with a minimum distance: the mean spacing ends up close to spacing_mm
+    dmin = max(2.0, a["spacing_mm"] * ppm * 0.75)
+    order = rng.permutation(len(xs))[: max(1, int(len(xs) * 5 / dmin))]
+    cell: dict = {}
+    picked = []
+    for k in order:
+        x, y = int(xs[k]), int(ys[k])
+        cx, cy = int(x // dmin), int(y // dmin)
+        if any((x - px) ** 2 + (y - py) ** 2 < dmin * dmin
+               for i in (-1, 0, 1) for j in (-1, 0, 1) for px, py in cell.get((cx + i, cy + j), ())):
+            continue
+        cell.setdefault((cx, cy), []).append((x, y))
+        picked.append((x, y))
+    drips = np.zeros_like(mask)
+    for x, y in sorted(picked):
+        r = rng.random(3)
+        ln = lmax * (1 - var * r[0])
+        w = w0 * (1 + var * 0.6 * (r[1] - 0.5))
+        if ln < w:
+            continue
+        x2 = x + int(round(var * w * 0.3 * (r[2] - 0.5)))        # slight slant
+        y2 = int(round(y + ln - w * 0.6))
+        cv2.line(drips, (x, int(round(y - w))), (x2, y2), 255, max(1, int(round(w))), cv2.LINE_8)
+        cv2.circle(drips, (x2, y2), max(1, int(round(w * 0.65))), 255, -1, cv2.LINE_8)   # end drop
+    out = mask | drips
+    # fillets where a drip leaves the shape (paint gathering), only around the drips
+    closed = cv2.morphologyEx(out, cv2.MORPH_CLOSE, _disk(w0 * 0.8))
+    near = cv2.dilate(drips, _disk(w0 * 1.5))
+    return out | (closed & near)
+
+
 def fx_offset(mask, ctx, a):
     d = a["distance_mm"] * ctx.ppm
     if abs(d) < 0.5:
@@ -560,14 +668,41 @@ def fx_halftone(mask, ctx, a):
         dist = _dist_inside(mask) / ppm
         t = np.clip(dist / max(a["fade_mm"], 1e-3), 0, 1)[py, px]
     else:                                          # tone: dark in the image = big dot
-        L = ctx.lightness()
-        inside = L[mask > 0]
-        lo, hi = np.percentile(inside, (5, 95)) if inside.size else (0.0, 100.0)
-        dark = np.clip((hi - L) / max(hi - lo, 1e-3), 0, 1)
-        dark = cv2.GaussianBlur(dark, (0, 0), max(0.5, pitch * ppm * 0.5))
-        t = dark[py, px]
+        t = _darkness(ctx, mask, pitch * ppm * 0.5)[py, px]
     r = (dmin + (dmax - dmin) * t) * 0.5
     return _u8((d <= r) & (r > 0) & (mask > 0))
+
+
+def _darkness(ctx, mask, sigma_px: float) -> np.ndarray:
+    """Darkness of the original image, 0 (lightest) .. 1 (darkest), stretched over the tones found
+    inside the layer (5th-95th percentiles), smoothed at the scale of the pattern."""
+    L = ctx.lightness()
+    inside = L[mask > 0]
+    lo, hi = np.percentile(inside, (5, 95)) if inside.size else (0.0, 100.0)
+    dark = np.clip((hi - L) / max(hi - lo, 1e-3), 0, 1)
+    return cv2.GaussianBlur(dark, (0, 0), max(0.5, sigma_px))
+
+
+def fx_engrave(mask, ctx, a):
+    if not mask.any():
+        return mask
+    ppm = ctx.ppm
+    pitch = a["pitch_mm"]
+    wmin, wmax = sorted((a["wmin_mm"], a["wmax_mm"]))
+    dark = _darkness(ctx, mask, pitch * ppm * 0.5)
+    if a["style"] == "contour":
+        u = _dist_inside(mask) / ppm
+    else:
+        X, Y = ctx.grid_mm(mask.shape)
+        th = math.radians(a["angle"])
+        c, s = math.cos(th), math.sin(th)
+        u = X * c + Y * s
+        if a["style"] == "wave":
+            u += a["amplitude_mm"] * np.sin((2 * np.pi / a["period_mm"]) * (Y * c - X * s))
+        del X, Y
+    f = np.abs(np.mod(u, pitch) - pitch / 2)       # distance to the centre line of the nearest line
+    w = wmin + (wmax - wmin) * dark
+    return _u8((f <= w / 2) & (w > 0) & (mask > 0))
 
 
 def _stripes(X, Y, angle_deg, pitch, width):
@@ -687,6 +822,105 @@ def fx_halo(mask, ctx, a):
     return mask
 
 
+def fx_blend(mask, ctx, a):
+    """Halftone transition across the border of the layer: in a band centred on the border, the
+    share of the layer goes from 1 (its side) to 0 (the other side). Exclusive stacking: what the
+    layer takes is removed from the other layers, what it gives goes to the nearest neighbour layer
+    (or stays bare support)."""
+    if not mask.any():
+        return mask
+    ppm = ctx.ppm
+    i, n = ctx.index, len(ctx.masks)
+    A = mask > 0
+    union = np.zeros(mask.shape, bool)
+    for k in range(n):
+        if k != i:
+            union |= ctx.masks[k] > 0
+    if ctx.cumulative:                    # nested layers: around the layer is the lighter one (or the support)
+        lay = (ctx.masks[i - 1] > 0) & ~A if i > 0 else np.zeros_like(A)
+        sup = ~(union | A)
+    else:
+        lay = union & ~A
+        sup = ~(union | A)
+    w = a["with"]
+    O = np.zeros_like(A)
+    if w in ("layers", "all"):
+        O |= lay
+    if w in ("support", "all"):
+        O |= sup
+    if not O.any():
+        return mask
+    W = a["width_mm"]
+    dO = cv2.distanceTransform((~O).astype(np.uint8), cv2.DIST_L2, 5)
+    s = np.where(A, -dO, _dist_outside(mask)) / ppm          # signed distance to the border (mm), > 0 outside
+    del dO
+    band = (np.abs(s) <= W / 2) & (A | O)
+    if not band.any():
+        return mask
+    pitch = a["pitch_mm"]
+    pat = a["pattern"]
+    if pat == "bands":                    # rings along the border, the share sampled at the ring centre
+        sc = (np.floor(s / pitch) + 0.5) * pitch
+        t = np.clip(0.5 - sc / W, 0, 1)
+        on = np.abs(np.mod(s, pitch) / pitch - 0.5) * 2 < t
+    else:
+        t = np.clip(0.5 - s / W, 0, 1)
+        X, Y = ctx.grid_mm(mask.shape)
+        th = math.radians(a["angle"])
+        c, sn = math.cos(th), math.sin(th)
+        u = (X * c + Y * sn) * (2 * np.pi / pitch)
+        if pat == "comb":                  # tapered teeth: the share is the width of a tooth
+            on = np.abs(np.mod(u / (2 * np.pi), 1) - 0.5) * 2 > 1 - t
+        else:                              # dots growing into a checkerboard, then holes shrinking
+            v = (Y * c - X * sn) * (2 * np.pi / pitch)
+            on = 0.5 - 0.25 * (np.cos(u) + np.cos(v)) < t
+    new = (A & ~band) | (band & on)
+    gained = new & ~A
+    lost = A & ~new
+    if ctx.cumulative:
+        if w in ("support", "all") and lost.any():
+            # towards the support the lighter layers (painted below) must leave it bare too
+            to_sup = lost
+            if w == "all":                 # only where the support is nearer than the lighter layer
+                d_sup = cv2.distanceTransform((~sup).astype(np.uint8), cv2.DIST_L2, 5)
+                d_lay = cv2.distanceTransform((~lay).astype(np.uint8), cv2.DIST_L2, 5)
+                to_sup = lost & (d_sup <= d_lay)
+            for k in range(i):
+                if (ctx.masks[k][to_sup] > 0).any():
+                    ctx.masks[k] = ctx.masks[k] & ~_u8(to_sup)
+                    ctx.touched.add(k)
+        return _u8(new)
+    gu = _u8(gained)
+    for k in range(n):                     # taken from the other layers
+        if k != i and (ctx.masks[k][gained] > 0).any():
+            ctx.masks[k] = ctx.masks[k] & ~gu
+            ctx.touched.add(k)
+    if lost.any():                         # given to the nearest neighbour layer, or left bare
+        cands = []
+        if w in ("layers", "all"):
+            cands += [k for k in range(n) if k != i and (ctx.masks[k] > 0).any()]
+        dists = [cv2.distanceTransform((ctx.masks[k] == 0).astype(np.uint8), cv2.DIST_L2, 5)[lost]
+                 for k in cands]
+        if w in ("support", "all"):
+            dists.append(cv2.distanceTransform((~sup).astype(np.uint8), cv2.DIST_L2, 5)[lost])
+            cands.append(None)
+        if cands:
+            best = np.argmin(np.stack(dists), axis=0)
+            ly, lx = np.nonzero(lost)
+            for c, k in enumerate(cands):
+                sel = best == c
+                if not sel.any():
+                    continue
+                part = np.zeros(mask.shape, np.uint8)
+                part[ly[sel], lx[sel]] = 255
+                if k is None:              # bare support on purpose (not passed on to another layer)
+                    ctx.bare = part if ctx.bare is None else (ctx.bare | part)
+                else:
+                    ctx.masks[k] = ctx.masks[k] | part
+                    ctx.touched.add(k)
+    return _u8(new)
+
+
 def fx_mosaic(mask, ctx, a):
     if not mask.any():
         return mask
@@ -766,9 +1000,9 @@ def fx_merge(mask, ctx, a):
 
 
 APPLY = {"smooth": fx_smooth, "polygon": fx_polygon, "angular": fx_angular, "rough": fx_rough,
-         "wavy": fx_wavy, "offset": fx_offset, "halftone": fx_halftone, "hatch": fx_hatch,
-         "levels": fx_levels, "pattern": fx_pattern, "outline": fx_outline, "shadow": fx_shadow,
-         "halo": fx_halo, "mosaic": fx_mosaic, "bridges": fx_bridges, "overlap": fx_overlap,
+         "wavy": fx_wavy, "drips": fx_drips, "offset": fx_offset, "halftone": fx_halftone,
+         "hatch": fx_hatch, "engrave": fx_engrave, "levels": fx_levels, "pattern": fx_pattern,
+         "outline": fx_outline, "shadow": fx_shadow, "halo": fx_halo, "blend": fx_blend, "mosaic": fx_mosaic, "bridges": fx_bridges, "overlap": fx_overlap,
          "merge": fx_merge}
 assert set(APPLY) == set(EFFECTS)
 assert all(e["category"] in CATEGORIES for e in EFFECTS.values())
@@ -879,7 +1113,8 @@ def apply_all(masks: list, effects: dict, p, image_bgr: np.ndarray, off_px: tupl
     `opts`: see `options` (exclusive stacking only; None = no passing on)."""
     orig = list(masks)
     out = list(masks)
-    ctx = Context(ppm=p.px_per_mm, off_px=off_px, image_bgr=image_bgr, masks=out)
+    ctx = Context(ppm=p.px_per_mm, off_px=off_px, image_bgr=image_bgr, masks=out,
+                  cumulative=getattr(p, "layering", "exclusive") == "cumulative")
     done = set()
     for i in range(len(out)):
         stack = effects.get(i + 1)

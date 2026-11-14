@@ -186,6 +186,11 @@ ratio can be free, the support's, or fixed (1:1, 4:3, 3:4, 16:9, 9:16).
 - **Best fit in the stencil** makes the image as large as possible for the chosen stencil sheet
   and cutting mat, and picks the best orientation automatically.
 
+A warning appears when the image resolution does not suit its size on the support: below the
+computation resolution (default 6 px/mm, e.g. 2 460 × 1 980 px for a 6F canvas filled), the
+image is enlarged and its edges are blurred; above 24 px/mm (twice the maximum computation
+resolution), the extra pixels are useless and only slow things down.
+
 Anything outside the support is trimmed (full bleed). With the **Mat** button on, the cutting mat is
 drawn with its inch grid, so you immediately see whether the sheet fits.
 
@@ -470,14 +475,17 @@ The effects are grouped by category in the **+ Add…** list.
 | | **Angular outline** | Segments at set angles only (90° steps, 45° or 30°): geometric, Art Deco look. |
 | | **Rough edges** | Distorts the outlines with random noise (amplitude, scale, seed). The same seed on several layers keeps them registered. |
 | | **Wavy edges** | Regular waves, saw teeth or scallops along the outlines (amplitude, period). |
+| | **Drips** | Paint drips hanging from the edges facing down: strokes ending in a drop (length, width, spacing, variation, seed). |
 | | **Grow / shrink** | Moves the whole outline outwards (thicker) or inwards (thinner). |
 | Fill | **Halftone dots** | Round holes on a grid (pitch, min / max diameter, angle); dot size constant, growing with the distance to the edge, or following the tones of the original image (halftone gradient). |
 | | **Hatching** | Parallel bands, single or crossed (pitch, width, angle). Crossed hatching leaves squares of material held by bridges. |
+| | **Engraving** | Lines whose width follows the tones of the original image (min / max width, pitch); straight, wavy or following the outline: intaglio look. |
 | | **Contour lines** | Bands following the outline, further and further inside (topographic / op art). |
 | | **Pattern** | Repeated diamonds, hexagons, bricks or stars, cut by the shape (size, joint). |
 | Structure | **Outline only** | Keeps a band along the edge of each shape: a flat area becomes an outlined stroke. |
 | | **Drop shadow** | Adds a shifted copy of the layer to another layer (0 = the darkest). |
 | | **Halo / border** | Band around the shapes, at a given distance: left as bare support (layer 0, white sticker border) or painted by another layer. |
+| | **Blend between layers** | Halftone transition (dots, bands along the border or interlocking comb) in a band across the border with the neighbouring layers and/or the bare support. What the layer takes is removed from the other layer, what it gives up goes to it. |
 | | **Mosaic / stained glass** | Cuts the openings into irregular shards separated by material joints; a large stencil gets stiffer. |
 | | **Decorative bridges** | Strips of material forming parallel lines, a grid or rays: the bridges become part of the style. |
 | Practical | **Overlap** | Extends the layer under the following (darker) layers, so a slight registration offset leaves no thin line of bare support. |

@@ -650,6 +650,7 @@
     <label class="row">Largeur de l'image (mm) <input type="number" id="img_width_mm" min="5" max="5000" step="1"></label>
     <label class="row">Hauteur de l'image (mm) <input type="number" id="img_height_mm" min="5" max="5000" step="1"></label>
     <div class="check"><input type="checkbox" id="keep_ratio" checked><label for="keep_ratio">Conserver les proportions</label></div>
+    <div class="warn" id="resWarn" hidden></div>
     <input type="hidden" id="image_height_factor" value="1">
     <label class="full">Aligner sur le support</label>
     <div style="display:flex; gap:10px; align-items:center">
@@ -1597,11 +1598,33 @@ function layoutCalc() {
   const w = fitW * val("image_scale") / 100, h = w * ar * hf;
   return { SW, SH, im, ar, hf, fitW, w, h, x: val("image_pos_x") / 100 * SW - w / 2, y: val("image_pos_y") / 100 * SH - h / 2 };
 }
+// Resolution of the source image for its size on the support: the image is resampled at the
+// computation resolution (px_per_mm, 12 at most). Below it, the image is enlarged (blurred
+// edges); far above even the maximum, the extra pixels are lost and only slow things down.
+const RES_MAX_USEFUL = 24;   // px/mm: 2 × the maximum computation resolution
+function resolutionWarning() {
+  if (!IMG) return null;
+  const L = layoutCalc(), c = cropPx(), ppm = val("px_per_mm");
+  const lo = Math.min(c.w / L.w, c.h / L.h), hi = Math.max(c.w / L.w, c.h / L.h);
+  const fr = v => v.toFixed(1).replace(".", ",");
+  const px = k => `${Math.ceil(L.w * k)} × ${Math.ceil(L.h * k)} px`;
+  if (lo < ppm)
+    return `Image trop petite pour sa taille sur le support : ${fr(lo)} px/mm pour une résolution de calcul de ${ppm} px/mm, elle sera agrandie et ses bords seront flous. Il faudrait au moins ${px(ppm)} (partie gardée par le recadrage), ou une image plus petite sur le support.`;
+  if (hi > RES_MAX_USEFUL)
+    return `Image bien plus grande que nécessaire pour sa taille sur le support : ${fr(hi)} px/mm, alors que le calcul en utilise ${ppm} (12 au plus). Les pixels en trop sont perdus et ralentissent le travail : ${px(18)} suffisent, même à la résolution maximale.`;
+  return null;
+}
+function showResolutionWarning() {
+  const w = resolutionWarning(), e = $("resWarn");
+  e.hidden = !w;
+  e.textContent = w ? "⚠ " + w : "";
+}
 function syncWidth() {
   if (!IMG) return;
   const L = layoutCalc();
   $("img_width_mm").value = Math.round(L.w);
   $("img_height_mm").value = Math.round(L.h);
+  showResolutionWarning();
   updateSummaries();
   syncMat();   // the sheet fitted to the design changes with the image size
 }
@@ -2834,6 +2857,7 @@ async function init() {
   showValues();
 
   sel.addEventListener("change", () => { applyMaterial(sel.value); cutInfo(); schedule(); });
+  $("px_per_mm").addEventListener("input", showResolutionWarning);
   // Editing a field: a built-in material switches to "Custom"; a ★ material stays selected
   // (marked "modified") so it can be overwritten with "Save".
   const MAT_EDIT_FIELDS = [...MAT_FIELDS, "cut_blade", "cut_force", "cut_speed", "cut_passes", "cut_notes"];
@@ -3274,6 +3298,9 @@ function applyProjectSettings(info) {
     CUT_FIELDS.forEach(f => { if (m.cut && m.cut[f] != null) vals["cut_" + f] = m.cut[f]; });
     if (p.crop_w) crop = { x: p.crop_x, y: p.crop_y, w: p.crop_w, h: p.crop_h };
   }
+  // settings missing from the project (saved before they existed, e.g. layer effects): default
+  // values, not the ones of the current session
+  if (DEFAULTS) PARAMS.forEach(k => { if (!(k in vals) && k in DEFAULTS) vals[k] = DEFAULTS[k]; });
   const mat = vals.material; delete vals.material;
   if (mat && [...$("material").options].some(o => o.value === mat)) $("material").value = mat;
   setVals(migrateSens(vals));
@@ -4427,6 +4454,8 @@ function render() {
   renderToolbar();
 
   const warns = [...(LAST.warnings || [])];
+  const resW = resolutionWarning();
+  if (resW) warns.push(resW);
   if (LAST.support_tone && lum(LAST.base) < 90 && LAST.layers.length)
     warns.push("Support foncé : les zones sombres laissées au support deviennent des îlots dans les couches claires, et leurs ponts resteront visibles. Pour des aplats foncés sans pont, décochez « La teinte la plus proche du support reste nue ».");
   const fill = val("stencil_style") !== "line";
