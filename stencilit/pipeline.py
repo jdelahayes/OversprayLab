@@ -909,6 +909,35 @@ def merge_zones(opening: np.ndarray, p: Params, hidden: np.ndarray | None = None
         return a
 
     size = [1] * n
+    # A closed channel must weld the island at least as wide as the material strip minimum: a fill
+    # linking two pieces of material only by a pinch (two corners almost touching) leaves a weld
+    # far thinner, which `clean_mask` (run before the merges) no longer sees. Such a merge is
+    # skipped and the island keeps its bridge (or a wider channel width closes it more broadly).
+    weld_r = p.min_strip_mm * p.px_per_mm / 2
+    weld_k = disk(weld_r) if weld_r >= 0.5 else None
+
+    def weld_holds(sub, x, y, roots) -> bool:
+        """True when the channel fill `sub` (box x, y) links at least two of the material groups
+        `roots` through material at least `weld_r` * 2 wide, around the fill."""
+        if weld_k is None:
+            return True
+        m = int(np.ceil(weld_r)) * 4 + 2
+        ya, yb = max(0, y - m), min(opening.shape[0], y + sub.shape[0] + m)
+        xa, xb = max(0, x - m), min(opening.shape[1], x + sub.shape[1] + m)
+        mat = (opening[ya:yb, xa:xb] == 0).astype(np.uint8)
+        mat[y - ya:y - ya + sub.shape[0], x - xa:x - xa + sub.shape[1]][sub] = 1
+        strong = cv2.morphologyEx(mat, cv2.MORPH_OPEN, weld_k)
+        nc, clab = cv2.connectedComponents(strong, connectivity=4)
+        src = lab[ya:yb, xa:xb]
+        sel = (clab > 0) & (src > 0)
+        pairs = np.unique(clab[sel].astype(np.int64) * n + src[sel])
+        seen: dict[int, set] = {}
+        for c in pairs.tolist():
+            r = find(c % n)
+            if r in roots and (c % n) not in removed:
+                seen.setdefault(c // n, set()).add(r)
+        return any(len(s) >= 2 for s in seen.values())
+
     removed = set()                     # islands removed (B): they no longer link anything
     count = 0
     filled_any = False
@@ -930,6 +959,8 @@ def merge_zones(opening: np.ndarray, p: Params, hidden: np.ndarray | None = None
             flab, fstats = fills[idx[0]]
             x, y, bw, bh = fstats[idx[1], :4]
             sub = flab[y:y + bh, x:x + bw] == idx[1]
+            if not weld_holds(sub, x, y, roots):
+                continue
             opening[y:y + bh, x:x + bw][sub] = 0
             merged[y:y + bh, x:x + bw] |= sub
             rl = list(roots)
