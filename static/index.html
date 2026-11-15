@@ -1226,6 +1226,8 @@
     </div>
     <button type="button" class="ibtn" id="palNearest" aria-label="Plus proches"
       title="Plus proches : donne à chaque couche la couleur de la palette la plus proche de sa teinte réelle dans l'image (deux couches n'ont jamais la même couleur) ; sans palette choisie, prend la palette qui colle le mieux à l'image"><svg class="ico" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="5"/><circle cx="12" cy="12" r="1.2" fill="currentColor"/></svg></button>
+    <button type="button" class="ibtn" id="palValues" aria-label="Par valeurs"
+      title="Par valeurs : donne les couleurs de la palette dans l'ordre clair → foncé, quelle que soit leur teinte (la couche la plus claire reçoit la couleur la plus claire choisie, et ainsi de suite), comme une affiche sérigraphiée ; sans palette choisie, prend la palette qui colle le mieux à l'image"><svg class="ico" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="2.5" y="5" width="6" height="14" rx="1" fill="currentColor" fill-opacity=".1"/><rect x="9" y="5" width="6" height="14" rx="1" fill="currentColor" fill-opacity=".45"/><rect x="15.5" y="5" width="6" height="14" rx="1" fill="currentColor"/></svg></button>
     <button type="button" class="ibtn" id="palVary" aria-label="Autres couleurs"
       title="Autres couleurs de la palette : chaque clic donne une autre combinaison, de la plus proche de l'image à la plus éloignée (deux couches n'ont jamais la même couleur)"><svg class="ico" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M16 3h5v5"/><path d="M4 20 21 3"/><path d="M21 16v5h-5"/><path d="m15 15 6 6"/><path d="M4 4l5 5"/></svg></button>
     <button type="button" class="ibtn" id="palOrder" aria-pressed="false" aria-label="Garder l'ordre clair → foncé"
@@ -2984,6 +2986,7 @@ async function init() {
   };
   setupPalettes();
   $("palNearest").onclick = () => applyNearest(palDef(PAL_CUR || PAL_LAST) ? PAL_CUR || PAL_LAST : "");
+  $("palValues").onclick = () => applyNearest(palDef(PAL_CUR || PAL_LAST) ? PAL_CUR || PAL_LAST : "", true);
   $("palVary").onclick = varyColors;
   // "Other colours" option: keep the light -> dark order of the layers (remembered)
   const setOrder = on => $("palOrder").setAttribute("aria-pressed", String(on));
@@ -4795,7 +4798,20 @@ const PALETTES = {
   indigo:    ["Indigo (japonais)",  ["#f4f2ec", "#e1e2e3", "#c3c8d2", "#9aa5bb", "#6f7fa0", "#4b5b85", "#2f3e6b", "#121a33"], "Monochromes"],
   rougenoir: ["Rouge et noir",      ["#f5f2ea", "#f0d5cc", "#e8a598", "#e06656", "#d62828", "#a51d1d", "#6e1212", "#111111"], "Monochromes"],
   olive:     ["Olive",              ["#f4f3e3", "#e3e1bd", "#cfcc9a", "#b6b479", "#9c9a5a", "#7d7c44", "#5f5e30", "#262612"], "Monochromes"],
+  // — Propaganda posters (Shepard Fairey style, colours measured on his prints): 3 to 5 flat
+  // colours, meant to be given by lightness rank ("By values" button), not by hue
+  fespoir:   ["Espoir (crème, ciel, rouge, marine)",     ["#f4f1e1", "#8fd2eb", "#c92f2b", "#1b3663"], "Affiches (style Fairey)"],
+  fpastiche: ["Bleu-gris, rouge et marine",              ["#fae9b6", "#77969c", "#e51617", "#0f2f44"], "Affiches (style Fairey)"],
+  frougenoir:["Crème, rouge et noir",                    ["#fbf4e2", "#ce3a32", "#141010"], "Affiches (style Fairey)"],
+  fpoing:    ["Ocre, rouge et noir",                     ["#ebe4c0", "#e0aa30", "#b8391c", "#22221e"], "Affiches (style Fairey)"],
+  fcollage:  ["Collage (ocre, sarcelle, rouge, noir)",   ["#ebe6c4", "#e4ac3a", "#7da9a1", "#c4351f", "#141212"], "Affiches (style Fairey)"],
+  foeil:     ["Turquoise, rouge sang et noir",           ["#f2ecd5", "#9ecabe", "#54939c", "#a2100f", "#14181b"], "Affiches (style Fairey)"],
+  fvote:     ["Gris-bleu, rouge et ardoise",             ["#f4f2e0", "#a8c4c4", "#668e95", "#aa2930", "#2e3a4a"], "Affiches (style Fairey)"],
+  ftricolore:["Tricolore",                               ["#f4f1d9", "#e12328", "#2c628c", "#0b0a0c"], "Affiches (style Fairey)"],
 };
+// Colours of palette `key` for the image tones: closest hues, or (ordered) the best choice given by
+// lightness rank (the lightest layer gets the lightest chosen colour..., whatever its hue)
+const paletteFit = (key, tones, ordered) => ordered ? paletteCombos(palDef(key)[1], tones, true)[0] : nearestColors(palDef(key)[1], tones);
 const hexRgb = h => [1, 3, 5].map(i => parseInt(h.slice(i, i + 2), 16));
 const rgbHex = c => "#" + c.map(v => Math.round(v).toString(16).padStart(2, "0")).join("");
 // n colours spread over the palette, lightest to darkest: real palette colours as long as there are
@@ -4892,7 +4908,7 @@ function paletteTargets() {
 }
 const noTargets = () => status(val("stencil_style") === "line"
   ? "Trait seul : la palette s'applique aux limites du coloriage colorées par teinte" : "Calculez d'abord les couches", true);
-function applyNearest(key) {
+function applyNearest(key, ordered = false) {
   if (!LAST) return status("Calculez d'abord les couches", true);
   const layers = paletteTargets();
   if (!layers.length) return noTargets();
@@ -4902,7 +4918,7 @@ function applyNearest(key) {
   const keys = key ? [key].filter(palDef)
     : [...Object.keys(UP.palette || {}).map(k => "u:" + k), ...Object.keys(PALETTES)].filter(palDef);
   for (const k of keys) {
-    const r = nearestColors(palDef(k)[1], tones);
+    const r = paletteFit(k, tones, ordered);
     if (!best || r.mean < best.mean) best = { ...r, k };
   }
   if (!best) return;
@@ -4911,7 +4927,9 @@ function applyNearest(key) {
   $("layer_colors").value = Object.entries(m).map(([k, v]) => `${k}=${v}`).join(";");
   PAL_LAST = best.k; showPaletteChoice(best.k);
   const n = layers.length;
-  status(`Palette « ${palDef(best.k)[0]} » : couleurs les plus proches de l'image sur ${n} couche${n > 1 ? "s" : ""} (écart moyen ΔE ${best.mean.toFixed(1)})`);
+  status(ordered
+    ? `Palette « ${palDef(best.k)[0]} » : couleurs dans l'ordre clair → foncé sur ${n} couche${n > 1 ? "s" : ""} (écart moyen ΔE ${best.mean.toFixed(1)})`
+    : `Palette « ${palDef(best.k)[0]} » : couleurs les plus proches de l'image sur ${n} couche${n > 1 ? "s" : ""} (écart moyen ΔE ${best.mean.toFixed(1)})`);
   schedule();
 }
 // "Other colours": other combinations of the palette colours on the layers, from the closest to

@@ -565,12 +565,14 @@ By default each layer gets the tone computed from the image. To paint with your 
   silhouette, palette editor) opens the same picker. **Auto (computed tone)** goes back to the image
   tone. The card of an outline stencil has the same picker (it sets the line colour of its outline layer, A, B…). Choosing a colour of the
   current palette keeps that palette shown in the menu;
-- or use the **Colour palette…** menu at the top of the stencil column: 91 harmonious palettes in 10
+- or use the **Colour palette…** menu at the top of the stencil column: 99 harmonious palettes in 11
   families (Classics, Vivid, Modern vivid, Soft, Modern soft, Trending, Cold, Warm, Nature,
-  Monochromes), of 8 colours each. Each layer gets the palette colour closest to the tone it really
+  Monochromes, of 8 colours each, and Posters). Each layer gets the palette colour closest to the tone it really
   paints in the image (CIEDE2000 difference, optimal assignment so that two layers never share a
   colour; blended in-between tones are added when there are more layers than colours); the status
-  bar shows the mean ΔE. Your own palettes (*My palettes*) are made in the **palette editor**:
+  bar shows the mean ΔE. The **Posters (Fairey style)** palettes (3 to 5 flat colours measured on
+  propaganda-style screen prints: cream, sky blue or ochre, red, navy or black) are meant to be used
+  with **By values** (below) and 3 to 5 stencils. Your own palettes (*My palettes*) are made in the **palette editor**:
   **＋ New palette…** (empty), **＋ Save the current colours…** (starts from the layer colours),
   **＋ Import a palette…** (paste a JSON list such as `["#006ba6","#0496ff","#ffbc42","#d81159","#8f2d56"]`,
   `#rrggbb` codes separated by commas or spaces, or a coolors.co link), or **✎** next to a palette
@@ -581,6 +583,11 @@ By default each layer gets the tone computed from the image. To paint with your 
 - or click **Closest** (target icon ◎): same closest-colour assignment with the chosen palette (useful after editing
   colours by hand); with no palette chosen, every palette (yours included) is tried and the one that
   best matches the image is applied;
+- or click **By values** (three bars from light to dark, next to *Closest*): the palette colours are
+  given by lightness rank instead of hue, as on a screen-printed poster: the lightest layer gets the
+  lightest chosen colour, the darkest layer the darkest one, whatever their hue in the image (among
+  the light → dark ordered choices, the one closest to the image); with no palette chosen, every
+  palette is tried in this way;
 - or click **Other colours** (shuffle icon ⤨): each click gives another combination of the chosen palette's colours
   on the layers (never twice the same colour), from the closest to the image to the farthest, each
   one changing at least half of the layers; *Closest* goes back to the best one. The toggle next to
