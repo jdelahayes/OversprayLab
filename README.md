@@ -467,7 +467,14 @@ Choose how the stencil sheet relates to the support:
 ### 5.10 Layer effects
 
 The **Layer effects** section changes the shape of the computed layers (not the image): each
-colour layer has its own stack of effects, all visible at once, one block per layer.
+layer has its own stack of effects, all visible at once, one block per layer.
+
+Line stencils – the outline layers that receive the key details and the silhouette, and every
+stencil of the lines-only style – have effects too (listed as *Layer n (outline)* once computed).
+Painted over the colour layers, they are processed alone: their effects see the other layers but
+change only their own stencil (a halo or shadow given to another layer is left out). Lines added
+into a colour layer (destination *darkest* / *nearest layer*) are not changed by that layer's
+effects.
 
 The effects are grouped by category in the **+ Add…** list.
 
@@ -523,7 +530,8 @@ the same settings line up from one layer to the next.
   Both have no effect in cumulative stacking, where the layers already overlap.
 - A layer card shows **✦ n** when the layer has active effects; click it to reach its settings.
 - The effects are saved with the settings and in the project. If the number of stencils drops,
-  the effects of the missing layers are kept (marked *absent*) and come back with the layer.
+  the effects of the missing layers are kept (marked *absent*) and come back with the layer; the
+  **×** of an absent layer deletes its effects.
 
 ### 5.11 Check the result
 

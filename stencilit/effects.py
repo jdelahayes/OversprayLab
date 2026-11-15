@@ -1232,3 +1232,18 @@ def apply_all(masks: list, effects: dict, p, image_bgr: np.ndarray, off_px: tupl
     for i in sorted(done | ctx.touched):
         out[i] = clean_after(out[i], p, limit)
     return out
+
+
+def apply_alone(mask: np.ndarray, stack: list, p, image_bgr: np.ndarray, off_px: tuple,
+                below: list) -> np.ndarray:
+    """Applies a stack to a stencil painted over the others (outline stencils: key details,
+    silhouette, lines-only style). `below`: masks of the layers painted before it, numbered from 1
+    (image area), seen by the effects but never changed: only this stencil changes, what an effect
+    would give to another layer (halo or shadow painted by another layer) is left out."""
+    masks = [m.copy() for m in below] + [mask]
+    ctx = Context(ppm=p.px_per_mm, off_px=off_px, image_bgr=image_bgr, masks=masks,
+                  index=len(below))
+    m = mask
+    for kind, args in stack:
+        m = APPLY[kind](m, ctx, args)
+    return clean_after(m, p, None)

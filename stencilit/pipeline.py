@@ -1467,7 +1467,8 @@ def build(prep: Prepared, p: Params, outline_region: np.ndarray | None = None,
         cleaned_all.append(clean_mask(t, p, extra_area))
 
     # Effects of the layers (each layer its own stack), applied before lines, merges and bridges
-    fx = fxmod.parse(p.layer_effects) if color_ids else {}
+    fx_all = fxmod.parse(p.layer_effects)  # also the outline stencils (numbered after the colour layers)
+    fx = fx_all if color_ids else {}
     pre_fx = list(cleaned_all)            # without effects: what the "removed details" are compared to
     base_masks = list(cleaned_all)        # colour layers before their effects (key details "before effects")
     if fx:
@@ -1489,7 +1490,7 @@ def build(prep: Prepared, p: Params, outline_region: np.ndarray | None = None,
     # without the other; each one goes to an outline layer or into the colour layers.
     entries, groups = outline_entries(p, prep, zone_regions, outline_region)
     if p.stencil_style == "line":
-        return make_result(line_stencils(prep, p, entries, groups, support, place),
+        return make_result(line_stencils(prep, p, entries, groups, support, place, fx_all),
                            zone_lines=_zone_lines(entries))
 
     # Key-detail lines merged into the colour layers (instead of a separate outline stencil):
@@ -1560,6 +1561,7 @@ def build(prep: Prepared, p: Params, outline_region: np.ndarray | None = None,
     # Outline stencils, painted last, above all layers: one per outline layer (A, B...), made of
     # the zones (and silhouette) sent to it
     order = [g for g in groups if any(e[2] == g for e in entries)]
+    out_masks = []                         # outline stencils done (image area), for their effects
     sim = sim_pre = None
     for g in order:
         if sim is None:
@@ -1584,10 +1586,15 @@ def build(prep: Prepared, p: Params, outline_region: np.ndarray | None = None,
         if target is not None and target.any():
             cleaned = clean_mask(target, p)
             lost = cv2.bitwise_xor(cleaned, target)
+            n_out = len(layers) + 1
+            if fx_all.get(n_out):          # effects of the outline stencil: on it alone
+                cleaned = fxmod.apply_alone(cleaned, fx_all[n_out], p, prep.resized, prep.off_px,
+                                            cleaned_all + out_masks)
+            out_masks.append(cleaned)
             opening = place(cleaned)
             merged, n_merged = merge_line_islands(opening, p, color, support)
             bridges, n_isl, n_short = add_bridges(opening, p, None) if p.bridges else ([], 0, 0)
-            layers.append(Layer(index=len(layers) + 1, color=color, target=target, opening=opening,
+            layers.append(Layer(index=n_out, color=color, target=target, opening=opening,
                                 lost=lost, bridges=bridges, paths=vectorize(opening, p),
                                 islands=n_isl, short_islands=n_short, merged=merged, n_merged=n_merged,
                                 kind="outline", group=g))
@@ -2068,10 +2075,11 @@ def zone_limits(prep: Prepared, p: Params) -> tuple[np.ndarray, np.ndarray]:
 
 
 def line_stencils(prep: Prepared, p: Params, entries: list, groups: dict, support: np.ndarray,
-                  place) -> list:
+                  place, fx: dict | None = None) -> list:
     """Stencils of the "line" style: no flat colour, only lines, one stencil per line colour
     (sprayed from the lightest to the darkest). Sources: key details found against the bare
-    support, silhouette of a mask, limits between the tone zones (colouring book)."""
+    support, silhouette of a mask, limits between the tone zones (colouring book).
+    `fx`: effects per stencil number (see `effects.parse`), each applied to its stencil alone."""
     H, W = prep.labels.shape
     ppm = p.px_per_mm
     flat = np.empty((H, W, 3), np.uint8)
@@ -2131,14 +2139,18 @@ def line_stencils(prep: Prepared, p: Params, entries: list, groups: dict, suppor
         if src not in g[1]:
             g[1].append(src)
     order = sorted(by_colour.values(), key=lambda g: -float(_lab(g[2].reshape(1, 3))[0, 0]))  # light first
-    layers = []
+    layers, done = [], []
     for i, (target, srcs, c) in enumerate(order):
         cleaned = clean_mask(target, p)
+        lost = cv2.bitwise_xor(cleaned, target)
+        if fx and fx.get(i + 1):
+            cleaned = fxmod.apply_alone(cleaned, fx[i + 1], p, prep.resized, prep.off_px, done)
+        done.append(cleaned)
         opening = place(cleaned)
         merged, n_merged = merge_line_islands(opening, p, c, support)
         bridges, n_isl, n_short = add_bridges(opening, p, None) if p.bridges else ([], 0, 0)
         layers.append(Layer(index=i + 1, color=c, target=target, opening=opening,
-                            lost=cv2.bitwise_xor(cleaned, target), bridges=bridges,
+                            lost=lost, bridges=bridges,
                             paths=vectorize(opening, p), islands=n_isl, short_islands=n_short,
                             merged=merged, n_merged=n_merged, kind="outline", sources=tuple(srcs)))
     return layers

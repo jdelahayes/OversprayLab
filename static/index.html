@@ -424,8 +424,8 @@
   .fxtog .chev { color: var(--muted); width: 8px; flex: none; }
   .fxname { flex: none; font-weight: 600; }
   .fxsum { color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; flex: 1; }
-  .fxdel { border: 0; background: none; padding: 2px 6px; color: var(--muted); font-size: 14px; line-height: 1; }
-  .fxdel:hover { color: var(--accent); }
+  .fxdel, .fxldel { border: 0; background: none; padding: 2px 6px; color: var(--muted); font-size: 14px; line-height: 1; }
+  .fxdel:hover, .fxldel:hover { color: var(--accent); }
   .fxparams { padding: 0 8px 6px; font-size: 12px; }
   .fxparams select { margin-bottom: 4px; }
   .fxnone { margin: 4px 2px 0; }
@@ -2418,11 +2418,12 @@ function fxSave(s, compute = true) {
   renderFx(true); updateSummaries();
   if (compute) schedule();
 }
-// Colour layers shown: those of the last computation, else the requested number of stencils;
-// layers that no longer exist but still have effects are listed as "absent" (kept, not applied)
+// Layers shown: those of the last computation (outline stencils included: their effects change
+// them alone), else the requested number of stencils; layers that no longer exist but still have
+// effects are listed as "absent" (kept, not applied)
 function fxLayers() {
   const out = LAST && LAST.layers
-    ? LAST.layers.filter(L => L.kind !== "outline").map(L => ({ n: L.index, color: L.color }))
+    ? LAST.layers.map(L => ({ n: L.index, color: L.color, outline: L.kind === "outline" }))
     : (val("stencil_style") === "line" ? [] : Array.from({ length: val("n_layers") }, (_, i) => ({ n: i + 1, color: null })));
   const s = fxState();
   Object.keys(s.layers).map(Number).filter(n => !out.some(L => L.n === n) && s.layers[n].fx.length)
@@ -2473,7 +2474,7 @@ function renderFx(force) {
   const a = document.activeElement, keep = a && box.contains(a)
     ? { id: a.closest(".fxitem")?.dataset.id, k: a.dataset.k, cls: a.className.split(" ")[0], l: a.closest(".fxlayer")?.dataset.l } : null;
   if (!layers.length) {
-    box.innerHTML = `<p class="hint">Les effets s'appliquent aux couches en aplat (pas au style trait seul).</p>`;
+    box.innerHTML = `<p class="hint">Les couches de traits apparaissent ici après le calcul.</p>`;
     return;
   }
   // effects grouped by category, in the order of the catalogue
@@ -2501,10 +2502,10 @@ function renderFx(force) {
       <div class="fxlh">
         <span class="fxsw" style="background:${Ly.color || "transparent"}"></span>
         <input type="checkbox" class="fxlon"${L.on ? " checked" : ""} title="Activer les effets de la couche ${Ly.n}" aria-label="Activer les effets de la couche ${Ly.n}">
-        <b>Couche ${Ly.n}</b>${Ly.orphan ? `<span class="hint" title="Cette couche n'existe pas avec le nombre de pochoirs actuel : ses effets sont gardés mais pas appliqués">absente</span>` : ""}
+        <b${Ly.outline ? ` title="Pochoir de traits (détails clés, silhouette…) : ses effets ne changent que lui"` : ""}>Couche ${Ly.n}${Ly.outline ? " (contours)" : ""}</b>${Ly.orphan ? `<span class="hint" title="Cette couche n'existe pas avec le nombre de pochoirs actuel : ses effets sont gardés mais pas appliqués">absente</span>` : ""}
         ${L.fx.length && others.length ? `<select class="fxcopy" title="Copier la pile d'effets de cette couche vers une autre couche (elle remplace la sienne)">
           <option value="">⧉ Copier vers…</option>${others.map(o => `<option value="${o.n}">Couche ${o.n}</option>`).join("")}${others.length > 1 ? `<option value="all">toutes les couches</option>` : ""}</select>` : ""}
-        ${Ly.orphan ? "" : `<select class="fxadd" title="Ajouter un effet à cette couche (à la fin de sa pile)"><option value="">+ Ajouter…</option>${addOpts}</select>`}
+        ${Ly.orphan ? `<button type="button" class="fxldel" aria-label="Supprimer les effets de la couche ${Ly.n}" title="Supprimer les effets de cette couche absente">×</button>` : `<select class="fxadd" title="Ajouter un effet à cette couche (à la fin de sa pile)"><option value="">+ Ajouter…</option>${addOpts}</select>`}
       </div>
       <div class="fxitems">${items || `<p class="hint fxnone">aucun effet</p>`}</div>
     </div>`;
@@ -2559,6 +2560,14 @@ function setupFx() {
     t.closest("label").querySelector(".v").textContent = fxFmt(q, t.value);
   });
   box.addEventListener("click", e => {
+    const ld = e.target.closest(".fxldel");
+    if (ld) {                            // absent layer: its kept effects are dropped
+      const s = fxState(), n = ld.closest(".fxlayer").dataset.l;
+      (s.layers[n]?.fx || []).forEach(f => FXOPEN.delete(f.id));
+      delete s.layers[n];
+      status(`Effets de la couche ${n} supprimés`);
+      return fxSave(s);
+    }
     const it = e.target.closest(".fxitem"); if (!it) return;
     if (e.target.closest(".fxtog")) {
       const id = it.dataset.id; FXOPEN.has(id) ? FXOPEN.delete(id) : FXOPEN.add(id);
@@ -2627,7 +2636,6 @@ function setupFx() {
 }
 // Layer card badge: number of active effects, click = settings of that layer
 function fxBadge(L) {
-  if (L.kind === "outline") return "";
   const fx = fxActive(L.index); if (!fx.length) return "";
   return `<button type="button" class="fxbadge" data-idx="${L.index}" title="Effets de la couche ${L.index} — cliquer pour les régler">✦ ${fx.length}</button>`;
 }
