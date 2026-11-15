@@ -84,8 +84,10 @@
   .hint { color: var(--muted); font-size: 12px; margin: 4px 0 0; }
   .cut { background: var(--soft); border-radius: 6px; padding: 6px 8px; font-size: 12px; margin-top: 8px; }
   .cut b { font-weight: 600; }
-  #drop { border: 2px dashed var(--line); border-radius: 10px; padding: 16px; text-align: center;
-          cursor: pointer; color: var(--muted); margin-bottom: 12px; }
+  /* image box (drop zone) on the left, project buttons stacked on its right */
+  .topbox { display: flex; gap: 8px; align-items: flex-start; margin-bottom: 12px; }
+  #drop { border: 2px dashed var(--line); border-radius: 10px; padding: 10px; text-align: center;
+          cursor: pointer; color: var(--muted); flex: 1 1 auto; min-width: 0; max-width: 220px; font-size: 12px; }
   #drop.over { border-color: var(--accent); color: var(--ink); }
   #drop img { max-width: 100%; max-height: 120px; display: block; margin: 0 auto 6px; border-radius: 4px; }
   button { font: inherit; border-radius: 7px; border: 1px solid var(--line); background: var(--soft);
@@ -123,6 +125,7 @@
   .detlegend { display: inline-flex; align-items: center; gap: 4px; font-size: 12px; color: var(--muted); }
   .detlegend i { display: inline-block; width: 12px; height: 4px; border-radius: 2px; margin-left: 6px; }
   .maskwrap canvas { position: absolute; inset: 0; width: 100%; height: 100%; opacity: var(--mask-alpha, .5); pointer-events: none; }
+  .maskwrap canvas.mbg { opacity: 1; }
   .maskwrap .cropguide { position: absolute; border: 1.5px dashed rgba(255,255,255,.9); box-shadow: 0 0 0 1px rgba(0,0,0,.4); pointer-events: none; }
   .stage .brush { position: absolute; z-index: 7; border-radius: 50%; border: 1.5px solid #fff; box-shadow: 0 0 0 1px rgba(0,0,0,.7);
                      transform: translate(-50%, -50%); pointer-events: none; display: none; }
@@ -262,7 +265,7 @@
   .lv img.ov { position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none; background: transparent; }
   .stage .lv { max-width: 100%; }
   .stage .lv img { max-width: none; max-height: none; width: 100%; height: 100%; }
-  body.no-bridges .lv .ov-bridges, body.no-lost .lv .ov-lost, body.no-merged .lv .ov-merged { display: none; }
+  body.no-bridges .lv .ov-bridges, body.no-lost .lv .ov-lost, body.no-merged .lv .ov-merged, body.no-flat .lv .ov-flat { display: none; }
   /* registration marks (vector overlay, "Marks" button) */
   .regov { position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none; overflow: visible; z-index: 5; }
   .regov polygon, .regov circle { fill: rgba(255,255,255,.9); stroke: #222; stroke-width: 1; vector-effect: non-scaling-stroke; }
@@ -328,8 +331,13 @@
   textarea { resize: vertical; font-size: 12px; }
   .cutgrid { display: grid; grid-template-columns: 1fr 1fr; gap: 4px 8px; margin-top: 4px; }
   .cutgrid label { display: grid; grid-template-columns: 52px 1fr; align-items: center; gap: 4px; }
-  .projbar { margin: -6px 0 12px; display: flex; flex-wrap: wrap; gap: 6px; justify-content: center; }
-  .projbar button { font-size: 12px; padding: 4px 10px; }
+  .projbar { display: flex; flex-direction: column; gap: 6px; flex: none; }
+  .projname { padding: 4px 6px; border: 1px dashed transparent; border-radius: 6px; cursor: text; font-weight: 600;
+              overflow-wrap: anywhere; min-height: 1.4em; }
+  .projname:hover, .projname:focus-visible { border-color: var(--line); }
+  .projname.empty { color: var(--muted); font-weight: normal; cursor: default; }
+  #projNameInput { width: 100%; }
+  .projbar button { font-size: 12px; padding: 4px 10px; text-align: left; }
   header button.link { margin-left: 12px; background: none; border: none; color: var(--muted); text-decoration: underline; padding: 0; font-size: 12px; }
   .aligngrid { display: grid; grid-template-columns: repeat(3, 30px); gap: 3px; }
   .aligngrid button, #alignH, #alignV { padding: 3px 0; width: 30px; font-size: 14px; line-height: 1.2; }
@@ -445,6 +453,11 @@
   .zonebar, .mzones { display: flex; flex-wrap: wrap; gap: 4px; align-items: center; }
   .zonebar { margin: 4px 0 6px; }
   .zchip.off { text-decoration: line-through; opacity: .6; }
+  .fchip { display: inline-flex; align-items: center; gap: 4px; }
+  .fchip .fsw { width: 10px; height: 10px; border-radius: 2px; border: 1px solid var(--line); flex: none; }
+  .fchip.painted { font-weight: 600; }
+  .card .lflat { padding: 2px 5px; line-height: 0; border-radius: 999px; margin-left: 4px; color: var(--muted); }
+  .card .lflat.on { color: var(--accent); }
   .zadd { min-width: 28px; font-weight: 700; }
   .zonetools { display: flex; flex-wrap: wrap; gap: 6px 10px; align-items: center; margin-bottom: 4px; }
   label.row[hidden] { display: none; }
@@ -492,16 +505,27 @@
 <div class="colgrip left" data-side="left" role="separator" aria-orientation="vertical" aria-label="Largeur du panneau des réglages" title="Glisser pour élargir / réduire (double-clic : largeur par défaut)"></div>
 <div class="colgrip right" data-side="right" role="separator" aria-orientation="vertical" aria-label="Largeur de la colonne des pochoirs" title="Glisser pour élargir / réduire (double-clic : largeur par défaut)"></div>
 <aside>
+  <div class="topbox">
   <div id="drop">
     <div id="dropInner">Glissez une image ici<br>ou cliquez pour choisir</div>
     <input type="file" id="file" accept="image/*" hidden>
   </div>
   <div class="projbar">
-    <button type="button" id="openProject" title="Rouvrir un zip exporté par StencilIt (image, masque et tous les réglages), ou seulement son fichier …_infos.json">Ouvrir un projet…</button>
-    <button type="button" class="primary" id="export" disabled title="Pochoirs SVG + projet rechargeable (image d'origine, masque, réglages)">Exporter le projet (.zip)</button>
+    <button type="button" id="openProject" title="Rouvrir un zip exporté par StencilIt (image, masque et tous les réglages), ou seulement son fichier infos.json">Ouvrir un projet…</button>
+    <button type="button" class="primary" id="export" disabled title="Pochoirs SVG + projet rechargeable (image d'origine, masque, réglages)">Exporter le projet</button>
     <button type="button" id="resetAll" title="Rétablit tous les réglages par défaut ; l'image chargée et ses masques sont conservés, ainsi que les réglages enregistrés">Réglages par défaut</button>
     <input type="file" id="projectFile" accept=".zip,.json,application/zip,application/json" hidden>
   </div>
+  </div>
+
+  <fieldset id="projSec">
+    <legend>Projet</legend>
+    <label class="full" for="projNameInput">Nom du projet</label>
+    <div class="projname empty" id="projName" role="button" tabindex="0" title="Cliquer pour renommer le projet : il nomme le zip exporté et figure sur la fiche de pulvérisation">(aucune image)</div>
+    <input type="text" id="projNameInput" maxlength="80" hidden aria-label="Nom du projet">
+    <div class="hint" id="projImage" hidden><span>Image d'origine :</span> <span id="projImageName" data-noi18n></span></div>
+    <p class="hint">Par défaut, le nom de l'image. Le zip exporté porte ce nom ; les fichiers qu'il contient n'ont pas de préfixe.</p>
+  </fieldset>
 
   <fieldset>
     <legend>Support à peindre</legend>
@@ -852,6 +876,21 @@
       <input type="range" id="hue_weight" min="0" max="300" step="10" value="40"></label>
     <label class="row">Vivacité des couleurs (%) <span class="v" id="color_vividness_v"></span>
       <input type="range" id="color_vividness" min="0" max="100" step="5" value="0"></label>
+    <label class="row">Aplats automatiques <span class="v" id="flat_auto_v"></span>
+      <input type="range" id="flat_auto" min="0" max="100" step="5" value="0"></label>
+    <div class="row" style="margin:6px 0 0">Aplat réglé</div>
+    <div class="zonebar" id="flatTolFor" role="group" aria-label="Masque d'aplat réglé" title="Masque d'aplat dont la tolérance est réglée : Générale ou la couche où l'aplat est forcé (chaque masque garde sa tolérance ; sans réglage propre, une couche prend la tolérance générale)"></div>
+    <label class="row" for="flat_tolerance">Tolérance des zones d'aplat <span class="v" id="flat_tolerance_v"></span></label>
+    <div style="display:flex; gap:6px; align-items:center; margin:-2px 0 6px">
+      <button type="button" id="flatTolAuto" class="vt-opt" aria-pressed="true" title="Tolérance générale : enfoncé, cet aplat suit la tolérance de l'aplat Générale. Relâché (clic ou curseur bougé), il garde sa propre tolérance, celle du curseur ; recliquer le ramène à la tolérance générale">Auto</button>
+      <input type="range" id="flat_tolerance" min="0" max="100" step="5" value="50" aria-label="Tolérance des zones d'aplat" style="flex:1; min-width:0"></div>
+    <input type="hidden" id="flat_tolerances" value="">
+    <div style="display:flex; gap:6px; align-items:center; margin:2px 0 6px">
+      <button type="button" id="paintFlat" class="vt-small">Peindre les zones d'aplat…</button>
+      <span class="hint" id="flatInfoSide">Aucune zone d'aplat peinte.</span>
+    </div>
+    <p class="hint">Aplats : couches pleines, sans îlots d'une teinte voisine qui s'entremêlent (style affiche).
+      Chaque zone d'aplat peinte (ou objet sélectionné) prend sa teinte principale ; les détails francs restent.</p>
     <label class="full">Mode</label>
     <select id="color_mode">
       <option value="auto">Automatique</option>
@@ -1148,11 +1187,14 @@
         <button type="button" class="vt-opt vt-ico mkind" data-kind="outline" aria-pressed="false" aria-label="Masque contours" title="Masque contours (détails clés) : zones où les détails clés du pochoir de contours sont cherchés"><svg class="ico" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M2 12s3.5-6 10-6 10 6 10 6-3.5 6-10 6S2 12 2 12z"/><circle cx="12" cy="12" r="2.5"/><path d="M5 4l1.5 2M12 2.5V4.5M19 4l-1.5 2"/></svg><i class="mdot"></i></button>
         <button type="button" class="vt-opt vt-ico mkind" data-kind="subject" aria-pressed="false" aria-label="Masque sujet" title="Masque sujet (fond supprimé) : le sujet à garder, le fond reste support nu"><svg class="ico" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="2.5" y="2.5" width="19" height="19" rx="2" stroke-dasharray="3 2.5"/><circle cx="12" cy="9.5" r="3.2" fill="currentColor"/><path d="M6 19c.8-3.2 3.2-5 6-5s5.2 1.8 6 5z" fill="currentColor"/></svg><i class="mdot"></i></button>
         <button type="button" class="vt-opt vt-ico mkind" data-kind="silhouette" aria-pressed="false" aria-label="Masque silhouette" title="Masque silhouette (contour tracé) : zone dont le contour est tracé par les contours"><svg class="ico" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="8" r="4"/><path d="M4.5 21c1-4.3 4-6.8 7.5-6.8s6.5 2.5 7.5 6.8"/></svg><i class="mdot"></i></button>
+        <button type="button" class="vt-opt vt-ico mkind" data-kind="flat" aria-pressed="false" aria-label="Masque aplats" title="Masque aplats : chaque zone peinte (ou objet sélectionné) est remplie de sa teinte principale, sans îlots d'autres teintes (tolérance : section Simplification)"><svg class="ico" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 13 11 6l7 7-7 7z" fill="currentColor" fill-opacity=".35"/><path d="M8 3l3 3"/><path d="M19.5 15.5s1.5 2 1.5 3a1.5 1.5 0 0 1-3 0c0-1 1.5-3 1.5-3z" fill="currentColor"/></svg><i class="mdot"></i></button>
       <span class="mzones" id="mZones" hidden role="group" aria-label="Zone de contours à peindre"></span>
+      <span class="mzones" id="mFlat" hidden role="group" aria-label="Couche de l'aplat à peindre"></span>
       <select id="maskKind" hidden aria-label="Masque à peindre" title="Masque à peindre" style="width:auto; flex:none">
         <option value="outline">Masque contours (toutes les zones)</option>
         <option value="subject">Masque sujet (fond supprimé)</option>
         <option value="silhouette">Masque silhouette (contour tracé)</option>
+        <option value="flat">Masque aplats</option>
       </select>
       </span>
       <span class="mgroup">
@@ -1166,6 +1208,10 @@
         <label class="vt-size" id="mSizeBox" title="Taille du pinceau : touches [ et ], ou Ctrl + molette sur l'image">Taille <input type="range" id="mSize" min="4" max="160" value="40" aria-label="Taille du pinceau"> <span id="mSizeV">40</span> px</label>
         <label class="vt-size" id="smartOpts" hidden title="Sensibilité aux limites du pinceau intelligent : plus haut = s'arrête aux moindres changements de couleur (zone plus serrée), plus bas = déborde sur les teintes proches">Sensibilité
           <input type="range" id="smartSens" min="0" max="100" value="50" aria-label="Sensibilité du pinceau intelligent"> <span id="smartSensV">50</span></label>
+        <select id="smartSrc" hidden aria-label="Ce que suit le pinceau intelligent" title="Ce que suit le pinceau intelligent : l'image source, ou le fond affiché sous le masque (prévisualisation ou couches choisies, voir le menu Fond) pour peindre en suivant les zones des couches" style="width:auto; flex:none">
+          <option value="image">Suit : l'image</option>
+          <option value="bg">Suit : le fond affiché</option>
+        </select>
       <div class="semopts" id="semOpts" hidden>
         <label class="vt-size" title="Sensibilité de la sélection d'objet : plus haut = sélection plus large (les bords sont inclus plus généreusement), plus bas = plus serrée. Changer la valeur refait la dernière sélection.">Sensibilité
           <input type="range" id="semSens" min="0" max="100" value="50" aria-label="Sensibilité de la sélection d'objet"> <span id="semSensV">50</span></label>
@@ -1190,12 +1236,21 @@
           <input type="range" id="mAlpha" min="10" max="100" step="5" value="50" aria-label="Opacité du masque"> <span id="mAlphaV">50</span> %</label>
       </span>
       <span class="mgroup">
+        <select id="mBg" aria-label="Fond affiché sous le masque" title="Fond affiché sous le masque : l'image, la prévisualisation (toutes les couches visibles, sur le support) ou les couches choisies (sur l'image atténuée)" style="width:auto; flex:none">
+          <option value="image">Fond : image</option>
+          <option value="preview">Fond : prévisualisation</option>
+          <option value="layers">Fond : couches choisies</option>
+        </select>
+        <span class="mzones" id="mBgLayers" hidden role="group" aria-label="Couches affichées sous le masque"></span>
+      </span>
+      <span class="mgroup">
         <button type="button" id="mClear" class="vt-small">Tout effacer</button>
         <select id="mCopy" aria-label="Copier ce masque dans un autre masque" title="Copie le masque affiché dans un autre masque (son contenu est remplacé)" style="width:auto; flex:none">
           <option value="">Copier vers…</option>
           <option value="outline">Masque contours</option>
           <option value="subject">Masque sujet</option>
           <option value="silhouette">Masque silhouette</option>
+          <option value="flat">Masque aplats</option>
         </select>
       </span>
       <button type="button" class="vt-opt vt-ico mdet" id="optDetect" aria-pressed="false" aria-label="Aperçu de la détection"
@@ -1240,6 +1295,7 @@
     <button type="button" class="lgbtn" id="lgBridges" aria-pressed="true" title="Afficher / masquer les ponts sur les vues des couches"><i style="background:#e62828"></i>pont</button>
     <button type="button" class="lgbtn" id="lgLost" aria-pressed="true" title="Afficher / masquer les détails supprimés par les contraintes du matériau"><i style="background:#ff8c00"></i>détail supprimé</button>
     <button type="button" class="lgbtn" id="lgMerged" aria-pressed="true" title="Afficher / masquer les zones fusionnées au lieu d'un pont (chenal fermé ou petit îlot supprimé)"><i style="background:#963cc8"></i>fusion</button>
+    <button type="button" class="lgbtn" id="lgFlat" aria-pressed="true" title="Afficher / masquer les zones d'aplat peintes sur les vues des couches : zones de l'aplat Générale là où elles ont abouti dans la couche, et zones forcées dans la couche"><i style="background:#14b8a6"></i>aplat</button>
   </div>
   <div class="layers" id="layers"><p class="hint">Les pochoirs apparaîtront ici, dans l'ordre de pulvérisation.</p></div>
 </div>
@@ -1255,7 +1311,7 @@ const PARAMS = ["support_w_mm", "support_h_mm", "support_color", "inner_margin_m
   "image_scale", "image_height_factor", "image_pos_x", "image_pos_y", "margin_mm", "sheet_mode", "sheet_border_mm", "reg_dims", "machine_max_mm", "mat_w_mm", "mat_h_mm", "mat_orient", "reg_corners", "reg_shape", "reg_size_mm", "layer_notches", "sheet_outline",
   "pre_auto_levels", "pre_clahe", "pre_gamma", "manual_thresholds", "thresholds", "pre_saturation", "pre_sharpen", "pre_remove_bg",
   "layer_colors", "layer_effects",
-  "n_layers", "detail", "hue_weight", "color_vividness", "color_mode", "layering", "skip_support", "protect_lines",
+  "n_layers", "detail", "hue_weight", "color_vividness", "flat_auto", "flat_tolerance", "flat_tolerances", "color_mode", "layering", "skip_support", "protect_lines",
   "outline", "outline_target", "outline_method", "outline_sensitivity", "outline_width_mm", "outline_min_length_mm", "outline_subject", "outline_subject_mask", "outline_subject_weak", "outline_subject_de", "outline_subject_gap_every_mm", "outline_subject_gap_mm", "stencil_style", "line_zones", "line_zones_color", "line_sil_color", "outline_auto_color", "outline_color", "outline_zones", "outline_ref", "outline_whole_lines", "outline_line_sens", "outline_close_lines", "outline_channel", "outline_follow_mm",
   ...MAT_FIELDS, "merge_amount", "merge_channel_mm", "merge_channels", "merge_islands", "merge_line_islands",
   "tolerance_mm", "smooth_curves", "spray_mm", "px_per_mm"];
@@ -1932,6 +1988,9 @@ function setVals(o) {
   if (!$("stock_preset").value) $("stock_preset").value = "custom";   // deleted ★ format
   syncSheetMode(); syncStockPreset(); syncMat();   // state of the fields, sheet, cutting mat and material sheet
   methodHint(); syncStyle(); renderFx(true); zonesAfterLoad();
+  // settings saved before per-mask flat tolerances: "auto" = the loaded flat_tolerance
+  if (o && "flat_tolerance" in o && !("flat_tolerances" in o)) $("flat_tolerances").value = JSON.stringify({ auto: +o.flat_tolerance });
+  flatTolToField();
 }
 async function presetCall(method, url, body) {
   try {
@@ -2125,7 +2184,7 @@ function restoreSettings() {
   return true;
 }
 function showValues() {
-  ["n_layers", "detail", "hue_weight", "color_vividness", "tolerance_mm", "spray_mm", "px_per_mm", "image_scale", "image_pos_x", "image_pos_y", "outline_sensitivity", "pre_clahe", "pre_gamma", "pre_saturation", "pre_sharpen", "merge_amount"].forEach(k => {
+  ["n_layers", "detail", "hue_weight", "color_vividness", "flat_auto", "flat_tolerance", "tolerance_mm", "spray_mm", "px_per_mm", "image_scale", "image_pos_x", "image_pos_y", "outline_sensitivity", "pre_clahe", "pre_gamma", "pre_saturation", "pre_sharpen", "merge_amount"].forEach(k => {
     const o = $(k + "_v");
     if (o) o.textContent = k.startsWith("image_") ? (+$(k).value).toFixed(1) : k === "pre_gamma" ? (+$(k).value).toFixed(2) : $(k).value;
   });
@@ -2152,6 +2211,7 @@ function applyMaterial(k) {
 // ---------------- Collapsible panel sections ----------------
 // All collapsed at first; opening one closes the others.
 const SECTION_SUMMARY = {
+  "Projet": () => PROJECT_NAME,
   "Support à peindre": () => `${val("support_w_mm")} × ${val("support_h_mm")} mm`,
   "Image : cadrage & taille": () => IMG ? `${$("img_width_mm").value} × ${$("img_height_mm").value} mm` : "",
   "Feuille du pochoir & calage": () => `${val("reg_corners")} coins · ${{ equerre: "équerres", croix: "croix", rond: "trous" }[val("reg_shape")] || ""}`,
@@ -2168,7 +2228,8 @@ const SECTION_SUMMARY = {
   },
   "Simplification": () => (val("stencil_style") === "line" ? "trait seul · " : "") + `${val("n_layers")} pochoir${val("n_layers") > 1 ? "s" : ""} · détail ${val("detail")}` +
     (val("hue_weight") !== 40 ? ` · teinte ${val("hue_weight")} %` : "") +
-    (val("color_vividness") > 0 ? ` · vivacité ${val("color_vividness")} %` : ""),
+    (val("color_vividness") > 0 ? ` · vivacité ${val("color_vividness")} %` : "") +
+    (val("flat_auto") > 0 ? ` · aplats ${val("flat_auto")}` : "") + (!flatEmpty() ? " · zones d'aplat" : ""),
   "Contours des détails clés": () => val("stencil_style") === "line"
     ? "trait seul : " + ([val("outline") && "détails", val("outline_subject") && "silhouette", val("line_zones") && "coloriage"].filter(Boolean).join(" · ") || "aucun trait")
     : val("outline") && zState().zones.length > 1 ? `activé · ${zState().zones.filter(z => z.on !== false).length} zones${val("outline_subject") ? " · silhouette" : ""}`
@@ -2264,7 +2325,7 @@ function setupColumns() {
 // Added to the field and its label, without overwriting a tooltip already defined in the HTML.
 const TIPS = {
   file: "Image à transformer en pochoirs (photo, dessin, logo… en couleur ou noir et blanc). Vous pouvez aussi la glisser sur la zone.",
-  projectFile: "Projet StencilIt exporté (.zip) ou son fichier …_infos.json.",
+  projectFile: "Projet StencilIt exporté (.zip) ou son fichier infos.json.",
   user_support: "Vos supports enregistrés : format, couleur, marges, feuille, tapis et repères de calage.",
   orientation: "Portrait ou paysage : intervertit la largeur et la hauteur du support.",
   support_w_mm: "Largeur réelle de la surface à peindre, en millimètres.",
@@ -2314,6 +2375,9 @@ const TIPS = {
   color_vividness: "Couleurs calculées des couches (bouton Auto). Elles sont mesurées sur la photo d'origine, sans le prétraitement. 0 % = moyenne des pixels de chaque ton, souvent terne (les teintes voisines, ombres et reflets se compensent) ; 100 % = même teinte et même clarté, avec la saturation des pixels les plus vifs. Ne change pas la découpe. Sans effet en noir et blanc.",
   color_mode: "Couleur, noir et blanc, ou automatique (détecté selon l'image).",
   layering: "Cumulatif : chaque pochoir ouvre sa couleur et toutes les plus foncées (moins de raccords). Exclusif : chaque pochoir n'ouvre que sa couleur.",
+  flat_auto: "Aplats automatiques : un îlot d'une teinte est absorbé par la zone qui l'entoure quand la frontière entre eux est peu contrastée (variation douce de luminosité coupée par un seuil, pas un vrai bord). Plus haut = contraste toléré et taille des îlots absorbés plus grands. 0 = désactivé. Les yeux, traits sombres et bords francs restent.",
+  flat_tolerance: "Zones d'aplat peintes (onglet Masques, masque Aplats) : chaque zone peinte séparément prend sa teinte principale partout où l'image en est assez proche. 0 = rien ne change ; 50 = les teintes voisines rejoignent la teinte principale ; 100 = toute la zone d'une seule couleur.",
+  paintFlat: "Ouvre l'onglet Masques sur le masque Aplats : peignez ou cliquez (outil Objet) chaque zone à remplir d'une seule teinte (visage, fond, vêtement…). Chaque zone séparée est traitée seule.",
   protect_lines: "Les traits fins, sombres ou clairs (yeux, sourcils, narines, mèches), gardent leur teinte au lieu d'être absorbés par la zone voisine lors de la simplification. Les traits plus fins que l'ouverture mini disparaissent quand même : utilisez alors « Détails clés estompés ».",
   outline_target: "Pochoir séparé : un pochoir de plus, peint en dernier, de la couleur choisie. Dans une couche : pas de pochoir en plus, les traits sont découpés dans une couche de couleur (plus foncée que la zone qu'ils traversent).",
   skip_support: "La teinte de l'image la plus proche de la couleur du support n'a pas de pochoir : le support reste visible à la place.",
@@ -2877,6 +2941,7 @@ async function init() {
   setupColumns();
   applyTips();
   setupAccordion();
+  setupProjectName();
   // Language: English by default; the choice is remembered and applies without reloading the page.
   // Started after the sections are built (they read the original French titles).
   I18N.start();
@@ -3057,18 +3122,21 @@ async function init() {
     setOverlay("lgBridges", "no-bridges", ov.bridges !== false);
     setOverlay("lgLost", "no-lost", ov.lost !== false);
     setOverlay("lgMerged", "no-merged", ov.merged !== false);
+    setOverlay("lgFlat", "no-flat", ov.flat !== false);
   } catch (e) { /* storage unavailable */ }
   const saveOverlays = () => {
     try {
       localStorage.setItem("stencilit.surlignages", JSON.stringify({
         bridges: $("lgBridges").getAttribute("aria-pressed") === "true",
         lost: $("lgLost").getAttribute("aria-pressed") === "true",
-        merged: $("lgMerged").getAttribute("aria-pressed") === "true" }));
+        merged: $("lgMerged").getAttribute("aria-pressed") === "true",
+        flat: $("lgFlat").getAttribute("aria-pressed") === "true" }));
     } catch (e) { /* storage unavailable */ }
   };
   $("lgBridges").onclick = () => { setOverlay("lgBridges", "no-bridges", $("lgBridges").getAttribute("aria-pressed") !== "true"); saveOverlays(); };
   $("lgLost").onclick = () => { setOverlay("lgLost", "no-lost", $("lgLost").getAttribute("aria-pressed") !== "true"); saveOverlays(); };
   $("lgMerged").onclick = () => { setOverlay("lgMerged", "no-merged", $("lgMerged").getAttribute("aria-pressed") !== "true"); saveOverlays(); };
+  $("lgFlat").onclick = () => { setOverlay("lgFlat", "no-flat", $("lgFlat").getAttribute("aria-pressed") !== "true"); saveOverlays(); };
   $("optPre").onclick = () => { SHOW_PRE = !SHOW_PRE; render(); };
   $("show_reg").addEventListener("change", () => { render(); rememberSettings(); });
   $("calage").addEventListener("click", e => {
@@ -3151,6 +3219,8 @@ async function init() {
   $("smartSens").value = prefs().smart_sens ?? 50; $("smartSensV").textContent = $("smartSens").value;
   $("smartSens").addEventListener("input", () => { $("smartSensV").textContent = $("smartSens").value; });
   $("smartSens").addEventListener("change", () => savePref("smart_sens", +$("smartSens").value));
+  $("smartSrc").value = prefs().smart_src === "bg" ? "bg" : "image";
+  $("smartSrc").addEventListener("change", () => savePref("smart_src", $("smartSrc").value));
   $("mSize").addEventListener("input", () => { $("mSizeV").textContent = $("mSize").value; });
   $("mShow").addEventListener("change", () => { if (VIEW === "mask") render(); });
   // Outline detection preview (Masks tab)
@@ -3183,6 +3253,20 @@ async function init() {
   $("silColor").addEventListener("change", () => setHidden("line_sil_color", $("silColor").value.toLowerCase()));
   // the silhouette is independent of the key details: ticking it does not turn them on
   ["outline_subject", "outline_subject_mask"].forEach(k => $(k).addEventListener("change", () => { syncSilhouetteSource(); updateSummaries(); schedule(); }));
+  $("paintFlat").onclick = () => { $("maskKind").value = "flat"; VIEW = "mask"; SEL = null; render(); };
+  $("flat_tolerance").addEventListener("input", () => { fieldToFlatTol(); flatInfo(); });
+  $("flatTolFor").addEventListener("click", e => { const c = e.target.closest(".fchip"); if (c) flatSelect(c.dataset.f); });
+  $("flatTolAuto").onclick = () => {
+    const s = flatTols();
+    if (FLAT_CUR === "auto") return;
+    // following Auto: own tolerance from the slider position (same value, released); else back to Auto
+    if (!Number.isFinite(+s[FLAT_CUR])) s[FLAT_CUR] = val("flat_tolerance");
+    else delete s[FLAT_CUR];
+    $("flat_tolerances").value = JSON.stringify(s);
+    flatTolToField(); flatInfo(); schedule();
+  };
+  $("mFlat").addEventListener("click", e => { const c = e.target.closest(".fchip"); if (c) flatSelect(c.dataset.f); });
+  setupMaskBg();
   $("paintSilhouette").onclick = () => { $("maskKind").value = val("outline_subject_mask"); VIEW = "mask"; SEL = null; render(); };
   $("mCopy").onchange = () => { const to = $("mCopy").value; $("mCopy").value = ""; copyMask(maskKind(), to); };
   ["outline_sensitivity", "outline_width_mm", "outline_min_length_mm", "outline_follow_mm"].forEach(k => $(k).addEventListener("input", detectPreview));
@@ -3235,7 +3319,7 @@ async function init() {
       await fetch("/api/palette", { method: "POST", headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ id: SID, palette: projectPalette() }) });
     } catch (e) { /* exported without it */ }
-    location.href = "/api/export/" + SID + "?lang=" + I18N.lang;
+    location.href = "/api/export/" + SID + "?lang=" + I18N.lang + "&name=" + encodeURIComponent(PROJECT_NAME);
   };
 }
 
@@ -3281,12 +3365,47 @@ async function upload(file) {
   render();
   process();
 }
+// ---- Project name: the image name by default (without extension), changed by clicking it
+// (Projet section); the exported zip is named after it
+let PROJECT_NAME = "", PROJECT_DEFAULT = "", IMG_FILE = "";   // IMG_FILE: original image file name (kept in the project)
+function showProjectName() {
+  const d = $("projName");
+  d.textContent = PROJECT_NAME || "(aucune image)";
+  d.classList.toggle("empty", !SID);
+  d.toggleAttribute("data-noi18n", !!SID);       // a user name, never translated
+  $("projImage").hidden = !SID || !IMG_FILE; $("projImageName").textContent = IMG_FILE;
+  updateSummaries();
+}
+function setupProjectName() {
+  const d = $("projName"), inp = $("projNameInput");
+  const edit = () => {
+    if (!SID) return;
+    inp.value = PROJECT_NAME; d.hidden = true; inp.hidden = false; inp.focus(); inp.select();
+  };
+  const done = ok => {
+    if (inp.hidden) return;
+    if (ok) PROJECT_NAME = inp.value.replace(/[<>:"/\\|?*\x00-\x1f]+/g, " ").replace(/\s+/g, " ").trim().replace(/^\.+|\.+$/g, "") || PROJECT_DEFAULT;
+    inp.hidden = true; d.hidden = false; showProjectName();
+  };
+  d.addEventListener("click", edit);
+  d.addEventListener("keydown", e => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); edit(); } });
+  inp.addEventListener("keydown", e => {
+    if (e.key === "Enter") { e.preventDefault(); done(true); d.focus(); }
+    else if (e.key === "Escape") { e.preventDefault(); e.stopPropagation(); done(false); d.focus(); }
+  });
+  inp.addEventListener("blur", () => done(true));
+  showProjectName();
+}
 function setSession(j, name) {
   SID = j.id;
+  IMG_FILE = String(j.filename || name || "");
+  PROJECT_DEFAULT = IMG_FILE.replace(/\.[^.]+$/, "") || "projet";
+  PROJECT_NAME = j.project_name || PROJECT_DEFAULT;
+  showProjectName();
   DIRTY = false; updateCalcBtn();
   IMG = { w: j.width, h: j.height, src: j.original, name, gray: j.gray };
   CROP = { x: 0, y: 0, w: 1, h: 1 };
-  createMask(); createSubj(); createSil();
+  createMask(); createSubj(); createSil(); createFlat();
   $("crop_ratio").value = "free";
   $("image_scale").value = 100; $("image_pos_x").value = 50; $("image_pos_y").value = 50;
   setHF(1); $("keep_ratio").checked = true;
@@ -3294,7 +3413,8 @@ function setSession(j, name) {
   dropInfo();
 }
 function dropInfo() {
-  $("dropInner").innerHTML = `<img src="${IMG.src}"><b>${IMG.name}</b><br>${IMG.w}×${IMG.h} px · ${IMG.gray ? "noir & blanc" : "couleur"}`;
+  // the file name is shown in the Projet section, not under the preview
+  $("dropInner").innerHTML = `<img src="${IMG.src}">${IMG.w}×${IMG.h} px · ${IMG.gray ? "noir & blanc" : "couleur"}`;
 }
 
 // ---------------- Project: export / reopen ----------------
@@ -3370,6 +3490,7 @@ function loadMaskImage(src, coverage, kind = "outline:z1") {
     const im = new Image();
     im.onload = () => {
       if (kind === "subject") createSubj(); else if (kind === "silhouette") createSil();
+      else if (kind.startsWith("flat:")) { const fc = flatCanvas(kind.slice(5)); fc.getContext("2d").clearRect(0, 0, fc.width, fc.height); }
       else { const zid = kind.slice(8); ZCV[zid] = maskCanvas(); ZOBJ[zid] = false; if (zid === ZONE_CUR) MASK = ZCV[zid]; }
       const CV = maskCv(kind), c = CV.getContext("2d");
       const [r, g, b] = mcol(kind).match(/\w\w/g).map(h => parseInt(h, 16));
@@ -3382,6 +3503,7 @@ function loadMaskImage(src, coverage, kind = "outline:z1") {
       c.putImageData(d, 0, 0);
       if (kind === "subject") { SUBJ_EMPTY = !(coverage > 0); }
       else if (kind === "silhouette") { SIL_EMPTY = !(coverage > 0); silInfo(coverage); }
+      else if (kind.startsWith("flat:")) { FLAT_COVS[kind.slice(5)] = coverage > 0 ? coverage : 0; flatInfo(); }
       else if (kind.slice(8) === ZONE_CUR) { MASK_EMPTY = !(coverage > 0); maskInfo(coverage); }
       MASKV[kind] = { png: coverage > 0 ? CV.toDataURL("image/png") : null, exact: false };
       done();
@@ -3394,7 +3516,7 @@ async function openProject(file) {
   if (/\.json$/i.test(file.name)) {
     let info;
     try { info = JSON.parse(await file.text()); } catch (e) { return status("Fichier JSON illisible", true); }
-    if (!info.projet && !info.parametres) return status("Ce JSON n'est pas un fichier …_infos.json de StencilIt", true);
+    if (!info.projet && !info.parametres) return status("Ce JSON n'est pas un fichier infos.json de StencilIt", true);
     if (SID) {
       applyProjectSettings(info);
       status("Réglages du projet appliqués à l'image chargée");
@@ -3425,6 +3547,8 @@ async function openProject(file) {
     FG_OVERLAY = j.subject.overlay; subjInfo(j.subject);
   }
   if (j.silmask) await loadMaskImage(j.silmask, j.silmask_coverage, "silhouette");
+  if (j.flatmask) await loadMaskImage(j.flatmask, j.flatmask_coverage, "flat:auto");
+  for (const [fid, m] of Object.entries(j.flat_layer_masks || {})) await loadMaskImage(m.png, m.coverage, "flat:" + fid);
   status(`Projet ouvert : ${file.name}`);
   render();
   await recommend(false);
@@ -3484,7 +3608,10 @@ function historySnap() {
   const s = uiState(), values = { ...s.values };
   // automatic line colour: rewritten by each computation, not a change of the user
   if (values.outline_auto_color) delete values.outline_color;
-  return { values, crop: s.crop, pal: PAL_CUR, palLast: PAL_LAST, masks: { ...MASKV } };
+  // empty masks left out: an absent mask and an empty one are the same state (otherwise undoing
+  // the first stroke of a new mask records a "change" that drops the redo)
+  const masks = Object.fromEntries(Object.entries(MASKV).filter(([, v]) => v && (v.png || v.exact)));
+  return { values, crop: s.crop, pal: PAL_CUR, palLast: PAL_LAST, masks };
 }
 function historyRecord() {
   clearTimeout(HIST.timer); HIST.timer = null;
@@ -3541,11 +3668,13 @@ async function process() {
   busy = true; status("Calcul en cours…");
   document.querySelector("header").classList.add("busy");
   const gen = GEN; updateCalcBtn();
+  const sid = SID;
   try {
     const r = await fetch("/api/process", { method: "POST", headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ id: SID, params: params(), material: material(), ui: uiState() }) });
     const j = await r.json();
     if (!r.ok) throw new Error(j.error || "Erreur");
+    j.sid = sid;              // image the result belongs to (the mask background checks it)
     IMG_CACHE = new Map(); LAST = j; render(); rememberSettings(); updateSummaries();
     status(j.recolored ? `Couleurs mises à jour en ${j.seconds} s (découpe inchangée)` : `Calculé en ${j.seconds} s`);
     if (GEN === gen) DIRTY = false;               // nothing changed during the computation
@@ -3571,13 +3700,14 @@ let SUBJ = null, SUBJ_EMPTY = true, FG_OVERLAY = null, SUBJ_SENDING = null;
 let SUBJ_EXACT = false;
 let OUT_INFO = "", SUBJ_INFO = "";
 const maskKind = () => $("maskKind").value;
-const MASK_COLORS = { outline: "#e61e1e", subject: "#1fbf4f", silhouette: "#1f6fe6" };
+const MASK_COLORS = { outline: "#e61e1e", subject: "#1fbf4f", silhouette: "#1f6fe6", flat: "#ff8c00" };
 // display colours offered for the masks (only the display: the server reads the transparency)
 const MASK_PALETTE = [["Rouge", "#e61e1e"], ["Vert", "#1fbf4f"], ["Bleu", "#1f6fe6"], ["Jaune", "#f5d000"],
   ["Orange", "#ff8c00"], ["Magenta", "#e01ee0"], ["Cyan", "#00c8e6"], ["Violet", "#8a2be2"], ["Noir", "#000000"], ["Blanc", "#ffffff"]];
 // mask icons: the one shown is pressed, each with a bar of its display colour
 function syncMaskKinds() {
   if ($("mZones")) $("mZones").hidden = maskKind() !== "outline";
+  renderFlatChips();
   $("optDetect").setAttribute("aria-pressed", String($("mDetect").checked));
   document.querySelectorAll(".mkind").forEach(b => {
     b.setAttribute("aria-pressed", String(b.dataset.kind === maskKind()));
@@ -3607,17 +3737,28 @@ function setupMaskLook() {
     syncMaskKinds();
   });
 }
-const MASK_NAMES = { outline: "contours", subject: "sujet", silhouette: "silhouette" };
+const MASK_NAMES = { outline: "contours", subject: "sujet", silhouette: "silhouette", flat: "aplats" };
 // Third mask: area whose outline the outline stencil draws (option "Draw the silhouette")
 let SIL = null, SIL_EMPTY = true, SIL_INFO = "", SIL_SENDING = null;
 // masks containing an object selection (exact outline): kept exact when copied into the subject mask
-const MASK_OBJ = { outline: false, silhouette: false };
-const maskCv = k => k === "subject" ? SUBJ : k === "silhouette" ? SIL : String(k).startsWith("outline:") ? zoneCanvas(k.slice(8)) : MASK;
+const MASK_OBJ = { outline: false, silhouette: false, flat: false };
+// Fourth mask: flat zones (each painted blob takes its main tone)
+// one canvas per target: "auto" (main tone of each zone) or "t<n>" (zones forced into the layer of
+// tone n); mask kind "flat" = the target shown (FLAT_CUR), "flat:<id>" = a given one
+let FCV = {}, FLAT_CUR = "auto", FLAT_INFO = "", FLAT_COVS = {};
+const FLAT_SENDING = {};
+const flatCanvas = (id = FLAT_CUR) => FCV[id] || (FCV[id] = maskCanvas());
+const flatKey = id => "flat:" + id;
+const flatId = k => k === "flat" ? FLAT_CUR : String(k).slice(5);
+const isFlat = k => k === "flat" || String(k).startsWith("flat:");
+const flatEmpty = () => !Object.values(FLAT_COVS).some(c => c > 0);
+const maskCv = k => k === "subject" ? SUBJ : k === "silhouette" ? SIL : isFlat(k) ? flatCanvas(flatId(k)) : String(k).startsWith("outline:") ? zoneCanvas(k.slice(8)) : MASK;
+const createFor = k => k === "subject" ? createSubj : k === "silhouette" ? createSil : isFlat(k) ? createFlat : createMask;
 // Masks in the undo history: PNG of each mask (null = empty) + exact flag, updated when a mask is
 // sent to the server (end of a stroke, object, copy, clear) or loaded; MASK_RESTORE > 0 while
 // undo / redo puts a mask back (no history entry, no automatic option change)
 // (key-detail zones: one entry per zone, "outline:<zone id>")
-const MASKV = { subject: { png: null, exact: false }, silhouette: { png: null, exact: false } };
+const MASKV = { subject: { png: null, exact: false }, silhouette: { png: null, exact: false }, "flat:auto": { png: null, exact: false } };
 let MASK_RESTORE = 0;
 const maskExact = k => k === "subject" ? SUBJ_EXACT : String(k).startsWith("outline:") ? !!ZOBJ[k.slice(8)] : MASK_OBJ[k];
 function maskCommit(kind, png) {
@@ -3626,7 +3767,7 @@ function maskCommit(kind, png) {
   historySoon();
 }
 async function restoreMask(kind, st) {
-  if (!maskCv(kind)) (kind === "subject" ? createSubj : kind === "silhouette" ? createSil : createMask)();
+  if (!maskCv(kind)) createFor(kind)();
   MASKV[kind] = st;
   const c = maskCv(kind), ctx = c.getContext("2d");
   ctx.clearRect(0, 0, c.width, c.height);
@@ -3666,6 +3807,197 @@ function createSil() {
   SIL_EMPTY = true; SEM_LAST = null; MASK_OBJ.silhouette = false;
   silInfo(0);
 }
+function createFlat() {          // new image: every flat mask starts empty
+  $("flat_tolerances").value = JSON.stringify(flatTols());
+  FCV = {}; FLAT_CUR = "auto"; FLAT_COVS = {};
+  flatTolToField();
+  for (const k of Object.keys(MASKV)) if (k.startsWith("flat:")) delete MASKV[k];
+  MASKV[flatKey("auto")] = { png: null, exact: false };
+  SEM_LAST = null; MASK_OBJ.flat = false;
+  flatInfo();
+}
+// targets offered: auto, the colour layers (by tone), the bare support, and any painted target
+// whose tone no longer exists (to be able to clear it)
+function flatTargets() {
+  const out = [{ id: "auto", label: "Générale", color: null, title: "Aplat général : chaque zone prend sa teinte principale" }];
+  const seen = new Set(["auto"]);
+  for (const L of (LAST && LAST.layers) || []) {
+    if (L.kind === "outline" || L.tone == null || seen.has("t" + L.tone)) continue;
+    seen.add("t" + L.tone);
+    out.push({ id: "t" + L.tone, label: `Couche ${L.index}`, color: L.color, title: `Aplat forcé dans la couche ${L.index}` });
+  }
+  if (LAST && LAST.support_label != null && !seen.has("t" + LAST.support_label)) {
+    seen.add("t" + LAST.support_label);
+    out.push({ id: "t" + LAST.support_label, label: "Support nu", color: LAST.support_tone || val("support_color"), title: "Aplat forcé dans la teinte laissée au support nu (pas de peinture)" });
+  }
+  for (const id of Object.keys(FLAT_COVS)) if (!seen.has(id) && FLAT_COVS[id] > 0) {
+    seen.add(id);
+    out.push({ id, label: `Teinte ${+id.slice(1) + 1} (absente)`, color: null, title: "Cette teinte n'existe plus avec les réglages actuels : effacez ce masque ou changez le nombre de pochoirs" });
+  }
+  return out;
+}
+const flatLabel = id => (flatTargets().find(t => t.id === id) || { label: id === "auto" ? "Générale" : `Teinte ${+id.slice(1) + 1}` }).label;
+function renderFlatChips() {
+  flatTolToField();
+  const box = $("mFlat");
+  if (!box) return;
+  box.hidden = maskKind() !== "flat";
+  box.innerHTML = flatChipsHtml();
+}
+// chips of the flat masks (Masks tab bar and Simplification section): the mask shown is pressed
+function flatChipsHtml() {
+  return flatTargets().map(t => `<button type="button" class="vt-opt fchip${FLAT_COVS[t.id] > 0 ? " painted" : ""}" data-f="${t.id}" aria-pressed="${t.id === FLAT_CUR}" title="${escH(t.title)}">` +
+    (t.color ? `<i class="fsw" style="background:${t.color}"></i>` : "") + `${escH(t.label)}</button>`).join("");
+}
+// ---- Background under the mask being painted: the image (default), the preview (every visible
+// layer on the support) or chosen layers (on the dimmed image). The layer images of the preview are
+// in support coordinates: `mask_map` gives where the computed image area is in them and which part
+// of the source image (the mask canvas) it shows.
+let MBG_MODE = "image";
+const MBG_SEL = new Set();          // layer indices shown in "chosen layers" mode
+const MBG_IMGS = new Map();         // data URL -> loaded Image
+function mbgImage(url) {
+  let im = MBG_IMGS.get(url);
+  if (!im) {
+    im = new Image();
+    im.ready = new Promise(ok => { im.onload = () => ok(im); im.onerror = () => ok(null); });
+    im.src = url;
+    MBG_IMGS.set(url, im);
+    if (MBG_IMGS.size > 60) MBG_IMGS.delete(MBG_IMGS.keys().next().value);
+  }
+  return im.ready;
+}
+function setupMaskBg() {
+  const p = prefs();
+  MBG_MODE = ["image", "preview", "layers"].includes(p.mask_bg) ? p.mask_bg : "image";
+  $("mBg").value = MBG_MODE;
+  $("mBg").addEventListener("change", () => {
+    MBG_MODE = $("mBg").value; savePref("mask_bg", MBG_MODE);
+    if (MBG_MODE === "layers" && !MBG_SEL.size) mbgDefaultSel();
+    if (VIEW === "mask") render();
+  });
+  $("mBgLayers").addEventListener("click", e => {
+    const c = e.target.closest(".bchip"); if (!c) return;
+    const i = +c.dataset.l;
+    if (MBG_SEL.has(i)) MBG_SEL.delete(i); else MBG_SEL.add(i);
+    if (VIEW === "mask") render();
+  });
+}
+function mbgDefaultSel() {           // the layer of the flat mask shown, else every colour layer
+  const L = (LAST && LAST.layers) || [], t = FLAT_CUR.startsWith("t") ? +FLAT_CUR.slice(1) : null;
+  const own = maskKind() === "flat" && t != null ? L.filter(x => x.tone === t && x.kind !== "outline") : [];
+  (own.length ? own : L.filter(x => x.kind !== "outline")).forEach(x => MBG_SEL.add(x.index));
+}
+function renderMaskBgChips() {
+  const box = $("mBgLayers");
+  box.hidden = MBG_MODE !== "layers" || !LAST;
+  if (box.hidden) return;
+  box.innerHTML = LAST.layers.map(L => `<button type="button" class="vt-opt fchip bchip" data-l="${L.index}" aria-pressed="${MBG_SEL.has(L.index)}" title="${L.kind === "outline" ? `Couche ${L.index} (contours)` : `Couche ${L.index}`}">` +
+    `<i class="fsw" style="background:${L.color}"></i>${L.index}</button>`).join("");
+}
+async function drawMaskBg(wrap, CV) {
+  renderMaskBgChips();
+  const c = wrap.querySelector("canvas.mbg"), map = LAST && LAST.mask_map;
+  if (!c) return;
+  delete c.dataset.ver;              // being drawn: the smart brush uses the image meanwhile
+  if (MBG_MODE === "image" || !map || !LAST.layers || LAST.sid !== SID) { c.hidden = true; return; }
+  const W = CV.width, H = CV.height;
+  const layers = LAST.layers.filter(L => MBG_MODE === "preview" ? !HIDDEN.has(L.index) : MBG_SEL.has(L.index))
+    .sort((a, b) => a.index - b.index);
+  const [src, imgs] = await Promise.all([mbgImage(IMG.src), Promise.all(layers.map(L => mbgImage(L.mask_flat)))]);
+  if (!c.isConnected) return;
+  c.width = W; c.height = H; c.hidden = false;
+  const g = c.getContext("2d");
+  g.fillStyle = "#ffffff"; g.fillRect(0, 0, W, H);   // opaque: hides the image element under it
+  // the whole source image, dimmed: what lies outside the computed area (and under chosen layers)
+  if (src) { g.globalAlpha = MBG_MODE === "preview" ? 0.3 : 0.45; g.drawImage(src, 0, 0, W, H); g.globalAlpha = 1; }
+  const [sx0, sy0, sx1, sy1] = map.src, [ix0, iy0, ix1, iy1] = map.img;
+  const dx = sx0 * W, dy = sy0 * H, dw = (sx1 - sx0) * W, dh = (sy1 - sy0) * H;
+  if (MBG_MODE === "preview") { g.fillStyle = LAST.base || "#ffffff"; g.fillRect(dx, dy, dw, dh); }
+  for (const im of imgs) {
+    if (!im) continue;
+    const pw = im.naturalWidth, ph = im.naturalHeight;
+    g.drawImage(im, ix0 * pw, iy0 * ph, (ix1 - ix0) * pw, (iy1 - iy0) * ph, dx, dy, dw, dh);
+  }
+  c.dataset.ver = ++MBG_VER;
+}
+let MBG_VER = 0;
+// ---- Tolerance of each flat mask, like the settings of the key-detail zones: the hidden field
+// `flat_tolerances` (JSON {auto, t<tone>}) holds them, the slider of the Simplification section
+// edits the mask shown (FLAT_CUR); a mask without its own value takes the "auto" one.
+function flatTols() {
+  let s = null;
+  try { s = JSON.parse($("flat_tolerances").value || "null"); } catch (e) { s = null; }
+  if (!s || typeof s !== "object" || Array.isArray(s)) s = {};
+  if (!Number.isFinite(+s.auto)) s.auto = FLAT_CUR === "auto" ? val("flat_tolerance") : 50;
+  return s;
+}
+const flatTolOf = (id, s = flatTols()) => Number.isFinite(+s[id]) ? +s[id] : +s.auto;
+function fieldToFlatTol() {
+  const s = flatTols();
+  s[FLAT_CUR] = val("flat_tolerance");
+  $("flat_tolerances").value = JSON.stringify(s);
+  flatTolToField();                 // own value now: list label and Auto button
+}
+function flatTolToField() {
+  $("flat_tolerances").value = JSON.stringify(flatTols());   // "auto" written before switching
+  $("flat_tolerance").value = flatTolOf(FLAT_CUR);
+  if ($("flatTolFor")) {
+    const s = flatTols();
+    $("flatTolFor").innerHTML = flatChipsHtml();
+    $("flatTolFor").querySelectorAll(".fchip").forEach(b => {
+      const id = b.dataset.f;
+      if (id !== "auto") b.title += Number.isFinite(+s[id]) ? ` — tolérance ${s[id]}` : " — tolérance générale";
+    });
+    // pressed while the mask follows Auto (always for the Auto mask itself, which cannot leave it)
+    const follows = FLAT_CUR === "auto" || !Number.isFinite(+s[FLAT_CUR]);
+    $("flatTolAuto").setAttribute("aria-pressed", String(follows));
+    $("flatTolAuto").disabled = FLAT_CUR === "auto";
+  }
+  showValues();
+}
+function flatSelect(id) {
+  if (id === FLAT_CUR) return;
+  $("flat_tolerances").value = JSON.stringify(flatTols());
+  FLAT_CUR = id; SEM_LAST = null;
+  flatTolToField();
+  flatInfo();
+  if (VIEW === "mask") render(); else renderFlatChips();
+}
+function flatOpen(id) {            // layer card button: paint a flat zone forced into that layer
+  $("flat_tolerances").value = JSON.stringify(flatTols());
+  FLAT_CUR = id; SEM_LAST = null;
+  flatTolToField();
+  $("maskKind").value = "flat"; VIEW = "mask"; SEL = null;
+  flatInfo(); render();
+}
+function flatInfo() {
+  const id = FLAT_CUR, cov = FLAT_COVS[id] || 0, tol = val("flat_tolerance"), name = flatLabel(id);
+  FLAT_INFO = id === "auto"
+    ? (cov > 0 ? `Zones d'aplat : ${cov} % de l'image — chaque zone séparée prend sa teinte principale (tolérance ${tol}).`
+       : "Peignez ou cliquez (outil Objet) chaque zone à remplir d'une seule teinte : visage, fond, vêtement… Chaque zone séparée prend sa teinte principale (tolérance : section Simplification).")
+    : (cov > 0 ? `Aplat forcé (${name}) : ${cov} % de l'image — la partie aplatie de chaque zone prend cette couche (tolérance ${tol}).`
+       : `Peignez ou cliquez (outil Objet) les zones à remplir avec cette couche (${name}) : la partie aplatie de chaque zone prend sa couleur, les détails francs restent.`);
+  const parts = Object.keys(FLAT_COVS).filter(k => FLAT_COVS[k] > 0).sort().map(k => k === "auto" ? "générale" : flatLabel(k).toLowerCase());
+  $("flatInfoSide").textContent = parts.length ? `Zones d'aplat peintes : ${parts.join(", ")}.` : "Aucune zone d'aplat peinte.";
+  showMaskInfo();
+}
+async function sendFlat(id = FLAT_CUR) {
+  if (!SID) return;
+  const cv = flatCanvas(id), was = !(FLAT_COVS[id] > 0), empty = maskIsEmpty(cv);
+  const png = empty ? null : cv.toDataURL("image/png");
+  maskCommit(flatKey(id), png);
+  const req = fetch("/api/mask", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ id: SID, png, kind: "flat", zone: id }) });
+  FLAT_SENDING[id] = req;
+  try {
+    const r = await req, j = await r.json();
+    if (!r.ok) { status(j.error || "Erreur du masque", true); return; }
+    if (FLAT_SENDING[id] !== req) return;
+    FLAT_COVS[id] = empty ? 0 : j.coverage;
+    flatInfo(); renderFlatChips(); updateSummaries();
+    if (!(was && empty)) schedule();
+  } catch (e) { status("Serveur injoignable : " + e.message, true); }
+}
 function silInfo(coverage) {
   SIL_INFO = SIL_EMPTY
     ? "Peignez ou sélectionnez (outil Objet) la zone dont le contour sera tracé : option « Silhouette » des contours, masque silhouette."
@@ -3703,7 +4035,7 @@ function createSubj() {
   SUBJ_EMPTY = true; SUBJ_EXACT = false; FG_OVERLAY = null; SEM_LAST = null;
   subjInfo(null);
 }
-function showMaskInfo() { $("mInfo").textContent = { subject: SUBJ_INFO, silhouette: SIL_INFO }[maskKind()] ?? OUT_INFO; }
+function showMaskInfo() { $("mInfo").textContent = { subject: SUBJ_INFO, silhouette: SIL_INFO, flat: FLAT_INFO }[maskKind()] ?? OUT_INFO; }
 function maskInfo(coverage) {
   OUT_INFO = MASK_EMPTY
     ? "Aucune zone peinte : les détails clés sont cherchés sur toute l'image."
@@ -3725,7 +4057,7 @@ let ALT_DOWN = false;           // Alt held (followed with keydown / keyup)
 function syncSmart() {
   $("mSmart").setAttribute("aria-pressed", String(SMART_ON));
   $("mSmart").disabled = MASK_TOOL === "select";
-  $("smartOpts").hidden = !SMART_ON || MASK_TOOL === "select";
+  $("smartOpts").hidden = $("smartSrc").hidden = !SMART_ON || MASK_TOOL === "select";
 }
 function setSmart(on) { SMART_ON = on; savePref("smart_on", on); syncSmart(); }
 function setMaskTool(t) {
@@ -3828,6 +4160,7 @@ async function copyMask(from, to) {
 async function sendMask(kind = maskKind()) {
   if (kind === "subject") return sendSubject();
   if (kind === "silhouette") return sendSil();
+  if (isFlat(kind)) return sendFlat(flatId(kind));
   if (!SID || !MASK) return;
   const zid = String(kind).startsWith("outline:") ? kind.slice(8) : ZONE_CUR, cv = zoneCanvas(zid), cur = zid === ZONE_CUR;
   const empty = maskIsEmpty(cv);
@@ -4045,9 +4378,12 @@ async function semanticClick(CV, kind, fx, fy, remove, wrap, redo = false) {
 // Colours compared in CIELab (image slightly blurred against noise), at the size of the mask canvas.
 let SMART_LAB = null;           // {key, w, h, L, a, b}
 function smartLab(W, H) {
-  const key = `${IMG.src.length}:${IMG.src.slice(-64)}:${W}x${H}`;
+  // the background under the mask (preview or chosen layers) when asked and shown, else the image
+  const bg = document.querySelector("#stage .maskwrap canvas.mbg");
+  const useBg = $("smartSrc").value === "bg" && bg && !bg.hidden && bg.dataset.ver;
+  const key = `${IMG.src.length}:${IMG.src.slice(-64)}:${W}x${H}:${useBg ? "bg" + bg.dataset.ver : "img"}`;
   if (SMART_LAB && SMART_LAB.key === key) return SMART_LAB;
-  const im = document.querySelector("#stage .maskwrap img");
+  const im = useBg ? bg : document.querySelector("#stage .maskwrap img");
   const c = document.createElement("canvas"); c.width = W; c.height = H;
   const x = c.getContext("2d", { willReadFrequently: true });
   x.filter = "blur(1px)"; x.drawImage(im, 0, 0, W, H);
@@ -4121,12 +4457,14 @@ function maskEditor(st) {
   syncMaskKinds();
   const wrap = document.createElement("div");
   wrap.className = "maskwrap" + (MASK_TOOL === "select" ? " select" : "");
-  wrap.innerHTML = `<img src="${IMG.src}" alt="Image source — ${kind === "subject" ? "peignez le sujet à garder" : kind === "silhouette" ? "peignez la zone dont le contour sera tracé" : "peignez les zones à détailler"}" draggable="false">
+  wrap.innerHTML = `<img src="${IMG.src}" alt="Image source — ${kind === "subject" ? "peignez le sujet à garder" : kind === "silhouette" ? "peignez la zone dont le contour sera tracé" : kind === "flat" ? "peignez les zones à remplir d'une seule teinte" : "peignez les zones à détailler"}" draggable="false">
+    <canvas class="mbg" aria-hidden="true" hidden></canvas>
     <img class="fgov" alt="" ${kind === "subject" && FG_OVERLAY ? `src="${FG_OVERLAY}"` : "hidden"}>
     <img class="detov" alt="" hidden>
     <div class="cropguide" title="Partie de l'image utilisée (recadrage)"></div><div class="brush"></div>`;
   wrap.insertBefore(CV, wrap.querySelector(".cropguide"));
-  [MASK, SUBJ, SIL].forEach(c => c.style.display = (c === CV && $("mShow").checked) ? "" : "none");
+  [MASK, SUBJ, SIL, ...Object.values(FCV)].forEach(c => c.style.display = (c === CV && $("mShow").checked) ? "" : "none");
+  drawMaskBg(wrap, CV);
   showMaskInfo();
   Object.assign(wrap.querySelector(".cropguide").style, {
     left: CROP.x * 100 + "%", top: CROP.y * 100 + "%", width: CROP.w * 100 + "%", height: CROP.h * 100 + "%",
@@ -4442,6 +4780,7 @@ function toggleLayer(i) {
   refreshPreviewOnly();
 }
 // Icons of the stencil cards (stroke, currentColor)
+const ICO_FLAT = `<svg class="ico" viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 13 11 6l7 7-7 7z" fill="currentColor" fill-opacity=".35"/><path d="M8 3l3 3"/><path d="M19.5 15.5s1.5 2 1.5 3a1.5 1.5 0 0 1-3 0c0-1 1.5-3 1.5-3z" fill="currentColor"/></svg>`;
 const ICO_RESET = `<svg class="ico" viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 12a9 9 0 1 0 3-6.7L3 8"/><path d="M3 3v5h5"/></svg>`;
 const eyeIcon = on => `<svg class="ico" viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${on ? `<path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7-10-7-10-7z"/><circle cx="12" cy="12" r="3"/>` : `<path d="M3 3l18 18"/><path d="M10.6 5.1A10.4 10.4 0 0 1 12 5c6.5 0 10 7 10 7a17 17 0 0 1-3.2 4.2"/><path d="M6.6 6.6C3.9 8.4 2 12 2 12s3.5 7 10 7c1.8 0 3.4-.5 4.8-1.3"/><path d="M9.9 9.9a3 3 0 0 0 4.2 4.2"/>`}</svg>`;
 function refreshPreviewOnly() {
@@ -4540,6 +4879,7 @@ function render() {
           : `<button type="button" class="lcolor" data-idx="${L.index}" style="background:${L.color}" aria-haspopup="dialog" title="Couleur de la peinture de la couche ${L.index}${layerColors()[L.index] ? " (choisie)" : " (calculée)"} — cliquer pour changer"></button>`}Couche ${L.index}${L.kind === "outline" ? ` — contours${L.group ? " " + L.group : ""} ✎` : ""} — ${L.color}${customColor(L)
           ? ` <button type="button" class="lcreset" data-idx="${L.index}" title="Revenir à la teinte calculée" aria-label="Revenir à la teinte calculée">${ICO_RESET}</button>` : ""}
           ${fxBadge(L)}
+          ${L.kind !== "outline" && L.tone != null ? `<button type="button" class="lflat${FLAT_COVS["t" + L.tone] > 0 ? " on" : ""}" data-tone="${L.tone}" title="Peindre un aplat dans cette couche : les zones peintes (ou objets sélectionnés) prennent la couleur de cette couche, les détails francs restent (onglet Masques, masque Aplats)" aria-label="Peindre un aplat dans cette couche">${ICO_FLAT}</button>` : ""}
           <button type="button" class="eye" aria-pressed="${!HIDDEN.has(L.index)}" title="Afficher / masquer dans la prévisualisation" aria-label="Afficher / masquer dans la prévisualisation">${eyeIcon(!HIDDEN.has(L.index))}</button></div>
         ${L.paths} tracés · ${L.nodes} nœuds · ${L.islands} îlot${L.islands > 1 ? "s" : ""} · ${L.bridges} ponts${L.merged ? ` · ${L.merged} fusion${L.merged > 1 ? "s" : ""}` : ""}<br>
         ${L.short_islands ? `<span style="color:#d97706">⚠ ${L.short_islands} îlot(s) sans place pour ${val("min_bridges")} ponts</span><br>` : ""}
@@ -4547,6 +4887,7 @@ function render() {
       </div>
     </div>`).join("");
   $("layers").querySelectorAll(".lcolor").forEach(b => b.onclick = () => openColorPop(b));
+  renderFlatChips(); flatInfo();
   syncLineSens();
   renderFx();
   const nOut = LAST.layers.filter(L => L.kind === "outline").length;
@@ -4556,6 +4897,7 @@ function render() {
   $("layers").querySelectorAll(".card").forEach(c => c.onclick = e => {
     if (e.target.closest(".eye")) { toggleLayer(+c.dataset.idx); return; }
     if (e.target.closest(".fxbadge")) { showFxLayer(+e.target.closest(".fxbadge").dataset.idx); return; }
+    if (e.target.closest(".lflat")) { flatOpen("t" + e.target.closest(".lflat").dataset.tone); return; }
     if (e.target.closest(".lcolor")) return;                       // colour picker: no selection
     if (e.target.closest(".lcreset")) { setLayerColor(+e.target.closest(".lcreset").dataset.idx, null); return; }
     const i = +c.dataset.i; SEL = (SEL === i) ? null : i; render();
@@ -4587,6 +4929,7 @@ function layerStack(L, attrs = "") {
   return `<div class="lv" ${attrs}><img src="${L.image}" alt="Pochoir ${L.index}">` +
     (L.img_lost ? `<img class="ov ov-lost" src="${L.img_lost}" alt="">` : "") +
     (L.img_merged ? `<img class="ov ov-merged" src="${L.img_merged}" alt="">` : "") +
+    (L.img_flat ? `<img class="ov ov-flat" src="${L.img_flat}" alt="">` : "") +
     (L.img_bridges ? `<img class="ov ov-bridges" src="${L.img_bridges}" alt="">` : "") +
     (LAST && L.reg ? regSVG(L.reg, [0, 0, LAST.sheet_mm[0], LAST.sheet_mm[1]]) : "") + `</div>`;
 }

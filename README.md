@@ -104,7 +104,7 @@ language selector (**French** is available; the exported files follow the select
 4. In **Cutting machine**, pick your machine and **Cutting mat**, then in **Material & cutting** your
    material (e.g. *Mylar*).
 5. Look at the **Preview** tab and the stencil cards on the right. Happy? Click
-   **Export the project (.zip)** (next to *Open a project…*, under the image box).
+   **Export the project** (right of the image box, under *Open a project…*).
 
 Open the SVG files of the zip in Silhouette Studio, cut, and spray layer 1, 2, 3… in order.
 
@@ -153,8 +153,14 @@ striped.
 ### 5.1 Load an image
 
 Drop a JPEG/PNG/WebP/AVIF file on the image box, or click it to browse. Colour and black & white images
-are both supported. **Open a project…** below the box reloads a previous export (see
+are both supported. **Open a project…**, right of the box, reloads a previous export (see
 [§7](#7-projects-and-saved-settings)).
+
+The **Project** section (first of the left panel) shows the **project name**: the image name by
+default (without extension). Click it to change it (Enter to confirm, Escape to cancel). The
+exported zip is named after it (spaces replaced by underscores) and it appears on the spraying
+sheet; the files inside the zip have no prefix. The section also shows the **original image file
+name**, stored in the project (the image box only shows its size and colour type).
 
 > Tip: an image with clear shapes and good contrast gives better stencils than a busy, low-contrast
 > photo. A portrait with a plain background is ideal.
@@ -243,6 +249,21 @@ it, with the layer number (**S** = tone left to the support).
   mean of its pixels, often duller than the image (neighbouring hues, shadows and highlights
   average out); 100 % = same hue and lightness with the saturation of its most vivid pixels
   (75th percentile), kept inside sRGB. It does not change the cut. No effect in black and white.
+- **Automatic flat areas** (0 = off): full flat layers, as on a screen-printed poster, instead of
+  islands of a neighbouring tone interleaved with them where the lightness varies gently around a
+  threshold (cheek, background gradient). An island of one tone is absorbed by the area around it
+  when the border between them has a low contrast and the island is smaller than that area; higher =
+  more contrast tolerated and larger islands absorbed. Eyes, dark strokes and sharp edges stay.
+- **Flat zone tolerance** and **Paint the flat zones…**: see the *Flat areas mask* (5.6). Each
+  painted zone takes its main tone wherever the image differs from it by less than the tolerance:
+  0 = nothing changes, 50 = the neighbouring tones join the main tone, 100 = the whole zone in a
+  single colour. Like the settings of the key-detail zones, each flat mask keeps its own tolerance:
+  the *Flat area set* buttons (General, Layer n, Bare support, as for the key-detail zones) pick
+  the mask the slider edits (also the mask shown in the Masks tab); a layer without its own value
+  takes the general tolerance. The **Auto** toggle, in front of the slider, is pressed while
+  the mask follows the general tolerance; releasing it (click, or moving the slider) gives the mask
+  its own tolerance, the slider's; pressing it again brings the mask back to the general tolerance.
+  (The *General* flat mask is unrelated to the *Automatic flat areas* slider.)
 - **Layer stacking**:
   - **Exclusive** (default) – each stencil opens only its own tone (useful for flat, poster-like colours).
   - **Cumulative** – each stencil opens its own tone *and all darker ones*. Layers
@@ -256,8 +277,8 @@ it, with the layer number (**S** = tone left to the support).
 
 The **Masks** tab lets you paint on the image with a brush, or select objects with a click. Its bar
 has two lines: the mask edited, the tool and its settings first, then the display (show, colour,
-opacity) and the actions (*Clear all*, *Copy to…*). Choose which mask you edit with the three
-icons (key details, subject, silhouette; the bar under each one is its display colour):
+opacity) and the actions (*Clear all*, *Copy to…*). Choose which mask you edit with the four
+icons (key details, subject, silhouette, flat areas; the bar under each one is its display colour):
 
 - **Subject mask** (background removal) – roughly paint over the subject, overflowing a little.
   StencilIt finds the exact edge by itself (GrabCut): outside the painted area = background,
@@ -270,6 +291,21 @@ icons (key details, subject, silhouette; the bar under each one is its display c
   searches the whole image. Painting turns on the outline stencil.
 - **Silhouette mask** – paint (or select with the Object tool) the area whose **outline** the
   outline stencil draws (see *Silhouette* below). Painting turns this option on.
+- **Flat areas mask** – paint, or click with the Object tool, each zone to fill with a single tone
+  (face, background, clothing…). Each separate painted zone is processed on its own: it takes its
+  main tone wherever the image is close enough to it (*Flat zone tolerance*, Simplification
+  section); strong details inside it (eyes, dark lines) keep their tone below 100.
+  Chips under the mask bar choose the target: **General** (the main tone of each zone, as above) or a
+  layer (**Layer n**, or **Bare support** when the lightest tone is left to the support): what is
+  painted there is **forced into that layer** — the flattened part of each zone takes its colour,
+  sharp details stay. The paint bucket button on a colour layer card opens that layer's flat mask
+  directly. The layer colours are measured before these forced zones, so forcing a light area into a
+  dark layer does not change the paint computed for that layer.
+
+**Background under the mask** (*Background* list of the Masks bar, remembered): **image** (default),
+**preview** (every visible layer on the support colour, as computed) or **chosen layers** (chips with
+the layer colours, drawn on the dimmed image; opening a layer's flat mask shows that layer first).
+Outside the computed area (crop), the dimmed image is shown.
 
 **Object** tool (semantic selection, Segment Anything / MobileSAM) – click an object to add it to the
 current mask; click other objects one after the other to add them too. Clicking again inside the
@@ -291,7 +327,10 @@ Options of the Object tool (shown while it is selected, remembered):
 **Smart mode** (*Smart* button, **M**) – the brush then only paints (or, with Shift, erases) the
 colour area under the brush centre and stop at its limits. The colour is compared continuously
 with the one around the brush centre, so the stroke follows the zone it is moved over. Its
-**Sensitivity** sets how small a change of colour stops it (higher = tighter). A subject mask
+**Sensitivity** sets how small a change of colour stops it (higher = tighter). The *Follows* list
+(remembered) chooses what it compares: the **image** (default) or the **shown background** (the
+preview or the chosen layers of the *Background* list), to paint exactly along the zones of the
+layers; with the image as background, both are the same. A subject mask
 painted in smart mode is used as is, without GrabCut, like an object selection.
 
 **Shift + left click** with the brush erases (smart or not, as the brush): there is no separate
@@ -546,7 +585,9 @@ the same settings line up from one layer to the next.
 
 - **Stencil cards** (right column): each card shows the cut layer; in the legend, **bridge** and
   **removed detail** are buttons that highlight bridges (red) and details removed by the material
-  limits; **merge** highlights the zones merged instead of a bridge (violet). A card warns you about remaining problems (for example an island that could not be
+  limits; **merge** highlights the zones merged instead of a bridge (violet); **flat area** shows
+  the painted flat zones of the layer (teal: zones of the General flat mask where they ended in this layer, and zones
+  forced into it). A card warns you about remaining problems (for example an island that could not be
   bridged).
 
 If many details are removed, increase the size of the image, lower the level of detail or choose a
@@ -607,20 +648,22 @@ computation is kept and only the colours, previews and simulated render are upda
 
 ### 5.13 Export
 
-Click **Export the project (.zip)**, next to *Open a project…* under the image box. The zip contains:
+Click **Export the project**, right of the image box, under *Open a project…*. The zip is named
+after the project (*Project* section) and contains (file names without prefix; French names when the
+interface is in French):
 
 | File | Content |
 |---|---|
-| `…_layer01_of03_<colour>.svg`, `…_layer02_of03_…` | **One cutting file per layer**, in mm, red 0.1 mm lines, with registration marks and number notches. |
-| `…_layerNN_of03_outline_<colour>.svg` | The outline stencil, if enabled. |
-| `…_overview.svg` | All layers stacked, to check the result. |
-| `…_simulated_render.png` | The simulated airbrush result. |
-| `…_spray_sheet.pdf` | **Spraying sheet** to print (A4): formats, layer colours in spraying order (swatch, hex, RGB, cut length), support colour, ruler registration dimensions and the simulated render. |
-| `…_inkscape.svg` | An **Inkscape document** with one layer per element (see below). |
-| `…_silhouette.svg` | **For Silhouette Studio**: only the stencils, one layer each, every layer being a **single compound path** (openings + sheet outline + marks). |
-| `…_original.<ext>` | Your original image, untouched. |
-| `…_outline_mask.png`, `…_subject_mask.png`, `…_silhouette_mask.png` | The painted masks, if any. |
-| `…_infos.json` | Sizes, colours, ruler measurements, and **all the settings** of the project. |
+| `layer01_of03_<colour>.svg`, `layer02_of03_…` | **One cutting file per layer**, in mm, red 0.1 mm lines, with registration marks and number notches. |
+| `layerNN_of03_outline_<colour>.svg` | The outline stencil, if enabled. |
+| `overview.svg` | All layers stacked, to check the result. |
+| `simulated_render.png` | The simulated airbrush result. |
+| `spray_sheet.pdf` | **Spraying sheet** to print (A4): formats, layer colours in spraying order (swatch, hex, RGB, cut length), support colour, ruler registration dimensions and the simulated render. |
+| `inkscape.svg` | An **Inkscape document** with one layer per element (see below). |
+| `silhouette.svg` | **For Silhouette Studio**: only the stencils, one layer each, every layer being a **single compound path** (openings + sheet outline + marks). |
+| `original.<ext>` | Your original image, untouched. |
+| `outline_mask.png`, `subject_mask.png`, `silhouette_mask.png`, `flat_mask.png`… | The painted masks, if any. |
+| `infos.json` | Sizes, colours, ruler measurements, and **all the settings** of the project. |
 
 The **spraying sheet** sums up what you need next to the airbrush: the colour of each layer in
 spraying order and the ruler measurements of the registration crosses.
@@ -638,10 +681,10 @@ squares with their hex codes, placed left of the page, to prepare your paints.
 
 **Cutting (Silhouette Studio)**
 
-1. Open (or drag in) `…_silhouette.svg` (all the stencils, one layer each) or one
-   `…_layerNN_of…svg` file. *SVG import requires Silhouette Studio Designer Edition or higher.*
+1. Open (or drag in) `silhouette.svg` (all the stencils, one layer each) or one
+   `layerNN_of…svg` file. *SVG import requires Silhouette Studio Designer Edition or higher.*
    The sizes are in mm: do not rescale the design. Silhouette Studio may skip part of the shapes
-   of a layer made of many separate polygons: in `…_silhouette.svg` each layer is a single compound
+   of a layer made of many separate polygons: in `silhouette.svg` each layer is a single compound
    path, cut entirely.
 2. Check the page / mat size and the orientation (if you chose *landscape* for the mat in
    StencilIt, rotate the design the same way).
@@ -671,7 +714,7 @@ squares with their hex codes, placed left of the page, to prepare your paints.
   options are not part of it, and in a text or number field Ctrl + Z stays the field's own undo.
 - **Re-open a project**: *Open a project…* (or drop the file on the image box)
   - the **.zip** restores everything: image, masks, settings, crop, colours – then recomputes;
-  - the **_infos.json** alone applies the settings to the loaded image (or to the next one you load);
+  - the **infos.json** alone (or the `…_infos.json` of an earlier export) applies the settings to the loaded image (or to the next one you load);
   - the **colour palette** applied to the layers comes back too; if it is not in *My palettes* on
     this computer (or differs from the one of the same name), it is added there.
 - **Presets**: the *Surface to paint* and *Material & cutting* sections, and the material sheet
@@ -680,7 +723,7 @@ squares with their hex codes, placed left of the page, to prepare your paints.
   are stored in `presets_utilisateur.json` (created on first save, editable by hand). The built-in
   materials are in `stencilit/materials.json`.
 - The **last settings used** are remembered by the browser and restored at the next start.
-  **Default settings** (under the image box, next to *Open a project…*) starts again from scratch.
+  **Default settings** (right of the image box, under *Export the project*) starts again from scratch.
 
 ---
 
@@ -716,6 +759,8 @@ in `app.py` (Flask) and the interface in `static/index.html` (+ `static/i18n.js`
    around a painted area, or objects selected with MobileSAM, see `stencilit/semantic.py`).
 3. **Simplification** – k-means clustering in the Lab colour space, chroma weighted by the hue
    weight (or on luminance, or with manual thresholds) plus a majority filter; tones sorted from light to dark = spraying order.
+   Optional flat areas: connected areas of each tone absorbed by a larger neighbour across a
+   low-contrast border (automatic), or painted zones filled with their main tone (tolerance).
    Tone colours = mean of each zone measured on the original (non-preprocessed) image, optionally
    made more vivid (colour vividness).
 4. **Layers** – cumulative or exclusive masks, one per tone, plus the optional outline layer

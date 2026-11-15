@@ -44,6 +44,7 @@ _FR = {
     # file names
     "layer": "couche", "of": "sur", "overview": "apercu", "simulated_render": "rendu_simule",
     "outline_mask": "masque_contours", "subject_mask": "masque_sujet", "silhouette_mask": "masque_silhouette",
+    "flat_mask": "masque_aplats",
     "_outline": "_contours",
     "spray_sheet": "fiche_pulverisation",
     # PDF spraying sheet
@@ -552,20 +553,25 @@ def export_zip(res: Result, material: dict | None, name: str = "stencil",
                original: tuple[bytes | None, str] | None = None, mask_png: bytes | None = None,
                sil_png: bytes | None = None,
                ui: dict | None = None, subject_png: bytes | None = None, lang: str = "en",
-               subject_exact: bool = False, zone_pngs: dict | None = None) -> bytes:
+               subject_exact: bool = False, zone_pngs: dict | None = None,
+               flat_png: bytes | None = None, flat_force_pngs: dict | None = None,
+               image_name: str | None = None) -> bytes:
     """Zip of the stencils + reloadable project (original image, masks, interface settings).
+    `name`: project name (titles of the sheets; the zip is named after it, the files inside have
+    no prefix). `image_name`: file name of the original image, given back when reopening.
 
-    The JSON keys of …_infos.json are a file format and stay unchanged whatever the language
+    The JSON keys of infos.json are a file format and stay unchanged whatever the language
     (projects reopen in both languages); only human-readable text and file names are translated.
     """
     token = _LANG.set("fr" if lang == "fr" else "en")
     try:
         buf = io.BytesIO()
         raw, ext = original or (None, ".png")
-        img_file = f"{name}_original{ext}" if raw else None
-        mask_file = f"{name}_{T('outline_mask')}.png" if mask_png else None
-        subject_file = f"{name}_{T('subject_mask')}.png" if subject_png else None
-        sil_file = f"{name}_{T('silhouette_mask')}.png" if sil_png else None
+        img_file = f"original{ext}" if raw else None
+        mask_file = f"{T('outline_mask')}.png" if mask_png else None
+        subject_file = f"{T('subject_mask')}.png" if subject_png else None
+        sil_file = f"{T('silhouette_mask')}.png" if sil_png else None
+        flat_file = f"{T('flat_mask')}.png" if flat_png else None
         with zipfile.ZipFile(buf, "w", zipfile.ZIP_DEFLATED) as z:
             if raw:
                 z.writestr(img_file, raw)
@@ -575,33 +581,43 @@ def export_zip(res: Result, material: dict | None, name: str = "stencil",
                 z.writestr(subject_file, subject_png)
             if sil_png:
                 z.writestr(sil_file, sil_png)
+            if flat_png:
+                z.writestr(flat_file, flat_png)
+            # flat zones forced into a layer (tone index t<n>)
+            flat_layer_files = {}
+            for zid, png in sorted((flat_force_pngs or {}).items()):
+                flat_layer_files[zid] = f"{T('flat_mask')}_{zid}.png"
+                z.writestr(flat_layer_files[zid], png)
             # painted masks of the other key-detail zones (the first zone's is `masque`)
             zone_files = {}
             for zid, png in sorted((zone_pngs or {}).items()):
-                zone_files[zid] = f"{name}_{T('outline_mask')}_{zid}.png"
+                zone_files[zid] = f"{T('outline_mask')}_{zid}.png"
                 z.writestr(zone_files[zid], png)
             n = len(res.layers)
             for L in res.layers:
                 kind = T("_outline") if L.kind == "outline" else ""
-                z.writestr(f"{name}_{T('layer')}{L.index:02d}_{T('of')}{n:02d}{kind}_{bgr_hex(L.color)[1:]}.svg",
+                z.writestr(f"{T('layer')}{L.index:02d}_{T('of')}{n:02d}{kind}_{bgr_hex(L.color)[1:]}.svg",
                            layer_svg(res, L, material))
-            z.writestr(f"{name}_{T('overview')}.svg", overview_svg(res))
-            z.writestr(f"{name}_inkscape.svg", inkscape_svg(res, material))
-            z.writestr(f"{name}_silhouette.svg", silhouette_svg(res, material))
+            z.writestr(f"{T('overview')}.svg", overview_svg(res))
+            z.writestr("inkscape.svg", inkscape_svg(res, material))
+            z.writestr("silhouette.svg", silhouette_svg(res, material))
             ok, png = cv2.imencode(".png", simulate(res))
-            z.writestr(f"{name}_{T('simulated_render')}.png", png.tobytes())
-            z.writestr(f"{name}_{T('spray_sheet')}.pdf", sheet_pdf(res, name))
+            z.writestr(f"{T('simulated_render')}.png", png.tobytes())
+            z.writestr(f"{T('spray_sheet')}.pdf", sheet_pdf(res, name))
             info = {
                 # Project: reopen this zip (or this file) in StencilIt with "Open a project…"
                 "projet": {
                     "version": PROJECT_VERSION,
                     "logiciel": "StencilIt",
                     "nom": name,
+                    "nom_image": image_name,
                     "image": img_file,
                     "masque": mask_file,
                     "masque_sujet": subject_file,
                     "masque_sujet_exact": bool(subject_png and subject_exact),
                     "masque_silhouette": sil_file,
+                    "masque_aplats": flat_file,
+                    "masques_aplats_couches": flat_layer_files,
                     "masques_zones": zone_files,
                     "interface": ui,
                 },
@@ -621,7 +637,7 @@ def export_zip(res: Result, material: dict | None, name: str = "stencil",
                 "materiau": material,
                 "parametres": res.params.__dict__,
             }
-            z.writestr(f"{name}_infos.json", json.dumps(info, ensure_ascii=False, indent=2))
+            z.writestr("infos.json", json.dumps(info, ensure_ascii=False, indent=2))
         return buf.getvalue()
     finally:
         _LANG.reset(token)

@@ -21,7 +21,7 @@ are not obvious from the code.
   setupAccordion) in `init`.
 - Exports work the other way round: `stencilit/svg_export.py` strings are English, wrapped in
   `T()`, with French in `_FR`; the language comes from `?lang=` (contextvar `_LANG`).
-- Keys of `…_infos.json` are a file format (project re-opening): never translate or rename them.
+- Keys of `infos.json` (`…_infos.json` in earlier exports) are a file format (project re-opening): never translate or rename them.
 - `tools/extract_strings.py` lists French strings to check coverage.
 
 ## Silhouette Studio compatibility (Inkscape export)
@@ -30,7 +30,7 @@ Hard-won constraints, verified by the author in Silhouette Studio – do not "cl
 - embedded images are JPEG at full resolution, with **no `clip-path`**;
 - hidden layers carry both `style="display:none"` and the `display="none"` attribute;
 - the occasional black/partial render image when zooming in Silhouette is a Silhouette bug;
-- Silhouette skips part of the shapes of a layer made of many separate polygons: `…_silhouette.svg`
+- Silhouette skips part of the shapes of a layer made of many separate polygons: `silhouette.svg`
   keeps **one single compound `<path>` per layer** (openings + sheet outline + marks). Generating
   `.studio3` files directly was investigated and is not needed.
 

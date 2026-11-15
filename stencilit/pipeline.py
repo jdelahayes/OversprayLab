@@ -70,6 +70,16 @@ class Params:
     layering: str = "exclusive"    # exclusive | cumulative
     skip_support: bool = True      # the tone closest to the support gets no stencil
     protect_lines: bool = False    # thin strokes (eyes, eyebrows…) escape the majority filter
+    # Flat areas (poster look: full flat layers, no interleaving): 0 = off .. 100 = strongest.
+    # Islands of a tone whose border with the surrounding area has a low contrast are absorbed by it
+    flat_auto: float = 0.0
+    # Painted flat zones (Masks tab, "flat" mask): each painted blob takes its majority tone where
+    # the image differs from it by less than this tolerance (0 = nothing .. 100 = the whole blob)
+    flat_tolerance: float = 50.0
+    # tolerance of each flat mask, JSON {"auto": v, "t<tone>": v} (the fields of the Simplification
+    # section edit the mask shown); a mask without its own value takes "auto", which takes
+    # `flat_tolerance` (settings saved before per-mask tolerances)
+    flat_tolerances: str = ""
     # Outline stencil (key details faded by the airbrush blur)
     outline: bool = False
     outline_method: str = "canny"       # canny (sharp edges) | xdog (drawn line) | ridge (thin lines, centre line)
@@ -160,6 +170,15 @@ class Params:
     # Preview
     spray_mm: float = 0.4
 
+    def flat_tol(self, zone: str) -> float:
+        """Tolerance of a flat mask ("auto" or "t<tone>"): its own value, else the "auto" one."""
+        try:
+            tols = json.loads(self.flat_tolerances) if self.flat_tolerances else {}
+        except ValueError:
+            tols = {}
+        v = tols.get(zone, tols.get("auto", self.flat_tolerance)) if isinstance(tols, dict) else self.flat_tolerance
+        return float(v)
+
     @classmethod
     def from_dict(cls, d: dict) -> "Params":
         p = cls()
@@ -176,6 +195,18 @@ class Params:
         p.detail = float(np.clip(p.detail, 0, 100))
         p.hue_weight = float(np.clip(p.hue_weight, 0, 300))
         p.color_vividness = float(np.clip(p.color_vividness, 0, 100))
+        p.flat_auto = float(np.clip(p.flat_auto, 0, 100))
+        p.flat_tolerance = float(np.clip(p.flat_tolerance, 0, 100))
+        # canonical form (also the cache key): "auto" always present, values clipped
+        try:
+            tols = json.loads(p.flat_tolerances) if p.flat_tolerances else {}
+        except ValueError:
+            tols = {}
+        tols = {str(k): float(np.clip(float(v), 0, 100)) for k, v in (tols if isinstance(tols, dict) else {}).items()
+                if (k == "auto" or re.fullmatch(r"t\d{1,2}", str(k))) and isinstance(v, (int, float))}
+        tols.setdefault("auto", p.flat_tolerance)
+        p.flat_tolerance = tols["auto"]
+        p.flat_tolerances = json.dumps(dict(sorted(tols.items())))
         if p.outline_subject_mask not in ("subject", "outline", "silhouette"):
             p.outline_subject_mask = "subject"
         if p.stencil_style not in ("fill", "line"):
@@ -459,6 +490,10 @@ class Prepared:
     # area whose outline is drawn by the outline (option `outline_subject`): selected subject or
     # another mask, computed image size (set by the server for each computation; None = prep.fg)
     subject: np.ndarray | None = None
+    # painted flat zones, computed image size (shown on the layer views): "auto" zones (main tone)
+    # and the zones forced into the layer of a tone {tone: mask}
+    flat_zones: np.ndarray | None = None
+    flat_forced_zones: dict | None = None
 
 
 def preprocess_active(p: Params) -> bool:
@@ -601,8 +636,11 @@ def parse_thresholds(txt: str) -> list[float]:
     return sorted(out)
 
 
-def prepare(img: np.ndarray, p: Params, lay: Layout, fg_src: np.ndarray | None = None) -> Prepared:
-    """`fg_src`: subject mask at the size of the source image (removed background), or None."""
+def prepare(img: np.ndarray, p: Params, lay: Layout, fg_src: np.ndarray | None = None,
+            flat_src: np.ndarray | None = None, flat_forced: dict | None = None) -> Prepared:
+    """`fg_src`: subject mask at the size of the source image (removed background), or None.
+    `flat_src`: painted flat zones at the size of the source image (tone chosen automatically), or
+    None. `flat_forced`: {tone index (0 = lightest): painted flat zones of that tone's layer}."""
     ppm = p.px_per_mm
     sx0, sy0, sx1, sy1 = lay.src_rect
     src = img[sy0:sy1, sx0:sx1]
@@ -706,10 +744,39 @@ def prepare(img: np.ndarray, p: Params, lay: Layout, fg_src: np.ndarray | None =
     for new, old_pos in enumerate(order):
         remap[used[old_pos]] = new
     labels = remap[labels]
+    # Flat areas: automatic (low-contrast islands absorbed), then the painted zones
+    n_used = len(used)
+    labels0 = labels
+    forced = {int(t): m for t, m in (flat_forced or {}).items() if m is not None and 0 <= int(t) < n_used}
+
+    def zone_map(src):
+        m = cv2.resize(src[sy0:sy1, sx0:sx1], (W, H), interpolation=cv2.INTER_NEAREST) > 0
+        return m & fg if fg is not None else m
+
+    if p.flat_auto > 0 or flat_src is not None or forced:
+        flab = _flat_lab(lab_full, gray)
+        if p.flat_auto > 0:
+            labels = flatten_auto(labels, n_used, flab, p.flat_auto, inside if fg is not None else None, ppm)
+        if flat_src is not None:
+            zones_m = zone_map(flat_src)
+            if zones_m.any():
+                labels = flatten_zones(labels, n_used, flab, zones_m, p.flat_tol("auto"))
+    # the colours are measured before the zones forced into a layer: a light area forced into a
+    # dark layer must not change the paint computed for that layer
+    labels_c = labels
+    flat_zones = zone_map(flat_src) if flat_src is not None else None
+    flat_forced_zones = {}
+    for t, src in sorted(forced.items()):
+        zones_m = zone_map(src)
+        if zones_m.any():
+            flat_forced_zones[t] = zones_m
+            labels = flatten_zones(labels, n_used, flab, zones_m, p.flat_tol(f"t{t}"), forced=t)
     # Paint colours measured on the original photo (resized, without preprocessing) over the same
     # zones: preprocessing helps the cut but must not dull or shift the colours
     lab_raw = cv2.cvtColor(raw, cv2.COLOR_BGR2LAB).astype(np.float32)
-    zones = [(labels == new) & inside for new in range(len(used))]
+    zones = [(labels_c == new) & inside for new in range(len(used))]
+    # a tone absorbed everywhere by the flat areas keeps the colour of its former zone
+    zones = [z if z.any() else (labels0 == i) & inside for i, z in enumerate(zones)]
     means = np.array([lab_raw[z].mean(axis=0) for z in zones], np.float32)
     if not gray and p.color_vividness > 0:
         means = np.array([vivid_tone(m, lab_raw[z], p.color_vividness / 100) for m, z in zip(means, zones)], np.float32)
@@ -717,7 +784,9 @@ def prepare(img: np.ndarray, p: Params, lay: Layout, fg_src: np.ndarray | None =
         means[:, 1:] = 128
     palette = lab_to_bgr(means)
     return Prepared(resized=resized, labels=labels, palette=palette, gray=gray, off_px=(ox, oy),
-                    raw=raw, hist=hist, auto_thresholds=auto_thr, thresholds_used=thr or None, fg=fg)
+                    raw=raw, hist=hist, auto_thresholds=auto_thr, thresholds_used=thr or None, fg=fg,
+                    flat_zones=flat_zones if flat_zones is not None and flat_zones.any() else None,
+                    flat_forced_zones=flat_forced_zones or None)
 
 
 def recommend_layers(img: np.ndarray, gray: bool, skip_lightest: bool, max_colors: int = 9) -> dict:
@@ -796,6 +865,187 @@ def majority_filter(labels: np.ndarray, k: int, r: float) -> np.ndarray:
         upd = b > acc
         out[upd] = i
         acc[upd] = b[upd]
+    return out
+
+
+# --------------------------------------------------------------------------
+# Flat areas (poster look): full flat layers instead of interleaved tones
+# --------------------------------------------------------------------------
+
+def _flat_lab(lab8: np.ndarray, gray: bool) -> np.ndarray:
+    """CIE L*a*b* (L* 0..100) of an OpenCV 8-bit Lab image; hue ignored in black and white."""
+    out = lab8.astype(np.float32).copy()
+    out[..., 0] *= 100.0 / 255.0
+    out[..., 1:] = 0.0 if gray else out[..., 1:] - 128.0
+    return out
+
+
+def _tone_gap(labels: np.ndarray, k: int, lab: np.ndarray, inside: np.ndarray | None = None) -> float:
+    """Typical colour difference (ΔE76) between two neighbouring tones: median of the differences
+    between the mean colours of tones that follow each other from light to dark."""
+    flat = labels.ravel() if inside is None else labels[inside]
+    pix = lab.reshape(-1, 3) if inside is None else lab[inside]
+    cnt = np.bincount(flat, minlength=k)[:k]
+    sums = np.stack([np.bincount(flat, weights=pix[:, c], minlength=k)[:k] for c in range(3)], 1)
+    present = cnt > 0
+    means = sums[present] / cnt[present, None]
+    if len(means) < 2:
+        return 10.0
+    return float(max(2.0, np.median(np.linalg.norm(np.diff(means, axis=0), axis=1))))
+
+
+def _components(labels: np.ndarray, k: int) -> tuple[np.ndarray, int, np.ndarray]:
+    """Connected areas of every tone (4-connectivity): id map (1..n), n, tone of each id (index 0
+    unused)."""
+    comp = np.zeros(labels.shape, np.int32)
+    tones = [0]
+    n = 0
+    for t in range(k):
+        m = (labels == t).astype(np.uint8)
+        if not m.any():
+            continue
+        c, cl = cv2.connectedComponents(m, connectivity=4)
+        sel = cl > 0
+        comp[sel] = cl[sel] + n
+        tones += [t] * (c - 1)
+        n += c - 1
+    return comp, n, np.array(tones, np.int32)
+
+
+def _borders(comp: np.ndarray, n: int, lab: np.ndarray, reach: int):
+    """Borders between neighbouring areas, seen from both sides: source area, neighbour area,
+    border length in pixels, mean contrast across the border (ΔE76 between the image `reach`
+    pixels on each side: low on a smooth gradient cut by a threshold, high on a real edge) and the
+    mean colour of the neighbour along the border."""
+    H, W = comp.shape
+    P = np.pad(lab, ((reach, reach), (reach, reach), (0, 0)), mode="edge")
+    srcs, dsts, conts, nbs = [], [], [], []
+    for axis in (1, 0):
+        if axis == 1:       # horizontal neighbours (x, x+1)
+            a, b = comp[:, :-1], comp[:, 1:]
+            la, lb = lab[:, :-1], lab[:, 1:]
+            fa, fb = P[reach:reach + H, 0:W - 1], P[reach:reach + H, 2 * reach + 1:2 * reach + W]
+        else:               # vertical neighbours (y, y+1)
+            a, b = comp[:-1, :], comp[1:, :]
+            la, lb = lab[:-1, :], lab[1:, :]
+            fa, fb = P[0:H - 1, reach:reach + W], P[2 * reach + 1:2 * reach + H, reach:reach + W]
+        d = a != b
+        if not d.any():
+            continue
+        c = np.linalg.norm(fa[d] - fb[d], axis=1)
+        srcs += [a[d], b[d]]
+        dsts += [b[d], a[d]]
+        conts += [c, c]
+        nbs += [lb[d], la[d]]
+    if not srcs:
+        e = np.zeros(0, np.int64)
+        return e, e, np.zeros(0), np.zeros(0), np.zeros((0, 3))
+    src, dst = np.concatenate(srcs).astype(np.int64), np.concatenate(dsts).astype(np.int64)
+    cont, nb = np.concatenate(conts), np.concatenate(nbs)
+    uk, inv = np.unique(src * (n + 1) + dst, return_inverse=True)
+    length = np.bincount(inv).astype(np.float64)
+    contrast = np.bincount(inv, weights=cont) / length
+    nb_mean = np.stack([np.bincount(inv, weights=nb[:, ch]) for ch in range(3)], 1) / length[:, None]
+    return uk // (n + 1), uk % (n + 1), length, contrast, nb_mean
+
+
+def flatten_auto(labels: np.ndarray, k: int, lab: np.ndarray, strength: float,
+                 inside: np.ndarray | None = None, ppm: float = 6.0) -> np.ndarray:
+    """Automatic flat areas: an area of one tone is absorbed by the neighbouring area it shares the
+    longest low-contrast border with (smooth luminance variation cut by a threshold, not a real
+    edge), when it is smaller than that neighbour and than a size limit. `strength` 0..100 raises
+    both the contrast tolerated and the size limit. `lab`: CIE Lab of the smoothed image."""
+    s = float(np.clip(strength, 0, 100)) / 100.0
+    if s <= 0:
+        return labels
+    gap = _tone_gap(labels, k, lab, inside)
+    max_contrast = gap * (0.3 + 0.55 * s)
+    total = labels.size if inside is None else max(1, int(inside.sum()))
+    max_area = total * 0.03 * s * s
+    reach = max(1, int(round(0.6 * ppm)))
+    blur = cv2.GaussianBlur(lab, (0, 0), max(0.6, reach / 2))
+    out = labels.copy()
+    for _ in range(4):
+        comp, n, tone = _components(out, k)
+        if n < 2:
+            break
+        flat_c = comp.ravel()
+        area = np.bincount(flat_c, minlength=n + 1).astype(np.float64)
+        src, dst, ln, ct, nb_mean = _borders(comp, n, blur, reach)
+        if not len(src):
+            break
+        # contrast of an area with a neighbour: across their border (a real edge) and between the
+        # mean colour of the area and that of the neighbour along the border (a thin line is
+        # thinner than the reach: only its mean colour shows it)
+        mean = np.stack([np.bincount(flat_c, weights=lab[..., ch].ravel(), minlength=n + 1)
+                         for ch in range(3)], 1) / np.maximum(area, 1)[:, None]
+        ct = np.maximum(ct, np.linalg.norm(mean[src] - nb_mean, axis=1))
+        ok = (ct < max_contrast) & (area[src] < area[dst]) & (area[src] <= max_area)
+        if inside is not None:      # removed background: left as it is
+            ins = np.zeros(n + 1, bool)
+            ins[np.unique(comp[inside])] = True
+            ok &= ins[src] & ins[dst]
+        if not ok.any():
+            break
+        src, dst, ln = src[ok], dst[ok], ln[ok]
+        # per source area, the neighbour with the longest qualifying border
+        order = np.lexsort((-ln, src))
+        src, dst = src[order], dst[order]
+        first = np.r_[True, src[1:] != src[:-1]]
+        src, dst = src[first], dst[first]
+        # smallest areas first; an area that absorbs another is not absorbed in the same pass
+        target = np.arange(n + 1)
+        taken = np.zeros(n + 1, bool)
+        changed = False
+        for i in np.argsort(area[src], kind="stable"):
+            sa, da = src[i], dst[i]
+            if taken[sa] or target[da] != da:
+                continue
+            target[sa] = da
+            taken[da] = True
+            changed = True
+        if not changed:
+            break
+        new_tone = tone[target]
+        out = new_tone[comp]
+        if inside is not None:
+            out = np.where(inside, out, labels)
+    return out.astype(labels.dtype)
+
+
+def flatten_zones(labels: np.ndarray, k: int, lab: np.ndarray, zones: np.ndarray,
+                  tolerance: float, forced: int | None = None) -> np.ndarray:
+    """Painted flat zones: each connected painted blob takes its majority tone wherever the image
+    is close enough to it. Every area of another tone inside the blob is compared (mean colour)
+    with the majority tone of the blob: it joins it when the difference is below the tolerance
+    (0 = nothing, 50 = the neighbouring tones, 100 = the whole blob). Strong details (eyes, dark
+    lines) stay. `forced`: tone given to the flattened part instead of the majority tone (zone
+    painted in a layer)."""
+    tol = float(np.clip(tolerance, 0, 100))
+    if tol <= 0 and forced is None:
+        return labels
+    gap = _tone_gap(labels, k, lab)
+    limit = np.inf if tol >= 100 else gap * tol / 40.0
+    nz, zmap = cv2.connectedComponents(zones.astype(np.uint8), connectivity=8)
+    out = labels.copy()
+    comp, n, tone = _components(labels, k)
+    pix = lab.reshape(-1, 3)
+    for z in range(1, nz):
+        zm = zmap == z
+        zl = labels[zm]
+        cnt = np.bincount(zl, minlength=k)
+        t = int(np.argmax(cnt))
+        ref = lab[zm & (labels == t)].mean(axis=0)
+        # mean colour of each area, over its part inside the blob
+        ids = comp[zm]
+        u, inv = np.unique(ids, return_inverse=True)
+        c = np.bincount(inv).astype(np.float64)
+        zp = pix[zm.ravel()]
+        mean = np.stack([np.bincount(inv, weights=zp[:, ch]) for ch in range(3)], 1) / c[:, None]
+        join = (np.linalg.norm(mean - ref, axis=1) < limit) | (tone[u] == t)
+        dest = t if forced is None else forced
+        if join.any():
+            out[zm & np.isin(comp, u[join])] = dest
     return out
 
 
@@ -2825,6 +3075,32 @@ LOST_BGR = (0, 140, 255)
 LOST_ALPHA = 0.6
 MERGE_BGR = (200, 60, 150)      # violet: zones merged instead of a bridge
 MERGE_ALPHA = 0.75
+FLAT_BGR = (166, 184, 20)       # teal: painted flat zones of the layer
+FLAT_ALPHA = 0.35
+
+
+def _flat_mask(res: Result, L: Layer) -> np.ndarray | None:
+    """Painted flat zones that apply to a colour layer, sheet size: the "auto" zones where they
+    ended in this layer's tone, and the zones forced into this layer. None when there is none."""
+    prep = res.prepared
+    if L.kind == "outline" or L.tone is None:
+        return None
+    m = None
+    if prep.flat_zones is not None:
+        m = prep.flat_zones & (prep.labels == L.tone)
+    forced = (prep.flat_forced_zones or {}).get(L.tone)
+    if forced is not None:
+        m = forced if m is None else (m | forced)
+    if m is None or not m.any():
+        return None
+    H, W = m.shape
+    X0, Y0 = res.img_off_px
+    out = np.zeros(L.opening.shape, bool)
+    Hs, Ws = out.shape
+    x0, y0, x1, y1 = max(0, X0), max(0, Y0), min(Ws, X0 + W), min(Hs, Y0 + H)
+    if x1 > x0 and y1 > y0:
+        out[y0:y1, x0:x1] = m[y0 - Y0:y1 - Y0, x0 - X0:x1 - X0]
+    return out if out.any() else None
 
 
 def _lost_mask(res: Result, L: Layer, edge: np.ndarray | None = None) -> np.ndarray:
@@ -2856,9 +3132,10 @@ def opening_without_bridges(res: Result, L: Layer) -> np.ndarray:
     return np.maximum(L.opening, cv2.bitwise_and(a, closed))
 
 
-def layer_overlays(res: Result, L: Layer) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
-    """Transparent overlays (BGRA, sheet size) of the bridges, removed details and merged zones,
-    to stack on `layer_view(..., bridges=False, lost=False)` so they can be shown or hidden."""
+def layer_overlays(res: Result, L: Layer) -> tuple:
+    """Transparent overlays (BGRA, sheet size) of the bridges, removed details, merged zones and
+    painted flat zones (None when the layer has none), to stack on
+    `layer_view(..., bridges=False, lost=False)` so they can be shown or hidden."""
     # colour everywhere, only transparency varies: sharp edges once the image is downscaled
     shape = L.opening.shape
     br = np.empty(shape + (4,), np.uint8)
@@ -2872,7 +3149,16 @@ def layer_overlays(res: Result, L: Layer) -> tuple[np.ndarray, np.ndarray, np.nd
     mg = np.empty(shape + (4,), np.uint8)
     mg[..., :3] = MERGE_BGR
     mg[..., 3] = 0 if L.merged is None else np.where(L.merged, int(round(255 * MERGE_ALPHA)), 0).astype(np.uint8)
-    return br, lo, mg
+    fz = _flat_mask(res, L)
+    fl = None
+    if fz is not None:
+        # light fill and a solid outline: the zone stays readable over the layer
+        u8 = fz.astype(np.uint8)
+        edge = cv2.morphologyEx(u8, cv2.MORPH_GRADIENT, disk(max(1.0, res.params.px_per_mm * 0.25))) > 0
+        fl = np.empty(shape + (4,), np.uint8)
+        fl[..., :3] = FLAT_BGR
+        fl[..., 3] = np.where(edge, 255, np.where(fz, int(round(255 * FLAT_ALPHA)), 0)).astype(np.uint8)
+    return br, lo, mg, fl
 
 
 def delta_e(res: Result, sheet_sim: np.ndarray | None = None) -> float:

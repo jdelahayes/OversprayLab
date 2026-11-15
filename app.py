@@ -34,7 +34,8 @@ LOCK = threading.Lock()
 
 PREP_KEYS = ("support_w_mm", "support_h_mm", "px_per_mm", "detail", "n_layers", "color_mode", "skip_support",
              "pre_auto_levels", "pre_clahe", "pre_gamma", "manual_thresholds", "thresholds",
-             "pre_saturation", "pre_sharpen", "pre_remove_bg", "protect_lines", "hue_weight", "color_vividness")
+             "pre_saturation", "pre_sharpen", "pre_remove_bg", "protect_lines", "hue_weight", "color_vividness",
+             "flat_auto", "flat_tolerance", "flat_tolerances")
 
 
 def materials() -> dict:
@@ -174,10 +175,17 @@ def new_session(img: np.ndarray, raw: bytes, filename: str) -> dict:
     sid = uuid.uuid4().hex
     with LOCK:
         SESSIONS[sid] = {"img": img, "name": Path(filename).stem, "raw": raw,
+                         "filename": Path(filename).name,
                          "ext": (Path(filename).suffix.lower() or ".png")}
     h, w = img.shape[:2]
     return dict(id=sid, width=w, height=h, gray=pl.is_grayscale(img), original=png_b64(img),
-                filename=Path(filename).name)
+                filename=Path(filename).name, project_name=Path(filename).stem)
+
+
+def project_name(v, default: str) -> str:
+    """Project name usable as a file name (zip): no path or reserved characters."""
+    v = re.sub(r'[<>:"/\\|?*\x00-\x1f]+', " ", str(v or "")).strip().strip(".")
+    return re.sub(r"\s+", " ", v)[:80] or default
 
 
 @app.post("/api/downscale")
@@ -201,11 +209,13 @@ def api_downscale():
         sess["img"] = img
         def fit(m):
             return cv2.resize(m, (w, h), interpolation=cv2.INTER_NEAREST)
-        for k in ("mask", "silmask", "subject"):
+        for k in ("mask", "silmask", "subject", "flatmask"):
             if sess.get(k) is not None:
                 sess[k] = fit(sess[k])
         for zid, m in (sess.get("zmasks") or {}).items():
             sess["zmasks"][zid] = fit(m)
+        for zid, m in (sess.get("flatforce") or {}).items():
+            sess["flatforce"][zid] = fit(m)
         if sess.get("fg") is not None:
             sess["fg"] = fit(sess["fg"].astype(np.uint8)) > 0
             sess["fg_ver"] = sess.get("fg_ver", 0) + 1
@@ -236,14 +246,15 @@ def api_recommend():
     return jsonify(cache[key])
 
 
-MASK_KEYS = {"outline": "mask", "silhouette": "silmask"}
+MASK_KEYS = {"outline": "mask", "silhouette": "silmask", "flat": "flatmask"}
 
 
 @app.post("/api/mask")
 def api_mask():
     """Receives a painted mask (transparent PNG, at the size of the source image preview).
     kind "outline" (default): areas where key details are searched; kind "silhouette": area whose
-    outline the outline stencil draws."""
+    outline the outline stencil draws; kind "flat": flat zones (each painted blob takes its main tone;
+    zone "auto", or "t<n>": zones forced into the layer of tone n)."""
     data = request.get_json(force=True)
     sess = SESSIONS.get(data.get("id", ""))
     if not sess:
@@ -254,9 +265,15 @@ def api_mask():
         if not ZONE_ID.match(zone):
             return jsonify(error="Zone inconnue"), 400
         store = sess.setdefault("zmasks", {})
+    elif key == "flatmask" and zone not in ("z1", "auto"):   # flat zones forced into a layer
+        if not FLAT_ID.match(zone):
+            return jsonify(error="Zone inconnue"), 400
+        store = sess.setdefault("flatforce", {})
     else:
         store, zone = sess, key
     png = data.get("png")
+    if key == "flatmask":                    # flat zones change the tones: new preparation
+        sess["flat_ver"] = sess.get("flat_ver", 0) + 1
     if not png:
         store.pop(zone, None)
         return jsonify(coverage=0.0)
@@ -269,7 +286,7 @@ def api_mask():
         return jsonify(error="Masque illisible"), 400
     alpha = m[..., 3] if (m.ndim == 3 and m.shape[2] == 4) else (m if m.ndim == 2 else m[..., 2])
     if not (alpha > 0).any():
-        sess.pop(key, None)
+        store.pop(zone, None)
         return jsonify(coverage=0.0)
     h, w = sess["img"].shape[:2]
     full = cv2.resize(alpha, (w, h), interpolation=cv2.INTER_LINEAR)
@@ -278,6 +295,12 @@ def api_mask():
 
 
 ZONE_ID = re.compile(r"^z\d{1,3}$")
+FLAT_ID = re.compile(r"^t\d{1,2}$")       # flat zones forced into the layer of tone n
+
+
+def flat_forced(sess) -> dict:
+    """Flat zones forced into a layer: {tone index: mask (full source image)}."""
+    return {int(k[1:]): m for k, m in (sess.get("flatforce") or {}).items() if m is not None}
 
 
 def zone_masks(sess) -> dict:
@@ -517,9 +540,10 @@ def api_process():
     lay, warnings = pl.resolve_layout(p, sess["img"].shape)
     t0 = time.perf_counter()
     key = (tuple(getattr(p, k) for k in PREP_KEYS) + (lay.src_rect, tuple(round(v, 3) for v in lay.vis_mm))
-           + ((sess.get("fg_ver", 0),) if p.pre_remove_bg else ()))
+           + ((sess.get("fg_ver", 0),) if p.pre_remove_bg else ()) + (sess.get("flat_ver", 0),))
     if sess.get("prep_key") != key:
-        sess["prep"] = pl.prepare(sess["img"], p, lay, sess.get("fg") if p.pre_remove_bg else None)
+        sess["prep"] = pl.prepare(sess["img"], p, lay, sess.get("fg") if p.pre_remove_bg else None,
+                                  sess.get("flatmask"), flat_forced(sess))
         sess["prep_key"] = key
     # Key-detail mask (painted in the Masks tab, outline mask), brought to the computed image area
     regions = zone_regions(sess, lay, sess["prep"].labels.shape) if p.outline else {}
@@ -596,8 +620,8 @@ def api_process():
             # registration marks + layer-number notches (sheet coordinates, mm), drawn by the browser
             "reg": pl.reg_shapes_json(pl.registration_shapes(res, L.index)[0]),
             **cached((L.index, "overlays"), lambda: {
-                k: (png_b64(o, 900) if k != "img_merged" or L.n_merged else None)
-                for k, o in zip(("img_bridges", "img_lost", "img_merged"), pl.layer_overlays(res, L))}),
+                k: (png_b64(o, 900) if o is not None and (k != "img_merged" or L.n_merged) else None)
+                for k, o in zip(("img_bridges", "img_lost", "img_merged", "img_flat"), pl.layer_overlays(res, L))}),
             "mask_flat": cached((L.index, "mflat", hexc), lambda: rgba_b64(L.color, flat)),
             "mask_sim": cached((L.index, "msim", hexc), lambda: rgba_b64(L.color, soft)),
             "mask_flat_nb": cached((L.index, "mflat_nb", hexc), lambda: rgba_b64(L.color, flat_nb)) if L.bridges else None,
@@ -621,6 +645,12 @@ def api_process():
     sheet_sim = pl.simulate_sheet(res)
     return jsonify(
         reference=png_b64(ref),
+        # where the computed image area is in the preview images (fractions of the preview) and
+        # which part of the source image it shows (fractions of the source): the Masks tab draws
+        # the layers under a mask painted on the source image
+        mask_map={"img": [ix * k / size[0], iy * k / size[1], (ix + W) * k / size[0], (iy + H) * k / size[1]],
+                  "src": [lay.src_rect[0] / sess["img"].shape[1], lay.src_rect[1] / sess["img"].shape[0],
+                          lay.src_rect[2] / sess["img"].shape[1], lay.src_rect[3] / sess["img"].shape[0]]},
         reference_pre=png_b64(on_support(pre_view(res))) if pre_on else None,
         subject_used=res.prepared.fg is not None,
         histogram=res.prepared.hist,
@@ -632,6 +662,7 @@ def api_process():
         base=pl.bgr_hex(res.support_color),
         support_tone=(pl.bgr_hex(res.prepared.palette[res.support_label])
                       if res.support_label is not None else None),
+        support_label=res.support_label,
         warnings=warnings + reg_warn,
         gray=res.prepared.gray,
         sheet_mm=[round(v, 1) for v in res.sheet_mm],
@@ -745,17 +776,27 @@ def api_export(sid):
     if sess.get("silmask") is not None:
         ok, buf = cv2.imencode(".png", sess["silmask"])
         sil_png = buf.tobytes()
+    flat_png = None
+    if sess.get("flatmask") is not None:
+        ok, buf = cv2.imencode(".png", sess["flatmask"])
+        flat_png = buf.tobytes()
+    flat_force_pngs = {}
+    for zid, m in (sess.get("flatforce") or {}).items():
+        ok, buf = cv2.imencode(".png", m)
+        flat_force_pngs[zid] = buf.tobytes()
     zone_pngs = {}
     for zid, m in (sess.get("zmasks") or {}).items():
         ok, buf = cv2.imencode(".png", m)
         zone_pngs[zid] = buf.tobytes()
     lang = "fr" if request.args.get("lang") == "fr" else "en"
-    data = export_zip(sess["result"], sess.get("material"), sess["name"],
+    name = project_name(request.args.get("name"), sess["name"])
+    data = export_zip(sess["result"], sess.get("material"), name, image_name=sess.get("filename"),
                       original=(sess.get("raw"), sess.get("ext", ".png")), mask_png=mask_png,
                       ui=sess.get("ui"), subject_png=subject_png, sil_png=sil_png, lang=lang,
-                      subject_exact=bool(sess.get("subject_exact")), zone_pngs=zone_pngs)
+                      subject_exact=bool(sess.get("subject_exact")), zone_pngs=zone_pngs,
+                      flat_png=flat_png, flat_force_pngs=flat_force_pngs)
     return send_file(io.BytesIO(data), mimetype="application/zip", as_attachment=True,
-                     download_name=f"{sess['name']}_{'pochoirs' if lang == 'fr' else 'stencils'}.zip")
+                     download_name=name.replace(" ", "_") + ".zip")
 
 
 @app.post("/api/project")
@@ -769,23 +810,26 @@ def api_project():
     except zipfile.BadZipFile:
         return jsonify(error="Ce fichier n'est pas un zip de projet StencilIt"), 400
     names = z.namelist()
-    info_name = next((n for n in names if n.endswith("_infos.json")), None)
+    # infos.json (files without prefix), or …_infos.json (exports of earlier versions)
+    info_name = next((n for n in names if n.rsplit("/", 1)[-1] == "infos.json"), None) \
+        or next((n for n in names if n.endswith("_infos.json")), None)
     if not info_name:
-        return jsonify(error="Fichier …_infos.json introuvable dans le zip"), 400
+        return jsonify(error="Fichier infos.json introuvable dans le zip"), 400
     info = json.loads(z.read(info_name).decode("utf-8"))
     proj = info.get("projet") or {}
     img_name = proj.get("image")
     if not img_name or img_name not in names:
         return jsonify(error="Ce zip ne contient pas l'image d'origine (export d'une version "
-                             "antérieure) : chargez l'image puis ouvrez le fichier …_infos.json"), 400
+                             "antérieure) : chargez l'image puis ouvrez le fichier infos.json"), 400
     raw = z.read(img_name)
     try:
         img = pl.decode_image(raw)
     except ValueError as e:
         return jsonify(error=str(e)), 400
-    out = new_session(img, raw, proj.get("nom_image") or img_name)
+    # earlier versions: no "nom_image", the image is "<image name>_original.<ext>"
+    out = new_session(img, raw, proj.get("nom_image") or re.sub(r"_original(?=\.[^.]+$)", "", img_name))
     sess = SESSIONS[out["id"]]
-    sess["name"] = proj.get("nom") or sess["name"]
+    out["project_name"] = project_name(proj.get("nom"), sess["name"])
     def read_mask(entry, key):
         """Painted mask of the project -> session (full image size) + PNG for the browser."""
         m_name = proj.get(entry)
@@ -815,6 +859,20 @@ def api_project():
         zones[zid] = {"png": "data:image/png;base64," + base64.b64encode(buf.tobytes()).decode(),
                       "coverage": round(100 * float((m > 0).mean()), 1)}
     sil_b64, sil_coverage = read_mask("masque_silhouette", "silmask")
+    flat_b64, flat_coverage = read_mask("masque_aplats", "flatmask")
+    flat_layers = {}
+    for zid, z_name in (proj.get("masques_aplats_couches") or {}).items():
+        if not (isinstance(zid, str) and FLAT_ID.match(zid) and z_name in names):
+            continue
+        m = cv2.imdecode(np.frombuffer(z.read(z_name), np.uint8), cv2.IMREAD_GRAYSCALE)
+        if m is None or not m.any():
+            continue
+        h, w = img.shape[:2]
+        m = np.where(cv2.resize(m, (w, h), interpolation=cv2.INTER_NEAREST) > 127, 255, 0).astype(np.uint8)
+        sess.setdefault("flatforce", {})[zid] = m
+        ok, buf = cv2.imencode(".png", m)
+        flat_layers[zid] = {"png": "data:image/png;base64," + base64.b64encode(buf.tobytes()).decode(),
+                            "coverage": round(100 * float((m > 0).mean()), 1)}
     subject = None
     s_name = proj.get("masque_sujet")
     if s_name and s_name in names:
@@ -827,7 +885,8 @@ def api_project():
             subject["png"] = "data:image/png;base64," + base64.b64encode(buf.tobytes()).decode()
     return jsonify({**out, "info": info, "mask": mask_b64, "mask_coverage": coverage, "subject": subject,
                     "zone_masks": zones,
-                    "silmask": sil_b64, "silmask_coverage": sil_coverage})
+                    "silmask": sil_b64, "silmask_coverage": sil_coverage,
+                    "flatmask": flat_b64, "flatmask_coverage": flat_coverage, "flat_layer_masks": flat_layers})
 
 
 if __name__ == "__main__":

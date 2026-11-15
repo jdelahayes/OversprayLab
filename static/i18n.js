@@ -48,8 +48,11 @@
     "Aucune image chargée.": "No image loaded.",
     "Glissez une image ici": "Drop an image here", "ou cliquez pour choisir": "or click to choose",
     "Ouvrir un projet…": "Open a project…",
-    "Rouvrir un zip exporté par StencilIt (image, masque et tous les réglages), ou seulement son fichier …_infos.json": "Reopen a zip exported by StencilIt (image, masks and all settings), or just its …_infos.json file",
-    "Exporter les SVG + projet (.zip)": "Export SVGs + project (.zip)", "Exporter le projet (.zip)": "Export the project (.zip)",
+    "Rouvrir un zip exporté par StencilIt (image, masque et tous les réglages), ou seulement son fichier infos.json": "Reopen a zip exported by StencilIt (image, masks and all settings), or just its infos.json file",
+    "Projet": "Project", "Nom du projet": "Project name", "Image d'origine :": "Original image:", "(aucune image)": "(no image)",
+    "Cliquer pour renommer le projet : il nomme le zip exporté et figure sur la fiche de pulvérisation": "Click to rename the project: it names the exported zip and appears on the spraying sheet",
+    "Par défaut, le nom de l'image. Le zip exporté porte ce nom ; les fichiers qu'il contient n'ont pas de préfixe.": "By default, the image name. The exported zip bears this name; the files inside have no prefix.",
+    "Exporter les SVG + projet (.zip)": "Export SVGs + project (.zip)", "Exporter le projet (.zip)": "Export the project (.zip)", "Exporter le projet": "Export the project",
     "Plus proches : donne à chaque couche la couleur de la palette la plus proche de sa teinte réelle dans l'image (deux couches n'ont jamais la même couleur) ; sans palette choisie, prend la palette qui colle le mieux à l'image":
       "Closest: gives each layer the palette colour closest to its real tone in the image (two layers never get the same colour); with no palette chosen, picks the palette that best matches the image",
     "Auto : revenir aux teintes calculées pour toutes les couches": "Auto: back to the computed tones for all layers",
@@ -189,6 +192,46 @@
     "Image prétraitée sur le support": "Preprocessed image on the support", "Image d'origine sur le support": "Original image on the support",
     "Image source — peignez le sujet à garder": "Source image — paint the subject to keep",
     "Image source — peignez les zones à détailler": "Source image — paint the areas to detail",
+    "Image source — peignez les zones à remplir d'une seule teinte": "Source image — paint the areas to fill with a single tone",
+    "Aplats automatiques": "Automatic flat areas", "Tolérance des zones d'aplat": "Flat zone tolerance",
+    "Peindre les zones d'aplat…": "Paint the flat zones…", "Aucune zone d'aplat peinte.": "No flat zone painted.",
+    "Aplats : couches pleines, sans îlots d'une teinte voisine qui s'entremêlent (style affiche). Chaque zone d'aplat peinte (ou objet sélectionné) prend sa teinte principale ; les détails francs restent.":
+      "Flat areas: full layers, without islands of a neighbouring tone interleaved with them (poster look). Each painted flat zone (or selected object) takes its main tone; sharp details stay.",
+    "Aplats automatiques : un îlot d'une teinte est absorbé par la zone qui l'entoure quand la frontière entre eux est peu contrastée (variation douce de luminosité coupée par un seuil, pas un vrai bord). Plus haut = contraste toléré et taille des îlots absorbés plus grands. 0 = désactivé. Les yeux, traits sombres et bords francs restent.":
+      "Automatic flat areas: an island of one tone is absorbed by the area around it when the border between them has a low contrast (smooth change of lightness cut by a threshold, not a real edge). Higher = more contrast tolerated and larger islands absorbed. 0 = off. Eyes, dark strokes and sharp edges stay.",
+    "Zones d'aplat peintes (onglet Masques, masque Aplats) : chaque zone peinte séparément prend sa teinte principale partout où l'image en est assez proche. 0 = rien ne change ; 50 = les teintes voisines rejoignent la teinte principale ; 100 = toute la zone d'une seule couleur.":
+      "Painted flat zones (Masks tab, Flat areas mask): each separately painted zone takes its main tone wherever the image is close enough to it. 0 = nothing changes; 50 = the neighbouring tones join the main tone; 100 = the whole zone in a single colour.",
+    "Ouvre l'onglet Masques sur le masque Aplats : peignez ou cliquez (outil Objet) chaque zone à remplir d'une seule teinte (visage, fond, vêtement…). Chaque zone séparée est traitée seule.":
+      "Opens the Masks tab on the Flat areas mask: paint or click (Object tool) each zone to fill with a single tone (face, background, clothing…). Each separate zone is processed on its own.",
+    "Masque aplats": "Flat areas mask",
+    "Aplat réglé": "Flat area set",
+    "Tolérance générale : enfoncé, cet aplat suit la tolérance de l'aplat Générale. Relâché (clic ou curseur bougé), il garde sa propre tolérance, celle du curseur ; recliquer le ramène à la tolérance générale":
+      "General tolerance: pressed, this flat area follows the tolerance of the General flat area. Released (click or slider moved), it keeps its own tolerance, the slider's; clicking again brings it back to the general tolerance",
+    "Générale": "General",
+    "Masque d'aplat réglé": "Flat mask being set",
+    "Masque d'aplat dont la tolérance est réglée : Générale ou la couche où l'aplat est forcé (chaque masque garde sa tolérance ; sans réglage propre, une couche prend la tolérance générale)":
+      "Flat mask whose tolerance is set: General or the layer the flat area is forced into (each mask keeps its tolerance; without its own setting, a layer takes the general tolerance)",
+    "aplat": "flat area",
+    "Afficher / masquer les zones d'aplat peintes sur les vues des couches : zones de l'aplat Générale là où elles ont abouti dans la couche, et zones forcées dans la couche":
+      "Show / hide the painted flat zones on the layer views: zones of the General flat area where they ended in the layer, and zones forced into the layer",
+    "Fond affiché sous le masque": "Background shown under the mask",
+    "Fond affiché sous le masque : l'image, la prévisualisation (toutes les couches visibles, sur le support) ou les couches choisies (sur l'image atténuée)":
+      "Background shown under the mask: the image, the preview (every visible layer, on the support) or the chosen layers (on the dimmed image)",
+    "Fond : image": "Background: image", "Fond : prévisualisation": "Background: preview", "Fond : couches choisies": "Background: chosen layers",
+    "Couches affichées sous le masque": "Layers shown under the mask",
+    "Couche de l'aplat à peindre": "Layer of the flat area to paint",
+    "Aplat général : chaque zone prend sa teinte principale": "General flat area: each zone takes its main tone",
+    "Support nu": "Bare support",
+    "Aplat forcé dans la teinte laissée au support nu (pas de peinture)": "Flat area forced into the tone left to the bare support (no paint)",
+    "Cette teinte n'existe plus avec les réglages actuels : effacez ce masque ou changez le nombre de pochoirs":
+      "This tone no longer exists with the current settings: clear this mask or change the number of stencils",
+    "Peindre un aplat dans cette couche": "Paint a flat area in this layer",
+    "Peindre un aplat dans cette couche : les zones peintes (ou objets sélectionnés) prennent la couleur de cette couche, les détails francs restent (onglet Masques, masque Aplats)":
+      "Paint a flat area in this layer: the painted zones (or selected objects) take the colour of this layer, sharp details stay (Masks tab, Flat areas mask)",
+    "Masque aplats : chaque zone peinte (ou objet sélectionné) est remplie de sa teinte principale, sans îlots d'autres teintes (tolérance : section Simplification)":
+      "Flat areas mask: each painted zone (or selected object) is filled with its main tone, without islands of other tones (tolerance: Simplification section)",
+    "Peignez ou cliquez (outil Objet) chaque zone à remplir d'une seule teinte : visage, fond, vêtement… Chaque zone séparée prend sa teinte principale (tolérance : section Simplification).":
+      "Paint or click (Object tool) each zone to fill with a single tone: face, background, clothing… Each separate zone takes its main tone (tolerance: Simplification section).",
     "Partie de l'image utilisée (recadrage)": "Part of the image used (crop)", "Position de la comparaison": "Comparison position",
     "Histogramme de luminance et seuils entre les teintes": "Luminance histogram and thresholds between tones",
     "Chargez une image pour voir l'histogramme": "Load an image to see the histogram",
@@ -423,11 +466,11 @@
     "Image chargée — réglages du projet appliqués": "Image loaded — project settings applied",
     "Réglages du projet appliqués à l'image chargée": "Project settings applied to the loaded image",
     "Réglages du projet chargés — chargez maintenant l'image d'origine": "Project settings loaded — now load the original image",
-    "Ce JSON n'est pas un fichier …_infos.json de StencilIt": "This JSON is not a StencilIt …_infos.json file", "Fichier JSON illisible": "Unreadable JSON file",
+    "Ce JSON n'est pas un fichier infos.json de StencilIt": "This JSON is not a StencilIt infos.json file", "Fichier JSON illisible": "Unreadable JSON file",
     "Projet illisible": "Unreadable project", "Erreur du masque": "Mask error", "Erreur du masque sujet": "Subject mask error", "Erreur": "Error",
     "Masque illisible": "Unreadable mask", "Session inconnue, rechargez l'image": "Unknown session, reload the image", "Aucune image reçue": "No image received",
     "Aucun fichier reçu": "No file received", "Ce fichier n'est pas un zip de projet StencilIt": "This file is not a StencilIt project zip",
-    "Fichier …_infos.json introuvable dans le zip": "…_infos.json file not found in the zip", "Rien à exporter": "Nothing to export",
+    "Fichier infos.json introuvable dans le zip": "infos.json file not found in the zip", "Rien à exporter": "Nothing to export",
     "Nom ou valeurs manquants": "Missing name or values", "Type de réglage inconnu": "Unknown preset type", "Nouveau nom manquant": "New name missing",
     "Image illisible": "Unreadable image",
     "Peignez le sujet dans l'onglet « Masques » (masque Sujet) pour supprimer le fond": "Paint the subject in the “Masks” tab (Subject mask) to remove the background",
@@ -776,12 +819,17 @@
     "Sensibilité aux limites du pinceau et de la gomme intelligents : plus haut = s'arrête aux moindres changements de couleur (zone plus serrée), plus bas = déborde sur les teintes proches": "Edge sensitivity of the smart brush and eraser: higher = stops at the slightest change of colour (tighter area), lower = spills over onto close tones",
     "Effacer (E). Avec le pinceau : Maj + clic gauche efface aussi": "Erase (E). With the brush: Shift + left click erases too",
     "Sensibilité du pinceau intelligent": "Smart brush sensitivity",
+    "Ce que suit le pinceau intelligent": "What the smart brush follows",
+    "Ce que suit le pinceau intelligent : l'image source, ou le fond affiché sous le masque (prévisualisation ou couches choisies, voir le menu Fond) pour peindre en suivant les zones des couches":
+      "What the smart brush follows: the source image, or the background shown under the mask (preview or chosen layers, see the Background menu) to paint following the zones of the layers",
+    "Suit : l'image": "Follows: image",
+    "Suit : le fond affiché": "Follows: shown background",
   });
 
   // ------------------------------------------------------------------ setting tooltips (TIPS)
   Object.assign(EN, {
     "Image à transformer en pochoirs (photo, dessin, logo… en couleur ou noir et blanc). Vous pouvez aussi la glisser sur la zone.": "Image to turn into stencils (photo, drawing, logo… in colour or black and white). You can also drop it on the area.",
-    "Projet StencilIt exporté (.zip) ou son fichier …_infos.json.": "Exported StencilIt project (.zip) or its …_infos.json file.",
+    "Projet StencilIt exporté (.zip) ou son fichier infos.json.": "Exported StencilIt project (.zip) or its infos.json file.",
     "Vos supports enregistrés : format, couleur, marges, feuille, tapis et repères de calage.": "Your saved supports: format, colour, margins, sheet, mat and registration marks.",
     "Portrait ou paysage : intervertit la largeur et la hauteur du support.": "Portrait or landscape: swaps the support width and height.",
     "Largeur réelle de la surface à peindre, en millimètres.": "Real width of the surface to paint, in millimetres.",
@@ -860,7 +908,11 @@
   const plural = (n, w) => `${n} ${w}${+n > 1 ? "s" : ""}`;
   const SIDES = { "gauche": "left", "droit": "right", "haut": "top", "bas": "bottom" };
   const KIND_EN = { "Support": "Support", "Matériau": "Material", "Format": "Sheet format" };
-  const MASK_EN = { "contours": "outline", "sujet": "subject", "silhouette": "silhouette", "contours (détails clés)": "outline (key details)" };
+  const flatPartEn = w => w === "générale" ? "general" : w === "support nu" ? "bare support"
+    : w.replace(/^couche (\d+)$/, "layer $1").replace(/^teinte (\d+) \(absente\)$/, "tone $1 (absent)");
+  const flatNameEn = w => w === "Support nu" ? "Bare support"
+    : w.replace(/^Couche (\d+)$/, "Layer $1").replace(/^Teinte (\d+) \(absente\)$/, "Tone $1 (absent)");
+  const MASK_EN = { "contours": "outline", "sujet": "subject", "silhouette": "silhouette", "aplats": "flat areas", "contours (détails clés)": "outline (key details)" };
   const decEN = x => x.replace(/(\d),(\d)/g, "$1.$2");
   const P = [
     [/^([\s\S]*)\nProchain trait à (\d+)\.$/, (m, t, n) => `${tr(t)}\nNext line at ${n}.`],
@@ -888,8 +940,17 @@
     [/^Pochoir (\d+) \(traits\) : peinture (#[0-9a-f]{6})$/i, (m, n, c) => `Stencil ${n} (lines): paint ${c}`],
     [/^Pochoir (\d+) \(traits\) : couleur automatique$/, (m, n) => `Stencil ${n} (lines): automatic colour`],
     [/^(\d+) couches?( \+ contours)? · dans l'ordre$/, (m, n, c) => `${plural(n, "layer")}${c ? " + outline" : ""} · in order`],
-    [/^(trait seul · )?(\d+) pochoirs? · détail (\d+)(?: · teinte (\d+) %)?(?: · vivacité (\d+) %)?$/, (m, l, n, d, h, v) =>
-      `${l ? "lines only · " : ""}${plural(n, "stencil")} · detail ${d}${h ? ` · hue ${h} %` : ""}${v ? ` · vividness ${v} %` : ""}`],
+    [/^(trait seul · )?(\d+) pochoirs? · détail (\d+)(?: · teinte (\d+) %)?(?: · vivacité (\d+) %)?(?: · aplats (\d+))?( · zones d'aplat)?$/, (m, l, n, d, h, v, f, z) =>
+      `${l ? "lines only · " : ""}${plural(n, "stencil")} · detail ${d}${h ? ` · hue ${h} %` : ""}${v ? ` · vividness ${v} %` : ""}${f ? ` · flat areas ${f}` : ""}${z ? " · flat zones" : ""}`],
+    [/^Zones d'aplat : ([\d.]+) % de l'image — chaque zone séparée prend sa teinte principale \(tolérance (\d+)\)\.$/,
+      (m, a, t) => `Flat zones: ${a} % of the image — each separate zone takes its main tone (tolerance ${t}).`],
+    [/^Zones d'aplat peintes : (.+)\.$/, (m, a) => `Flat zones painted: ${a.split(", ").map(flatPartEn).join(", ")}.`],
+    [/^Aplat forcé dans la couche (\d+)$/, (m, n) => `Flat area forced into layer ${n}`],
+    [/^Teinte (\d+) \(absente\)$/, (m, n) => `Tone ${n} (absent)`],
+    [/^Aplat forcé \((.+)\) : ([\d.]+) % de l'image — la partie aplatie de chaque zone prend cette couche \(tolérance (\d+)\)\.$/,
+      (m, n, a, t) => `Forced flat area (${flatNameEn(n)}): ${a} % of the image — the flattened part of each zone takes this layer (tolerance ${t}).`],
+    [/^Peignez ou cliquez \(outil Objet\) les zones à remplir avec cette couche \((.+)\) : la partie aplatie de chaque zone prend sa couleur, les détails francs restent\.$/,
+      (m, n) => `Paint or click (Object tool) the zones to fill with this layer (${flatNameEn(n)}): the flattened part of each zone takes its colour, sharp details stay.`],
     [/^(\d+) pochoirs?$/, (m, n) => plural(n, "stencil")],
     [/^(\d+) pochoir\(s\) : ΔE ([\d.]+)$/, (m, n, d) => `${n} stencil(s): ΔE ${d}`],
     [/^(\d+) coins · (.+)$/, (m, n, s) => `${n} corners · ${tr(s)}`],
@@ -903,12 +964,14 @@
     [/^écart à l'original jugé bon \(ΔE ([\d.]+) ≤ ([\d.]+)\)$/, (m, a, b) => `difference from original judged good (ΔE ${a} ≤ ${b})`],
     [/^Couche (\d+)( — contours( [A-Z])? ✎)? — (#[0-9a-f]{6})$/i, (m, n, c, g, h) => `Layer ${n}${c ? ` — outline${g || ""} ✎` : ""} — ${h}`],
     [/^Couche (\d+)( \(contours\))?$/, (m, n, c) => `Layer ${n}${c ? " (outline)" : ""}`],
+    [/^(.+) — tolérance (\d+(?:\.\d+)?)$/, (m, n, v) => `${trAny(n) ?? n} — tolerance ${v}`],
+    [/^(.+) — tolérance générale$/, (m, n) => `${trAny(n) ?? n} — general tolerance`],
     [/^Couche (\d+)( \(contours\))? (#[0-9a-f]{6})$/i, (m, n, c, h) => `Layer ${n}${c ? " (outline)" : ""} ${h}`],
     [/^Couche (\d+) : peinture (#[0-9a-f]{6})$/i, (m, n, h) => `Layer ${n}: paint ${h}`],
     [/^Couche (\d+) : teinte calculée$/, (m, n) => `Layer ${n}: computed tone`],
     [/^Couche (\d+) \(contours\) : peinture (#[0-9a-f]{6})$/i, (m, n, h) => `Layer ${n} (outline): paint ${h}`],
     [/^Couche (\d+) \(contours\) : couleur automatique$/, (m, n) => `Layer ${n} (outline): automatic colour`],
-    [/^Masque (contours|sujet|silhouette) copié dans le masque (contours|sujet|silhouette)$/, (m, a, b) => `${MASK_EN[a]} mask copied into the ${MASK_EN[b]} mask`],
+    [/^Masque (contours|sujet|silhouette|aplats) copié dans le masque (contours|sujet|silhouette|aplats)$/, (m, a, b) => `${MASK_EN[a]} mask copied into the ${MASK_EN[b]} mask`],
     [/^Silhouette : le masque (sujet|silhouette|contours \(détails clés\)) est vide \(onglet Masques\)$/, (m, a) => `Silhouette: the ${MASK_EN[a]} mask is empty (Masks tab)`],
     [/^Zone peinte : ([\d.]+) % de l'image — son contour est tracé par les contours \(masque silhouette\)\.$/, (m, a) => `Painted area: ${a} % of the image — its outline is drawn by the outline (silhouette mask).`],
     [/^Couche (\d+) : (#[0-9a-f]{6})$/i, (m, n, h) => `Layer ${n}: ${h}`],
@@ -1021,8 +1084,8 @@
       () => "The marks are placed in the support corners and may overlap the image: increase the sheet margin or the inner margin."],
     [/^Bordure de la feuille trop étroite pour les repères \((\d+) mm, il en faut (\d+)\) : ils risquent de chevaucher le motif\. Augmentez la bordure\.$/,
       (m, a, b) => `Sheet border too narrow for the marks (${a} mm, ${b} needed): they may overlap the design. Increase the border.`],
-    [/^Ce zip ne contient pas l'image d'origine \(export d'une version antérieure\) : chargez l'image puis ouvrez le fichier …_infos\.json$/,
-      () => "This zip does not contain the original image (export from an earlier version): load the image then open the …_infos.json file"],
+    [/^Ce zip ne contient pas l'image d'origine \(export d'une version antérieure\) : chargez l'image puis ouvrez le fichier infos\.json$/,
+      () => "This zip does not contain the original image (export from an earlier version): load the image then open the infos.json file"],
   ];
 
   function trAny(s) {
