@@ -3831,7 +3831,7 @@ async function sendMask(kind = maskKind()) {
     if (cur && MASK_SENDING !== req) return;          // a more recent upload is in progress
     if (cur) maskInfo(j.coverage);
     if (!empty && !$("outline").checked && !MASK_RESTORE) {   // painting a mask only makes sense with the outline stencil
-      $("outline").checked = true; updateSummaries();
+      $("outline").checked = true; syncOutlineGroups(); updateSummaries();
       status("Pochoir de contours activé (masque peint)");
     }
     if ($("outline").checked) schedule();
@@ -3851,7 +3851,7 @@ const METHOD_HINTS = {
 };
 function enableOutline() {
   if ($("outline").checked) return;
-  $("outline").checked = true; updateSummaries(); schedule();
+  $("outline").checked = true; syncOutlineGroups(); updateSummaries(); schedule();
   status("Pochoir de contours activé");
 }
 const TARGET_HINTS = {
