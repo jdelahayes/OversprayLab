@@ -157,7 +157,7 @@ class Params:
     margin_mm: float = 15.0
     sheet_border_mm: float = 20.0
     reg_dims: bool = True          # ruler dimensions of the crosses (sheet inside the support)
-    sheet_outline: bool = True
+    sheet_outline: bool = False
     machine_max_mm: float = 305.0  # usable cutting width of the machine
     mat_w_mm: float = 304.8        # cutting mat (0 = no mat: only the width matters)
     mat_h_mm: float = 304.8
@@ -351,7 +351,7 @@ def resolve_layout(p: Params, img_shape) -> tuple[Layout, list[str]]:
         elif sheet_h <= mw + tol and sheet_w <= mh + tol:
             warnings.append(f"La feuille ({sheet_w:.0f} × {sheet_h:.0f} mm) ne tient sur le {mat} qu'en la "
                             f"tournant d'un quart de tour : passez le tapis en "
-                            f"{'portrait' if land else 'paysage'} (section Feuille du pochoir & calage).")
+                            f"{'portrait' if land else 'paysage'} (section Machine de découpe).")
         else:
             fix = ("réduisez la marge autour du support, passez en « feuille dans le support »"
                    if p.sheet_mode == "around" else "réduisez la bordure ou la taille du motif")

@@ -8,14 +8,7 @@
     "double_bridge_area_mm2": 300,
     "min_bridges": 2,
     "bridges": true,
-    "sheet_color": "#e9dfc8",
-    "cut": {
-      "blade": "3-4",
-      "force": "20-28",
-      "speed": "3",
-      "passes": "1-2",
-      "notes": "Le papier se déchire facilement : préférez des ponts larges et des bandes de matière généreuses."
-    }
+    "sheet_color": "#e9dfc8"
   },
   "vinyle": {
     "label": "Vinyle adhésif",
@@ -26,14 +19,7 @@
     "double_bridge_area_mm2": 600,
     "min_bridges": 1,
     "bridges": true,
-    "sheet_color": "#d9dde2",
-    "cut": {
-      "blade": "1-2",
-      "force": "8-12",
-      "speed": "5",
-      "passes": "1",
-      "notes": "Avec un tapis de transfert, les îlots peuvent être repositionnés : vous pouvez désactiver les ponts."
-    }
+    "sheet_color": "#d9dde2"
   },
   "mylar": {
     "label": "Mylar (0,1-0,19 mm)",
@@ -44,13 +30,6 @@
     "double_bridge_area_mm2": 400,
     "min_bridges": 1,
     "bridges": true,
-    "sheet_color": "#cfe0e6",
-    "cut": {
-      "blade": "3-5",
-      "force": "25-33",
-      "speed": "2",
-      "passes": "2",
-      "notes": "Au-delà de 0,15 mm, utilisez la lame profonde et faites un test de coupe."
-    }
+    "sheet_color": "#cfe0e6"
   }
 }

@@ -82,8 +82,8 @@
   input[type=number] { width: 84px; }
   .check { display: flex; gap: 8px; align-items: center; margin: 6px 0; }
   .hint { color: var(--muted); font-size: 12px; margin: 4px 0 0; }
-  .cut { background: var(--soft); border-radius: 6px; padding: 6px 8px; font-size: 12px; margin-top: 8px; }
-  .cut b { font-weight: 600; }
+  /* preference "hints off": explanations under the settings hidden, states (.keep) kept */
+  body.no-hints aside .hint:not(.keep) { display: none !important; }
   /* image box (drop zone) on the left, project buttons stacked on its right */
   .topbox { display: flex; gap: 8px; align-items: flex-start; margin-bottom: 12px; }
   #drop { border: 2px dashed var(--line); border-radius: 10px; padding: 10px; text-align: center;
@@ -285,9 +285,25 @@
           background: var(--panel); font-variant-numeric: tabular-nums; font-size: 11px; }
   .chip.rec { border-color: var(--accent); color: var(--accent); font-weight: 700; }
   .chip.cur { background: var(--accent); color: var(--accent-ink); border-color: var(--accent); }
+  /* number of stencils: one button per value */
+  .nchips { display: flex; gap: 4px; margin: 2px 0 6px; }
+  .nchips .chip { flex: 1; min-width: 0; padding: 3px 0; font-size: 13px; text-align: center; border-radius: 6px; }
   .warn { background: #fef3c7; color: #78350f; border: 1px solid #fcd34d; border-radius: 8px;
           padding: 7px 10px; margin-bottom: 8px; font-size: 13px; }
   @media (prefers-color-scheme: dark) { .warn { background: #3a2e12; color: #fde68a; border-color: #854d0e; } }
+  /* outlined foldable boxes under the view (warnings, dimensions), like the ruler placement box */
+  .foldbox { margin-top: 10px; border: 1px solid var(--line); border-radius: 10px; padding: 8px 12px; font-size: 13px; }
+  .foldbox > summary { list-style: none; cursor: pointer; font-weight: 600; display: flex; gap: 6px; align-items: baseline; }
+  .foldbox > summary::-webkit-details-marker { display: none; }
+  .foldbox > summary::before { content: "▸"; display: inline-block; width: 10px; color: var(--muted); font-weight: 400; }
+  .foldbox[open] > summary::before { content: "▾"; }
+  .foldbox > summary:hover, .foldbox > summary:focus-visible { color: var(--accent); outline: none; }
+  .foldbox[open] > summary { margin-bottom: 8px; }
+  .warnbox > summary { color: #b45309; }
+  @media (prefers-color-scheme: dark) { .warnbox > summary { color: #fbbf24; } }
+  .warnbox .warn:last-child { margin-bottom: 0; }
+  .foldbox .metrics { margin: 0; }
+  #warnings { max-height: 30vh; overflow-y: auto; }
   .sw.pick { cursor: pointer; width: 20px; height: 20px; }
   /* Crop editor */
   .cropwrap { position: relative; display: inline-block; overflow: visible; user-select: none; touch-action: none; line-height: 0; }
@@ -318,19 +334,19 @@
   .acc[aria-expanded="true"] .chev { transform: rotate(90deg); }
   .acc .sum { margin-left: auto; font-weight: 400; font-size: 11px; color: var(--muted); white-space: nowrap;
               overflow: hidden; text-overflow: ellipsis; max-width: 55%; }
-  .pbtns { display: grid; grid-template-columns: 1fr 1fr; gap: 4px; margin-top: 6px; }
-  .pbtns button { padding: 4px 6px; font-size: 12px; }
-  .pbtns button[data-act="delete"].confirm { background: #dc2626; border-color: #dc2626; color: #fff; }
+  /* preset bar with icons (title line of a list of formats) */
+  .phead { display: flex; align-items: center; gap: 6px; margin: 6px 0 2px; }
+  .phead label { font-size: inherit; }
+  .phead .picons { margin-left: auto; display: inline-flex; gap: 3px; }
+  .phead .ibtn { padding: 3px 5px; }
+  .ibtn.confirm { background: #dc2626; border-color: #dc2626; color: #fff; }
   .nameform { display: flex; gap: 4px; margin-top: 6px; }
   .nameform input { flex: 1; min-width: 0; }
   .nameform button { padding: 4px 8px; font-size: 12px; }
   .dirty { font-size: 11px; color: #d97706; white-space: nowrap; }
-  .saved { background: var(--soft); border: 1px dashed var(--line); border-radius: 6px; padding: 7px 8px; margin-bottom: 8px; }
   input[type=text], textarea { width: 100%; padding: 5px 6px; border: 1px solid var(--line); border-radius: 6px;
           background: var(--panel); color: var(--ink); font: inherit; }
   textarea { resize: vertical; font-size: 12px; }
-  .cutgrid { display: grid; grid-template-columns: 1fr 1fr; gap: 4px 8px; margin-top: 4px; }
-  .cutgrid label { display: grid; grid-template-columns: 52px 1fr; align-items: center; gap: 4px; }
   .projbar { display: flex; flex-direction: column; gap: 6px; flex: none; }
   .projname { padding: 4px 6px; border: 1px dashed transparent; border-radius: 6px; cursor: text; font-weight: 600;
               overflow-wrap: anywhere; min-height: 1.4em; }
@@ -469,9 +485,13 @@
   .swc { width: 40px; height: 26px; padding: 0; border: 1px solid var(--line); border-radius: 6px; flex: none; }
   .ohead { margin-top: 10px; }
   .ohead label { font-weight: 600; }
-  .ogroup { border-left: 2px solid var(--line); padding: 2px 0 4px 10px; margin: 2px 0 8px 6px; }
+  .ogroup { border-left: 2px solid color-mix(in srgb, var(--muted) 60%, transparent); padding: 2px 0 4px 10px; margin: 2px 0 8px 6px; }
   .ogroup[hidden] { display: none; }
   .ogroup .hint { margin-top: 0; }
+  /* sub-sections of a section: a title, then its settings behind a vertical bar (.ogroup) */
+  .subhead, .phead.sub label { display: block; font-weight: 600; margin: 10px 0 2px; }
+  .phead.sub { margin-top: 6px; }
+  .phead.sub label { margin: 0; }
   .pair { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 0 10px; align-items: center; }
   .pair label.row { grid-template-columns: 1fr auto; }
   .pair input[type=number] { width: 60px; }
@@ -496,7 +516,10 @@
       <option value="fr">Français</option>
     </select></label>
   <div class="check"><input type="checkbox" id="auto_fit" checked><label for="auto_fit">Au chargement d'une image, l'ajuster au mieux dans le pochoir</label></div>
-  <p class="hint">Même effet que le bouton « Ajuster au mieux dans le pochoir » (section « Image : cadrage & taille »). Ne s'applique pas à l'ouverture d'un projet.</p>
+  <p class="hint">Même effet que l'icône « Ajuster au pochoir » (section « Position de l'image »). Ne s'applique pas à l'ouverture d'un projet.</p>
+  <div class="check"><input type="checkbox" id="show_hints" checked><label for="show_hints">Afficher les indications sous les réglages</label></div>
+  <p class="hint">Décoché : seuls restent les états (tient sur le tapis, sujet peint…).</p>
+  <div class="check"><input type="checkbox" id="show_tips" checked><label for="show_tips">Afficher les infobulles au survol</label></div>
 </div>
 <div class="colorpop" id="colorPop" role="dialog" aria-label="Couleur de la couche" hidden></div>
 <div class="paledit" id="palEdit" role="dialog" aria-label="Éditeur de palette" hidden></div>
@@ -523,33 +546,25 @@
     <label class="full" for="projNameInput">Nom du projet</label>
     <div class="projname empty" id="projName" role="button" tabindex="0" title="Cliquer pour renommer le projet : il nomme le zip exporté et figure sur la fiche de pulvérisation">(aucune image)</div>
     <input type="text" id="projNameInput" maxlength="80" hidden aria-label="Nom du projet">
-    <div class="hint" id="projImage" hidden><span>Image d'origine :</span> <span id="projImageName" data-noi18n></span></div>
     <p class="hint">Par défaut, le nom de l'image. Le zip exporté porte ce nom ; les fichiers qu'il contient n'ont pas de préfixe.</p>
+    <div class="hint keep" id="projImage" hidden><span>Image d'origine :</span> <span id="projImageName" data-noi18n></span></div>
   </fieldset>
 
   <fieldset>
     <legend>Support à peindre</legend>
-    <div class="saved" id="supBar">
-      <div style="display:flex; gap:6px; align-items:center">
-        <select id="user_support" style="flex:1" aria-label="Support enregistré"></select>
-        <span class="dirty" hidden title="Les valeurs ont été modifiées depuis le dernier enregistrement">● modifié</span>
-      </div>
-      <div class="pbtns">
-        <button type="button" data-act="save" title="Enregistrer les valeurs actuelles dans le support sélectionné">Enregistrer</button>
-        <button type="button" data-act="saveas" title="Enregistrer sous un nouveau nom">Enregistrer sous…</button>
-        <button type="button" data-act="rename" title="Renommer le support sélectionné">Renommer…</button>
-        <button type="button" data-act="delete" title="Supprimer le support sélectionné">Supprimer</button>
-      </div>
-      <div class="nameform" hidden>
-        <input type="text" maxlength="60" placeholder="Nom (ex. Toile 30×40 kraft)" aria-label="Nom du support">
-        <button type="button" class="ok">OK</button>
-        <button type="button" class="cancel">Annuler</button>
-      </div>
-      <p class="hint">Format, couleur, marge intérieure, feuille du pochoir et repères de calage.</p>
+    <div id="supBar">
+    <div class="phead">
+      <label for="support_preset">Format</label>
+      <span class="dirty" hidden title="Les valeurs ont été modifiées depuis le dernier enregistrement">● modifié</span>
+      <span class="picons">
+        <button type="button" class="ibtn" data-act="save" aria-label="Enregistrer" title="Enregistrer le support : dans le support ★ sélectionné, sinon sous un nouveau nom (format, couleur, marges, feuille, tapis et repères de calage)"><svg class="ico" viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/><path d="M17 21v-8H7v8"/><path d="M7 3v5h8"/></svg></button>
+        <button type="button" class="ibtn" data-act="saveas" aria-label="Enregistrer sous…" title="Enregistrer le support sous un nouveau nom"><svg class="ico" viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M14 3H6a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V9z"/><path d="M14 3v6h6"/><path d="M12 12v6"/><path d="M9 15h6"/></svg></button>
+        <button type="button" class="ibtn" data-act="rename" aria-label="Renommer…" title="Renommer le support ★ sélectionné"><svg class="ico" viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4z"/></svg></button>
+        <button type="button" class="ibtn" data-act="delete" aria-label="Supprimer" title="Supprimer le support ★ sélectionné"><svg class="ico" viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 6h18"/><path d="M8 6V4h8v2"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/><path d="M10 11v6"/><path d="M14 11v6"/></svg></button>
+      </span>
     </div>
-    <label class="full">Format</label>
     <div style="display:flex; gap:6px">
-      <select id="support_preset" style="flex:1" title="Format du support (grand côté / petit côté selon l'orientation)">
+      <select id="support_preset" style="flex:1" title="Format du support : vos supports ★ enregistrés, puis les formats standard (grand côté / petit côté selon l'orientation)">
         <optgroup label="Papier ISO">
           <option value="105x148">A6 — 105 × 148 mm</option>
           <option value="148x210">A5 — 148 × 210 mm</option>
@@ -647,6 +662,12 @@
         <option value="landscape">Paysage</option>
       </select>
     </div>
+    <div class="nameform" hidden>
+      <input type="text" maxlength="60" placeholder="Nom (ex. Toile 30×40 kraft)" aria-label="Nom du support">
+      <button type="button" class="ok">OK</button>
+      <button type="button" class="cancel">Annuler</button>
+    </div>
+    </div>
     <label class="row">Largeur du support (mm) <input type="number" id="support_w_mm" value="210" min="20" max="3000" step="1"></label>
     <label class="row">Hauteur du support (mm) <input type="number" id="support_h_mm" value="297" min="20" max="3000" step="1"></label>
     <label class="row">Couleur du support <input type="color" id="support_color" value="#ffffff" style="width:84px;height:28px;padding:0;border:1px solid var(--line);border-radius:6px"></label>
@@ -654,86 +675,92 @@
   </fieldset>
 
   <fieldset>
-    <legend>Image : cadrage & taille</legend>
-    <label class="full">Recadrage <span class="hint">(onglet « Cadrage » pour tracer le cadre)</span></label>
-    <div style="display:flex; gap:6px">
-      <select id="crop_ratio" style="flex:1">
-        <option value="free">Libre</option>
-        <option value="support">Proportions du support</option>
-        <option value="1">Carré 1:1</option>
-        <option value="1.3333">4:3</option>
-        <option value="0.75">3:4</option>
-        <option value="1.7778">16:9</option>
-        <option value="0.5625">9:16</option>
-      </select>
-      <button type="button" id="cropReset">Tout</button>
-    </div>
-    <p class="hint" id="cropInfo"></p>
-    <label class="row">Taille (% de « ajusté ») <span class="v" id="image_scale_v"></span>
-      <input type="range" id="image_scale" min="5" max="500" step="0.01" value="100"></label>
-    <label class="row">Largeur de l'image (mm) <input type="number" id="img_width_mm" min="5" max="5000" step="1"></label>
-    <label class="row">Hauteur de l'image (mm) <input type="number" id="img_height_mm" min="5" max="5000" step="1"></label>
-    <div class="check"><input type="checkbox" id="keep_ratio" checked><label for="keep_ratio">Conserver les proportions</label></div>
-    <div class="warn" id="resWarn" hidden></div>
-    <input type="hidden" id="image_height_factor" value="1">
-    <label class="full">Aligner sur le support</label>
-    <div style="display:flex; gap:10px; align-items:center">
-      <div class="aligngrid" id="alignGrid">
-        <button type="button" data-a="-1,-1" title="Coin haut-gauche">↖</button>
-        <button type="button" data-a="0,-1" title="Centré en haut">↑</button>
-        <button type="button" data-a="1,-1" title="Coin haut-droit">↗</button>
-        <button type="button" data-a="-1,0" title="Centré à gauche">←</button>
-        <button type="button" data-a="0,0" title="Centré">●</button>
-        <button type="button" data-a="1,0" title="Centré à droite">→</button>
-        <button type="button" data-a="-1,1" title="Coin bas-gauche">↙</button>
-        <button type="button" data-a="0,1" title="Centré en bas">↓</button>
-        <button type="button" data-a="1,1" title="Coin bas-droit">↘</button>
+    <legend>Position de l'image</legend>
+    <div class="subhead">Cadrage</div>
+    <div class="ogroup">
+      <label class="full">Recadrage</label>
+      <div style="display:flex; gap:6px">
+        <select id="crop_ratio" style="flex:1">
+          <option value="free">Libre</option>
+          <option value="support">Proportions du support</option>
+          <option value="1">Carré 1:1</option>
+          <option value="1.3333">4:3</option>
+          <option value="0.75">3:4</option>
+          <option value="1.7778">16:9</option>
+          <option value="0.5625">9:16</option>
+        </select>
+        <button type="button" id="cropReset">Tout</button>
       </div>
-      <div style="flex:1">
-        <label class="full" style="margin-top:0">Distance au bord (mm)</label>
-        <input type="number" id="align_margin_mm" value="10" min="-500" max="1000" step="1">
-        <div style="display:flex; gap:4px; margin-top:6px">
-          <button type="button" id="alignH" title="Centrer horizontalement">⇔</button>
-          <button type="button" id="alignV" title="Centrer verticalement">⇕</button>
+      <p class="hint">Onglet « Cadrage » pour tracer le cadre.</p>
+      <p class="hint keep" id="cropInfo"></p>
+      <div class="phead">
+        <label>Ajuster l'image</label>
+        <span class="picons">
+          <button type="button" class="ibtn" id="layFit" aria-label="Ajuster au support" title="Ajuster au support : image entière dans le support, marge intérieure comprise"><svg class="ico" viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="3" width="18" height="18" rx="1"/><rect x="7" y="9" width="10" height="6" fill="currentColor" stroke="none"/></svg></button>
+          <button type="button" class="ibtn" id="layFill" aria-label="Remplir le support" title="Remplir le support : l'image couvre tout le support (bords rognés)"><svg class="ico" viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="5" y="5" width="14" height="14" rx="1"/><rect x="1" y="7" width="22" height="10" fill="currentColor" fill-opacity=".45" stroke="none"/></svg></button>
+          <button type="button" class="ibtn" id="layFitStencil" aria-label="Ajuster au pochoir" title="Ajuster au pochoir : agrandit ou réduit l'image au maximum que permet le pochoir : support (feuille autour du support) ou tapis de découpe (feuille ajustée au motif), bordure comprise. Choisit au besoin l'orientation du tapis qui donne la plus grande image."><svg class="ico" viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="15 3 21 3 21 9"/><polyline points="9 21 3 21 3 15"/><line x1="21" y1="3" x2="14" y2="10"/><line x1="3" y1="21" x2="10" y2="14"/></svg></button>
+        </span>
+      </div>
+      <label class="row">Taille (% de « ajusté ») <span class="v" id="image_scale_v"></span>
+        <input type="range" id="image_scale" min="5" max="500" step="0.01" value="100"></label>
+      <label class="row">Largeur de l'image (mm) <input type="number" id="img_width_mm" min="5" max="5000" step="1"></label>
+      <label class="row">Hauteur de l'image (mm) <input type="number" id="img_height_mm" min="5" max="5000" step="1"></label>
+      <div class="check"><input type="checkbox" id="keep_ratio" checked><label for="keep_ratio">Conserver les proportions</label></div>
+      <input type="hidden" id="image_height_factor" value="1">
+      <label class="row">Marge intérieure pour « Ajuster au support » (mm) <input type="number" id="inner_margin_mm" value="10" min="0" max="200" step="1"></label>
+    </div>
+    <div class="subhead">Alignement</div>
+    <div class="ogroup">
+      <div style="display:flex; gap:10px; align-items:center">
+        <div class="aligngrid" id="alignGrid">
+          <button type="button" data-a="-1,-1" title="Coin haut-gauche">↖</button>
+          <button type="button" data-a="0,-1" title="Centré en haut">↑</button>
+          <button type="button" data-a="1,-1" title="Coin haut-droit">↗</button>
+          <button type="button" data-a="-1,0" title="Centré à gauche">←</button>
+          <button type="button" data-a="0,0" title="Centré">●</button>
+          <button type="button" data-a="1,0" title="Centré à droite">→</button>
+          <button type="button" data-a="-1,1" title="Coin bas-gauche">↙</button>
+          <button type="button" data-a="0,1" title="Centré en bas">↓</button>
+          <button type="button" data-a="1,1" title="Coin bas-droit">↘</button>
+        </div>
+        <div style="flex:1">
+          <label class="full" style="margin-top:0">Distance au bord (mm)</label>
+          <input type="number" id="align_margin_mm" value="10" min="-500" max="1000" step="1">
+          <div style="display:flex; gap:4px; margin-top:6px">
+            <button type="button" id="alignH" title="Centrer horizontalement">⇔</button>
+            <button type="button" id="alignV" title="Centrer verticalement">⇕</button>
+          </div>
         </div>
       </div>
+      <label class="row">Position horizontale (%) <span class="v" id="image_pos_x_v"></span>
+        <input type="range" id="image_pos_x" min="-50" max="150" step="0.01" value="50"></label>
+      <label class="row">Position verticale (%) <span class="v" id="image_pos_y_v"></span>
+        <input type="range" id="image_pos_y" min="-50" max="150" step="0.01" value="50"></label>
+      <p class="hint">Faites glisser l'image dans l'onglet « Mise en page » ; poignée en bas à droite = taille.</p>
     </div>
-    <label class="row">Position horizontale (%) <span class="v" id="image_pos_x_v"></span>
-      <input type="range" id="image_pos_x" min="-50" max="150" step="0.01" value="50"></label>
-    <label class="row">Position verticale (%) <span class="v" id="image_pos_y_v"></span>
-      <input type="range" id="image_pos_y" min="-50" max="150" step="0.01" value="50"></label>
-    <div style="display:flex; gap:6px; margin:6px 0">
-      <button type="button" id="layFit" title="Image entière dans le support, marge intérieure comprise">Ajuster</button>
-      <button type="button" id="layFill" title="L'image couvre tout le support (bords rognés)">Remplir</button>
-      <button type="button" id="layCenter">Centrer</button>
-    </div>
-    <button type="button" id="layFitStencil" style="width:100%; margin-bottom:6px"
-      title="Agrandit ou réduit l'image au maximum que permet le pochoir : support (feuille autour du support) ou tapis de découpe (feuille ajustée au motif), bordure comprise. Choisit au besoin l'orientation du tapis qui donne la plus grande image.">Ajuster au mieux dans le pochoir</button>
-    <label class="row">Marge intérieure pour « Ajuster » (mm) <input type="number" id="inner_margin_mm" value="10" min="0" max="200" step="1"></label>
-    <p class="hint">Faites glisser l'image dans l'onglet « Mise en page » ; poignée en bas à droite = taille.</p>
   </fieldset>
 
   <fieldset>
     <legend>Prétraitement de l'image</legend>
-    <label class="full"><input type="checkbox" id="pre_auto_levels"> Niveaux automatiques
-      <span class="hint">(étire les tons du plus sombre au plus clair)</span></label>
+    <label class="full"><input type="checkbox" id="pre_auto_levels"> Niveaux automatiques</label>
+    <p class="hint">Étire les tons du plus sombre au plus clair.</p>
     <label class="row">Contraste local <span class="v" id="pre_clahe_v"></span>
       <input type="range" id="pre_clahe" min="0" max="100" step="5" value="0"></label>
+    <p class="hint">Fait ressortir les volumes (visage, plis) avant le découpage en teintes.</p>
     <label class="row">Tons moyens (gamma) <span class="v" id="pre_gamma_v"></span>
       <input type="range" id="pre_gamma" min="0.4" max="2.5" step="0.05" value="1"></label>
-    <p class="hint">Contraste local : fait ressortir les volumes (visage, plis) avant le découpage en teintes.
-      Gamma &gt; 1 éclaircit les tons moyens, &lt; 1 les assombrit.</p>
+    <p class="hint">Au-dessus de 1, éclaircit les tons moyens ; en dessous, les assombrit.</p>
     <label class="row">Saturation (%) <span class="v" id="pre_saturation_v"></span>
       <input type="range" id="pre_saturation" min="0" max="250" step="5" value="100"></label>
+    <p class="hint">Sépare mieux les teintes proches d'une image couleur.</p>
     <label class="row">Netteté <span class="v" id="pre_sharpen_v"></span>
       <input type="range" id="pre_sharpen" min="0" max="100" step="5" value="0"></label>
-    <p class="hint">Saturation : sépare mieux les teintes proches d'une image couleur. Netteté : surtout utile au
-      pochoir de contours (détails clés) ; au-delà d'un réglage léger, elle crée du bruit.</p>
+    <p class="hint">Surtout utile au pochoir de contours (détails clés) ; au-delà d'un réglage léger, elle crée du bruit.</p>
     <label class="full"><input type="checkbox" id="pre_remove_bg"> Supprimer le fond (il reste support nu)</label>
-    <div style="display:flex; gap:6px; align-items:center; margin:2px 0 6px">
+    <div style="margin:2px 0 0">
       <button type="button" id="paintSubject" class="vt-small">Peindre le sujet…</button>
-      <span class="hint" id="subjInfoSide">Aucun sujet peint.</span>
     </div>
+    <p class="hint keep" id="subjInfoSide" style="margin-bottom:6px">Aucun sujet peint.</p>
     <label class="full"><input type="checkbox" id="manual_thresholds"> Seuils manuels entre les teintes</label>
     <div class="histo"><canvas id="histo" width="300" height="112" aria-label="Histogramme de luminance et seuils entre les teintes"></canvas></div>
     <div style="display:flex; gap:6px; margin:4px 0">
@@ -747,165 +774,78 @@
   </fieldset>
 
   <fieldset>
-    <legend>Feuille du pochoir & calage</legend>
-    <label class="full" for="sheet_mode">Feuille du pochoir</label>
-    <select id="sheet_mode" style="width:100%">
-      <option value="around">Autour du support (support + marge)</option>
-      <option value="fit" selected>Dans le support, ajustée au motif (+ bordure)</option>
-    </select>
-    <div id="rowMargin"><label class="row">Marge autour du support (mm) <input type="number" id="margin_mm" value="15" min="0" max="80" step="1"></label></div>
-    <div id="rowBorder" hidden><label class="row">Bordure autour du motif (mm) <input type="number" id="sheet_border_mm" value="20" min="3" max="200" step="1"></label></div>
-    <div id="rowDims" hidden>
-      <label class="full"><input type="checkbox" id="reg_dims" checked> Cotes à la règle pour tracer les croix sur le support</label>
-    </div>
-    <p class="hint" id="sheetHint"></p>
-    <label class="full">Repères d'alignement</label>
-    <div style="display:flex; gap:6px">
-      <select id="reg_corners" style="flex:1">
-        <option value="3">3 coins (détrompeur)</option>
-        <option value="4">4 coins</option>
-        <option value="0">Aucun</option>
-      </select>
-      <select id="reg_shape" style="flex:1">
-        <option value="equerre">Équerres sur les angles du support</option>
-        <option value="croix" selected>Croix de repérage</option>
-        <option value="rond">Trous pour pions</option>
-      </select>
-    </div>
-    <label class="row">Taille des repères (mm) <input type="number" id="reg_size_mm" value="8" min="2" max="40" step="0.5"></label>
-    <p class="hint" id="regHint"></p>
-    <div class="check"><input type="checkbox" id="layer_notches" checked><label for="layer_notches">Encoches = numéro de couche</label></div>
-    <div class="check"><input type="checkbox" id="sheet_outline" checked><label for="sheet_outline">Découper le contour de la feuille</label></div>
-  </fieldset>
-
-  <fieldset>
-    <legend>Machine de découpe</legend>
-    <label class="full" for="machine">Machine</label>
-    <select id="machine" style="width:100%">
-      <option value="cameo4">Silhouette Cameo 4 (largeur de coupe 305 mm)</option>
-      <option value="cameo5">Silhouette Cameo 5 (largeur de coupe 305 mm)</option>
-      <option value="pro">Silhouette Cameo Pro (largeur de coupe 610 mm)</option>
-      <option value="custom">Autre machine</option>
-    </select>
-    <div id="rowMachineW" hidden><label class="row" id="machineWLabel">Largeur de coupe (mm) <input type="number" id="machine_max_mm" value="305" min="100" max="2000" step="1"></label></div>
-    <label class="full" for="mat_preset">Tapis de découpe</label>
-    <div style="display:flex; gap:6px">
-    <select id="mat_preset" style="flex:1; min-width:0">
-      <option value="304.8x304.8">Tapis standard 12 × 12″ (304,8 × 304,8 mm)</option>
-      <option value="304.8x609.6">Tapis long 12 × 24″ (304,8 × 609,6 mm)</option>
-      <option value="609.6x609.6">Tapis Cameo Pro 24 × 24″ (609,6 × 609,6 mm)</option>
-      <option value="custom">Personnalisé</option>
-      <option value="none">Sans tapis (matière en rouleau)</option>
-    </select>
-    <select id="mat_orient" style="width:96px" title="Orientation du tapis par rapport au support (paysage = tapis tourné d'un quart de tour ; tournez le dessin de même dans Silhouette Studio)">
-      <option value="portrait">Portrait</option>
-      <option value="landscape">Paysage</option>
-    </select>
-    </div>
-    <div id="matDims" style="display:flex; gap:6px; margin-top:4px">
-      <label class="row" style="flex:1">L <input type="number" id="mat_w_mm" value="304.8" min="50" max="3000" step="0.1"></label>
-      <label class="row" style="flex:1">H <input type="number" id="mat_h_mm" value="304.8" min="50" max="3000" step="0.1"></label>
-    </div>
-    <p class="hint" id="matHint"></p>
-    <label class="full" for="stock_preset">Feuille de matière</label>
-    <div style="display:flex; gap:6px">
-      <select id="stock_preset" style="flex:1; min-width:0">
-        <option value="none">Non précisée (pas de contrôle)</option>
-        <optgroup label="Papier ISO">
-          <option value="148x210">A5 — 148 × 210 mm</option>
-          <option value="210x297">A4 — 210 × 297 mm</option>
-          <option value="297x420">A3 — 297 × 420 mm</option>
-          <option value="329x483">A3+ — 329 × 483 mm</option>
-          <option value="420x594">A2 — 420 × 594 mm</option>
-        </optgroup>
-        <optgroup label="Papier US">
-          <option value="215.9x279.4">Letter — 8,5 × 11″ (215,9 × 279,4 mm)</option>
-          <option value="215.9x355.6">Legal — 8,5 × 14″ (215,9 × 355,6 mm)</option>
-          <option value="279.4x431.8">Tabloid — 11 × 17″ (279,4 × 431,8 mm)</option>
-        </optgroup>
-        <optgroup label="Feuilles pour machine de découpe">
-          <option value="304.8x304.8">12 × 12″ (304,8 × 304,8 mm)</option>
-          <option value="304.8x609.6">12 × 24″ (304,8 × 609,6 mm)</option>
-          <option value="609.6x609.6">24 × 24″ (609,6 × 609,6 mm)</option>
-        </optgroup>
-        <option value="custom">Personnalisé</option>
-      </select>
-      <select id="stock_orient" style="width:96px" aria-label="Orientation de la feuille de matière">
-        <option value="portrait">Portrait</option>
-        <option value="landscape">Paysage</option>
-      </select>
-    </div>
-    <div id="stockDims" style="display:flex; gap:6px; margin-top:4px">
-      <label class="row" style="flex:1">L <input type="number" id="stock_w_mm" value="210" min="30" max="3000" step="0.1"></label>
-      <label class="row" style="flex:1">H <input type="number" id="stock_h_mm" value="297" min="30" max="3000" step="0.1"></label>
-    </div>
-    <p class="hint" id="stockHint"></p>
-    <div class="saved" id="stockBar">
-      <div style="display:flex; gap:6px; align-items:center">
-        <span style="flex:1; font-size:12px">Mes formats de feuille</span>
-        <span class="dirty" hidden title="Les valeurs ont été modifiées depuis le dernier enregistrement">● modifié</span>
-      </div>
-      <div class="pbtns">
-        <button type="button" data-act="save" title="Enregistrer la taille actuelle dans le format ★ sélectionné">Enregistrer</button>
-        <button type="button" data-act="saveas" title="Enregistrer sous un nouveau nom">Enregistrer sous…</button>
-        <button type="button" data-act="rename" title="Renommer le format ★ sélectionné">Renommer…</button>
-        <button type="button" data-act="delete" title="Supprimer le format ★ sélectionné">Supprimer</button>
-      </div>
-      <div class="nameform" hidden>
-        <input type="text" maxlength="60" placeholder="Nom (ex. Rhodoïd 50 × 65)" aria-label="Nom du format de feuille">
-        <button type="button" class="ok">OK</button>
-        <button type="button" class="cancel">Annuler</button>
-      </div>
-    </div>
-  </fieldset>
-
-  <fieldset>
     <legend>Simplification</legend>
-    <label class="full" for="stencil_style">Style de pochoir</label>
-    <select id="stencil_style">
-      <option value="fill">Couleurs pleines (aplats)</option>
-      <option value="line">Trait seul (dessin au trait)</option>
-    </select>
-    <p class="hint" id="styleHint" hidden>Trait seul : aucune couche pleine, seulement des pochoirs de traits (un par couleur de trait), réglés dans « Contours des détails clés ». Le nombre de pochoirs fixe le nombre de zones de teinte du coloriage.</p>
-    <label class="row">Nombre de pochoirs <span class="v" id="n_layers_v"></span>
-      <input type="range" id="n_layers" min="1" max="8" value="3"></label>
-    <div class="reco" id="reco" hidden></div>
-    <label class="row">Niveau de détail <span class="v" id="detail_v"></span>
-      <input type="range" id="detail" min="0" max="100" value="50"></label>
-    <label class="row">Poids de la teinte (%) <span class="v" id="hue_weight_v"></span>
-      <input type="range" id="hue_weight" min="0" max="300" step="10" value="40"></label>
-    <label class="row">Vivacité des couleurs (%) <span class="v" id="color_vividness_v"></span>
-      <input type="range" id="color_vividness" min="0" max="100" step="5" value="0"></label>
-    <label class="row">Aplats automatiques <span class="v" id="flat_auto_v"></span>
-      <input type="range" id="flat_auto" min="0" max="100" step="5" value="0"></label>
-    <div class="row" style="margin:6px 0 0">Aplat réglé</div>
-    <div class="zonebar" id="flatTolFor" role="group" aria-label="Masque d'aplat réglé" title="Masque d'aplat dont la tolérance est réglée : Générale ou la couche où l'aplat est forcé (chaque masque garde sa tolérance ; sans réglage propre, une couche prend la tolérance générale)"></div>
-    <label class="row" for="flat_tolerance">Tolérance des zones d'aplat <span class="v" id="flat_tolerance_v"></span></label>
-    <div style="display:flex; gap:6px; align-items:center; margin:-2px 0 6px">
-      <button type="button" id="flatTolAuto" class="vt-opt" aria-pressed="true" title="Tolérance générale : enfoncé, cet aplat suit la tolérance de l'aplat Générale. Relâché (clic ou curseur bougé), il garde sa propre tolérance, celle du curseur ; recliquer le ramène à la tolérance générale">Auto</button>
-      <input type="range" id="flat_tolerance" min="0" max="100" step="5" value="50" aria-label="Tolérance des zones d'aplat" style="flex:1; min-width:0"></div>
-    <input type="hidden" id="flat_tolerances" value="">
-    <div style="display:flex; gap:6px; align-items:center; margin:2px 0 6px">
-      <button type="button" id="paintFlat" class="vt-small">Peindre les zones d'aplat…</button>
-      <span class="hint" id="flatInfoSide">Aucune zone d'aplat peinte.</span>
+    <div class="subhead">Pochoirs</div>
+    <div class="ogroup">
+      <label class="full" for="stencil_style">Style de pochoir</label>
+      <select id="stencil_style">
+        <option value="fill">Couleurs pleines (aplats)</option>
+        <option value="line">Trait seul (dessin au trait)</option>
+      </select>
+      <p class="hint" id="styleHint" hidden>Trait seul : aucune couche pleine, seulement des pochoirs de traits (un par couleur de trait), réglés dans « Contours des détails clés ». Le nombre de pochoirs fixe le nombre de zones de teinte du coloriage.</p>
+      <label class="full" for="n_layers">Nombre de pochoirs</label>
+      <div class="nchips" id="nLayerChips" role="group" aria-label="Nombre de pochoirs"></div>
+      <input type="hidden" id="n_layers" value="3">
+      <div class="reco" id="reco" hidden></div>
+      <label class="row">Niveau de détail <span class="v" id="detail_v"></span>
+        <input type="range" id="detail" min="0" max="100" value="50"></label>
     </div>
-    <p class="hint">Aplats : couches pleines, sans îlots d'une teinte voisine qui s'entremêlent (style affiche).
-      Chaque zone d'aplat peinte (ou objet sélectionné) prend sa teinte principale ; les détails francs restent.</p>
-    <label class="full">Mode</label>
-    <select id="color_mode">
-      <option value="auto">Automatique</option>
-      <option value="color">Couleur</option>
-      <option value="gray">Noir & blanc / niveaux de gris</option>
-    </select>
+    <div class="subhead">Couleurs</div>
+    <div class="ogroup">
+      <label class="full">Mode</label>
+      <select id="color_mode">
+        <option value="auto">Automatique</option>
+        <option value="color">Couleur</option>
+        <option value="gray">Noir & blanc / niveaux de gris</option>
+      </select>
+      <label class="row">Poids de la teinte (%) <span class="v" id="hue_weight_v"></span>
+        <input type="range" id="hue_weight" min="0" max="300" step="10" value="40"></label>
+      <label class="row">Vivacité des couleurs (%) <span class="v" id="color_vividness_v"></span>
+        <input type="range" id="color_vividness" min="0" max="100" step="5" value="0"></label>
+    </div>
+    <div class="subhead">Aplats</div>
+    <div class="ogroup">
+      <label class="row">Aplats automatiques <span class="v" id="flat_auto_v"></span>
+        <input type="range" id="flat_auto" min="0" max="100" step="5" value="0"></label>
+      <p class="hint">Aplats : couches pleines, sans îlots d'une teinte voisine qui s'entremêlent (style affiche).</p>
+      <div class="row" style="margin:6px 0 0">Zone d'aplat forcé</div>
+      <div class="zonebar" id="flatTolFor" role="group" aria-label="Zone d'aplat forcé" title="Masque d'aplat dont la tolérance est réglée : Générale ou la couche où l'aplat est forcé (chaque masque garde sa tolérance ; sans réglage propre, une couche prend la tolérance générale)"></div>
+      <label class="row" for="flat_tolerance">Tolérance de la zone sélectionnée <span class="v" id="flat_tolerance_v"></span></label>
+      <div style="display:flex; gap:6px; align-items:center; margin:-2px 0 6px">
+        <button type="button" id="flatTolAuto" class="vt-opt" aria-pressed="true" title="Tolérance générale : enfoncé, cet aplat suit la tolérance de l'aplat Générale. Relâché (clic ou curseur bougé), il garde sa propre tolérance, celle du curseur ; recliquer le ramène à la tolérance générale">Auto</button>
+        <input type="range" id="flat_tolerance" min="0" max="100" step="5" value="50" aria-label="Tolérance de la zone sélectionnée" style="flex:1; min-width:0"></div>
+      <input type="hidden" id="flat_tolerances" value="">
+      <div style="margin:2px 0 0">
+        <button type="button" id="paintFlat" class="vt-small">Peindre les zones d'aplat…</button>
+      </div>
+      <p class="hint keep" id="flatInfoSide">Aucune zone d'aplat peinte.</p>
+      <p class="hint">Chaque zone d'aplat peinte (ou objet sélectionné) prend sa teinte principale ; les détails francs restent.</p>
+    </div>
     <div id="fillOnly">
-    <label class="full">Superposition des couches</label>
-    <select id="layering">
-      <option value="exclusive" selected>Exclusive (chaque couleur seule)</option>
-      <option value="cumulative">Cumulative (du clair au foncé, chevauchement)</option>
-    </select>
-    <div class="check"><input type="checkbox" id="skip_support" checked><label for="skip_support">La teinte la plus proche du support reste nue (pas de pochoir)</label></div>
-    <div class="check"><input type="checkbox" id="protect_lines"><label for="protect_lines">Protéger les traits fins de la simplification (yeux, sourcils, mèches…)</label></div>
-    <p class="hint">Cumulatif : chaque pochoir ouvre sa couleur + les plus foncées. Moins de pièces fragiles et pas de liseré entre couleurs.</p>
+      <div class="subhead">Couches</div>
+      <div class="ogroup">
+        <label class="full">Superposition des couches</label>
+        <select id="layering">
+          <option value="exclusive" selected>Exclusive (chaque couleur seule)</option>
+          <option value="cumulative">Cumulative (du clair au foncé, chevauchement)</option>
+        </select>
+        <p class="hint">Cumulatif : chaque pochoir ouvre sa couleur + les plus foncées. Moins de pièces fragiles et pas de liseré entre couleurs.</p>
+        <div class="check"><input type="checkbox" id="skip_support" checked><label for="skip_support">La teinte la plus proche du support reste nue (pas de pochoir)</label></div>
+        <div class="check"><input type="checkbox" id="protect_lines"><label for="protect_lines">Protéger les traits fins de la simplification (yeux, sourcils, mèches…)</label></div>
+      </div>
+    </div>
+    <div class="subhead">Fusion</div>
+    <div class="ogroup">
+      <label class="row">Fusion au lieu des ponts <span class="v" id="merge_amount_v"></span>
+        <input type="range" id="merge_amount" min="0" max="150" step="1" value="0"></label>
+      <p class="hint" id="merge_hint" style="margin-top:-2px"></p>
+      <div id="mergeFill">
+      <label class="row">Largeur max d'un chenal (mm) <input type="number" id="merge_channel_mm" value="2.5" min="0.3" max="30" step="0.5"></label>
+      <div class="check"><input type="checkbox" id="merge_channels" checked><label for="merge_channels">Fermer les chenaux étroits</label></div>
+      </div>
+      <div class="check"><input type="checkbox" id="merge_islands" checked><label for="merge_islands">Supprimer les petits îlots</label></div>
+      <div class="check" id="mergeLineIsl"><input type="checkbox" id="merge_line_islands"><label for="merge_line_islands">… y compris ceux entourés par les traits des détails clés</label></div>
+      <p class="hint" id="mergeLineHint" hidden>Trait seul : seuls les petits îlots entourés par les traits sont fusionnés (l'intérieur est peint) ; un trait n'est jamais coupé, les chenaux ne sont donc pas fermés.</p>
     </div>
   </fieldset>
 
@@ -1061,58 +1001,186 @@
   </fieldset>
 
   <fieldset>
+    <legend>Machine de découpe</legend>
+    <div id="machBar">
+    <div class="phead">
+      <label for="machine">Machine</label>
+      <span class="dirty" hidden title="Les valeurs ont été modifiées depuis le dernier enregistrement">● modifié</span>
+      <span class="picons">
+        <button type="button" class="ibtn" data-act="save" aria-label="Enregistrer" title="Enregistrer la machine : dans la machine ★ sélectionnée, sinon sous un nouveau nom (largeur de coupe)"><svg class="ico" viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/><path d="M17 21v-8H7v8"/><path d="M7 3v5h8"/></svg></button>
+        <button type="button" class="ibtn" data-act="saveas" aria-label="Enregistrer sous…" title="Enregistrer la machine sous un nouveau nom"><svg class="ico" viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M14 3H6a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V9z"/><path d="M14 3v6h6"/><path d="M12 12v6"/><path d="M9 15h6"/></svg></button>
+        <button type="button" class="ibtn" data-act="rename" aria-label="Renommer…" title="Renommer la machine ★ sélectionnée"><svg class="ico" viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4z"/></svg></button>
+        <button type="button" class="ibtn" data-act="delete" aria-label="Supprimer" title="Supprimer la machine ★ sélectionnée"><svg class="ico" viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 6h18"/><path d="M8 6V4h8v2"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/><path d="M10 11v6"/><path d="M14 11v6"/></svg></button>
+      </span>
+    </div>
+    <select id="machine" style="width:100%">
+      <option value="cameo4">Silhouette Cameo 4 (largeur de coupe 305 mm)</option>
+      <option value="cameo5">Silhouette Cameo 5 (largeur de coupe 305 mm)</option>
+      <option value="pro">Silhouette Cameo Pro (largeur de coupe 610 mm)</option>
+      <option value="custom">Autre machine</option>
+    </select>
+    <div id="rowMachineW" hidden><label class="row" id="machineWLabel">Largeur de coupe (mm) <input type="number" id="machine_max_mm" value="305" min="100" max="2000" step="1"></label></div>
+    <div class="nameform" hidden>
+      <input type="text" maxlength="60" placeholder="Nom (ex. Cameo 4 atelier)" aria-label="Nom de la machine">
+      <button type="button" class="ok">OK</button>
+      <button type="button" class="cancel">Annuler</button>
+    </div>
+    </div>
+    <div id="cutMatBar">
+    <div class="phead">
+      <label for="mat_preset">Tapis de découpe</label>
+      <span class="dirty" hidden title="Les valeurs ont été modifiées depuis le dernier enregistrement">● modifié</span>
+      <span class="picons">
+        <button type="button" class="ibtn" data-act="save" aria-label="Enregistrer" title="Enregistrer le tapis : dans le tapis ★ sélectionné, sinon sous un nouveau nom (largeur × hauteur)"><svg class="ico" viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/><path d="M17 21v-8H7v8"/><path d="M7 3v5h8"/></svg></button>
+        <button type="button" class="ibtn" data-act="saveas" aria-label="Enregistrer sous…" title="Enregistrer le tapis sous un nouveau nom"><svg class="ico" viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M14 3H6a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V9z"/><path d="M14 3v6h6"/><path d="M12 12v6"/><path d="M9 15h6"/></svg></button>
+        <button type="button" class="ibtn" data-act="rename" aria-label="Renommer…" title="Renommer le tapis ★ sélectionné"><svg class="ico" viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4z"/></svg></button>
+        <button type="button" class="ibtn" data-act="delete" aria-label="Supprimer" title="Supprimer le tapis ★ sélectionné"><svg class="ico" viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 6h18"/><path d="M8 6V4h8v2"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/><path d="M10 11v6"/><path d="M14 11v6"/></svg></button>
+      </span>
+    </div>
+    <div style="display:flex; gap:6px">
+    <select id="mat_preset" style="flex:1; min-width:0">
+      <option value="304.8x304.8">Tapis standard 12 × 12″ (304,8 × 304,8 mm)</option>
+      <option value="304.8x609.6">Tapis long 12 × 24″ (304,8 × 609,6 mm)</option>
+      <option value="609.6x609.6">Tapis Cameo Pro 24 × 24″ (609,6 × 609,6 mm)</option>
+      <option value="custom">Personnalisé</option>
+      <option value="none">Sans tapis (matière en rouleau)</option>
+    </select>
+    <select id="mat_orient" style="width:96px" title="Orientation du tapis par rapport au support (paysage = tapis tourné d'un quart de tour ; tournez le dessin de même dans Silhouette Studio)">
+      <option value="portrait">Portrait</option>
+      <option value="landscape">Paysage</option>
+    </select>
+    </div>
+    <div id="matDims">
+      <label class="row">Largeur du tapis (mm) <input type="number" id="mat_w_mm" value="304.8" min="50" max="3000" step="0.1"></label>
+      <label class="row">Hauteur du tapis (mm) <input type="number" id="mat_h_mm" value="304.8" min="50" max="3000" step="0.1"></label>
+    </div>
+    <div class="nameform" hidden>
+      <input type="text" maxlength="60" placeholder="Nom (ex. Tapis 12 × 18″)" aria-label="Nom du tapis">
+      <button type="button" class="ok">OK</button>
+      <button type="button" class="cancel">Annuler</button>
+    </div>
+    <p class="hint keep" id="matHint"></p>
+    </div>
+  </fieldset>
+
+  <fieldset>
     <legend>Matériau & découpe</legend>
-    <select id="material"></select>
-    <label class="row">Ouverture mini (mm) <input type="number" id="min_opening_mm" step="0.1" min="0" max="10"></label>
-    <label class="row">Bande de matière mini (mm) <input type="number" id="min_strip_mm" step="0.1" min="0" max="10"></label>
-    <label class="row">Surface mini d'une pièce (mm²) <input type="number" id="min_area_mm2" step="0.5" min="0" max="500"></label>
-    <div class="check"><input type="checkbox" id="bridges" checked><label for="bridges">Ponts automatiques (îlots)</label></div>
-    <label class="row">Largeur des ponts (mm) <input type="number" id="bridge_width_mm" step="0.1" min="0.3" max="10"></label>
-    <label class="row">Ponts minimum par îlot
-      <select id="min_bridges" style="width:84px">
-        <option value="1">1</option><option value="2">2</option><option value="3">3</option><option value="4">4</option>
-      </select></label>
-    <label class="row">2 ponts au-delà de (mm²) <input type="number" id="double_bridge_area_mm2" step="50" min="0" max="100000"></label>
-    <p class="hint">Les ponts d'un même îlot sont répartis tout autour. Plus de ponts = îlots mieux tenus (papier, grands îlots), mais plus de traces à retoucher.</p>
-    <label class="row">Fusion au lieu des ponts <span class="v" id="merge_amount_v"></span>
-      <input type="range" id="merge_amount" min="0" max="150" step="1" value="0"></label>
-    <p class="hint" id="merge_hint" style="margin-top:-2px"></p>
-    <div id="mergeFill">
-    <label class="row">Largeur max d'un chenal (mm) <input type="number" id="merge_channel_mm" value="2.5" min="0.3" max="30" step="0.5"></label>
-    <div class="check"><input type="checkbox" id="merge_channels" checked><label for="merge_channels">Fermer les chenaux étroits</label></div>
+    <div id="matBar">
+    <div class="phead sub">
+      <label for="material">Matériau</label>
+      <span class="dirty" hidden title="Les valeurs ont été modifiées depuis le dernier enregistrement">● modifié</span>
+      <span class="picons">
+        <button type="button" class="ibtn" data-act="save" aria-label="Enregistrer" title="Enregistrer le matériau : dans le matériau ★ sélectionné, sinon sous un nouveau nom (les matériaux fournis ne sont pas modifiables : une copie est créée)"><svg class="ico" viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/><path d="M17 21v-8H7v8"/><path d="M7 3v5h8"/></svg></button>
+        <button type="button" class="ibtn" data-act="saveas" aria-label="Enregistrer sous…" title="Enregistrer le matériau sous un nouveau nom"><svg class="ico" viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M14 3H6a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V9z"/><path d="M14 3v6h6"/><path d="M12 12v6"/><path d="M9 15h6"/></svg></button>
+        <button type="button" class="ibtn" data-act="rename" aria-label="Renommer…" title="Renommer le matériau ★ sélectionné"><svg class="ico" viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4z"/></svg></button>
+        <button type="button" class="ibtn" data-act="delete" aria-label="Supprimer" title="Supprimer le matériau ★ sélectionné"><svg class="ico" viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 6h18"/><path d="M8 6V4h8v2"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/><path d="M10 11v6"/><path d="M14 11v6"/></svg></button>
+      </span>
     </div>
-    <div class="check"><input type="checkbox" id="merge_islands" checked><label for="merge_islands">Supprimer les petits îlots</label></div>
-    <div class="check" id="mergeLineIsl"><input type="checkbox" id="merge_line_islands"><label for="merge_line_islands">… y compris ceux entourés par les traits des détails clés</label></div>
-    <p class="hint" id="mergeLineHint" hidden>Trait seul : seuls les petits îlots entourés par les traits sont fusionnés (l'intérieur est peint) ; un trait n'est jamais coupé, les chenaux ne sont donc pas fermés.</p>
-    <div class="cut">
-      <b>Réglages de la machine</b>
-      <div class="cutgrid">
-        <label>Lame <input type="text" id="cut_blade" maxlength="20"></label>
-        <label>Force <input type="text" id="cut_force" maxlength="20"></label>
-        <label>Vitesse <input type="text" id="cut_speed" maxlength="20"></label>
-        <label>Passes <input type="text" id="cut_passes" maxlength="20"></label>
-      </div>
-      <label class="full">Notes</label>
-      <textarea id="cut_notes" rows="2" maxlength="400"></textarea>
-      <p class="hint" style="margin-top:2px"><i>Faites toujours un test de coupe.</i> Ces valeurs sont reprises en commentaire dans les SVG exportés.</p>
-    </div>
-    <div class="saved" id="matBar" style="margin-top:8px">
-      <div style="display:flex; gap:6px; align-items:center">
-        <span style="flex:1; font-size:12px">Matériau & réglages de découpe</span>
-        <span class="dirty" hidden title="Les valeurs ont été modifiées depuis le dernier enregistrement">● modifié</span>
-      </div>
-      <div class="pbtns">
-        <button type="button" data-act="save" title="Enregistrer les valeurs actuelles dans le matériau ★ sélectionné">Enregistrer</button>
-        <button type="button" data-act="saveas" title="Enregistrer sous un nouveau nom">Enregistrer sous…</button>
-        <button type="button" data-act="rename" title="Renommer le matériau ★ sélectionné">Renommer…</button>
-        <button type="button" data-act="delete" title="Supprimer le matériau ★ sélectionné">Supprimer</button>
-      </div>
+    <div class="ogroup">
+      <select id="material"></select>
       <div class="nameform" hidden>
         <input type="text" maxlength="60" placeholder="Nom (ex. Mylar 0,125 Cameo 4)" aria-label="Nom du matériau">
         <button type="button" class="ok">OK</button>
         <button type="button" class="cancel">Annuler</button>
       </div>
-      <p class="hint">Vos matériaux apparaissent avec ★ dans la liste en haut de la section. Les matériaux fournis ne sont pas modifiables : « Enregistrer » crée alors une copie.</p>
+      <label class="row">Ouverture mini (mm) <input type="number" id="min_opening_mm" step="0.1" min="0" max="10"></label>
+      <label class="row">Bande de matière mini (mm) <input type="number" id="min_strip_mm" step="0.1" min="0" max="10"></label>
+      <label class="row">Surface mini d'une pièce (mm²) <input type="number" id="min_area_mm2" step="0.5" min="0" max="500"></label>
+    </div>
+    </div>
+    <div id="stockBar">
+    <div class="phead sub">
+      <label for="stock_preset">Feuille de matière</label>
+      <span class="dirty" hidden title="Les valeurs ont été modifiées depuis le dernier enregistrement">● modifié</span>
+      <span class="picons">
+        <button type="button" class="ibtn" data-act="save" aria-label="Enregistrer" title="Enregistrer la taille de la feuille : dans le format ★ sélectionné, sinon sous un nouveau nom"><svg class="ico" viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/><path d="M17 21v-8H7v8"/><path d="M7 3v5h8"/></svg></button>
+        <button type="button" class="ibtn" data-act="saveas" aria-label="Enregistrer sous…" title="Enregistrer la taille de la feuille sous un nouveau nom"><svg class="ico" viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M14 3H6a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V9z"/><path d="M14 3v6h6"/><path d="M12 12v6"/><path d="M9 15h6"/></svg></button>
+        <button type="button" class="ibtn" data-act="rename" aria-label="Renommer…" title="Renommer le format ★ sélectionné"><svg class="ico" viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4z"/></svg></button>
+        <button type="button" class="ibtn" data-act="delete" aria-label="Supprimer" title="Supprimer le format ★ sélectionné"><svg class="ico" viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 6h18"/><path d="M8 6V4h8v2"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/><path d="M10 11v6"/><path d="M14 11v6"/></svg></button>
+      </span>
+    </div>
+    <div class="ogroup">
+      <div style="display:flex; gap:6px">
+        <select id="stock_preset" style="flex:1; min-width:0">
+          <option value="none">Non précisée (pas de contrôle)</option>
+          <optgroup label="Papier ISO">
+            <option value="148x210">A5 — 148 × 210 mm</option>
+            <option value="210x297">A4 — 210 × 297 mm</option>
+            <option value="297x420">A3 — 297 × 420 mm</option>
+            <option value="329x483">A3+ — 329 × 483 mm</option>
+            <option value="420x594">A2 — 420 × 594 mm</option>
+          </optgroup>
+          <optgroup label="Papier US">
+            <option value="215.9x279.4">Letter — 8,5 × 11″ (215,9 × 279,4 mm)</option>
+            <option value="215.9x355.6">Legal — 8,5 × 14″ (215,9 × 355,6 mm)</option>
+            <option value="279.4x431.8">Tabloid — 11 × 17″ (279,4 × 431,8 mm)</option>
+          </optgroup>
+          <optgroup label="Feuilles pour machine de découpe">
+            <option value="304.8x304.8">12 × 12″ (304,8 × 304,8 mm)</option>
+            <option value="304.8x609.6">12 × 24″ (304,8 × 609,6 mm)</option>
+            <option value="609.6x609.6">24 × 24″ (609,6 × 609,6 mm)</option>
+          </optgroup>
+          <option value="custom">Personnalisé</option>
+        </select>
+        <select id="stock_orient" style="width:96px" aria-label="Orientation de la feuille de matière">
+          <option value="portrait">Portrait</option>
+          <option value="landscape">Paysage</option>
+        </select>
+      </div>
+      <div id="stockDims">
+        <label class="row">Largeur de la feuille (mm) <input type="number" id="stock_w_mm" value="210" min="30" max="3000" step="0.1"></label>
+        <label class="row">Hauteur de la feuille (mm) <input type="number" id="stock_h_mm" value="297" min="30" max="3000" step="0.1"></label>
+      </div>
+      <div class="nameform" hidden>
+        <input type="text" maxlength="60" placeholder="Nom (ex. Rhodoïd 50 × 65)" aria-label="Nom du format de feuille">
+        <button type="button" class="ok">OK</button>
+        <button type="button" class="cancel">Annuler</button>
+      </div>
+      <p class="hint keep" id="stockHint"></p>
+    </div>
+    </div>
+    <div class="subhead">Ponts</div>
+    <div class="ogroup">
+      <div class="check"><input type="checkbox" id="bridges" checked><label for="bridges">Ponts automatiques (îlots)</label></div>
+      <label class="row">Largeur des ponts (mm) <input type="number" id="bridge_width_mm" step="0.1" min="0.3" max="10"></label>
+      <label class="row">Ponts minimum par îlot
+        <select id="min_bridges" style="width:84px">
+          <option value="1">1</option><option value="2">2</option><option value="3">3</option><option value="4">4</option>
+        </select></label>
+      <p class="hint">Les ponts d'un même îlot sont répartis tout autour. Plus de ponts = îlots mieux tenus (papier, grands îlots), mais plus de traces à retoucher.</p>
+      <label class="row">2 ponts au-delà de (mm²) <input type="number" id="double_bridge_area_mm2" step="50" min="0" max="100000"></label>
+    </div>
+    <label class="subhead" for="sheet_mode">Feuille du pochoir</label>
+    <div class="ogroup">
+      <select id="sheet_mode" style="width:100%">
+        <option value="around">Autour du support (support + marge)</option>
+        <option value="fit" selected>Dans le support, ajustée au motif (+ bordure)</option>
+      </select>
+      <p class="hint" id="sheetHint"></p>
+      <div id="rowMargin"><label class="row">Marge autour du support (mm) <input type="number" id="margin_mm" value="15" min="0" max="80" step="1"></label></div>
+      <div id="rowBorder" hidden><label class="row">Bordure autour du motif (mm) <input type="number" id="sheet_border_mm" value="20" min="3" max="200" step="1"></label></div>
+      <div id="rowDims" hidden>
+        <label class="full"><input type="checkbox" id="reg_dims" checked> Cotes à la règle pour tracer les croix sur le support</label>
+      </div>
+      <div class="check"><input type="checkbox" id="sheet_outline"><label for="sheet_outline">Découper le contour de la feuille</label></div>
+    </div>
+    <div class="subhead">Repères d'alignement</div>
+    <div class="ogroup">
+      <div style="display:flex; gap:6px">
+        <select id="reg_corners" style="flex:1">
+          <option value="3">3 coins (détrompeur)</option>
+          <option value="4">4 coins</option>
+          <option value="0">Aucun</option>
+        </select>
+        <select id="reg_shape" style="flex:1">
+          <option value="equerre">Équerres sur les angles du support</option>
+          <option value="croix" selected>Croix de repérage</option>
+          <option value="rond">Trous pour pions</option>
+        </select>
+      </div>
+      <p class="hint" id="regHint"></p>
+      <label class="row">Taille des repères (mm) <input type="number" id="reg_size_mm" value="8" min="2" max="40" step="0.5"></label>
+      <div class="check"><input type="checkbox" id="layer_notches" checked><label for="layer_notches">Encoches = numéro de couche</label></div>
     </div>
   </fieldset>
 
@@ -1165,7 +1233,6 @@
       <button type="button" class="ibtn" id="redoBtn" disabled aria-label="Rétablir" title="Rétablir le changement annulé (Ctrl + Y ou Ctrl + Maj + Z)"><svg class="ico" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m15 14 5-5-5-5"/><path d="M20 9H9.5a5.5 5.5 0 0 0 0 11H13"/></svg></button>
     </span>
   </div>
-  <div id="warnings"></div>
   <div class="viewtools" id="viewtools" hidden>
     <button type="button" class="vt-opt vt-pre" id="optPre" aria-pressed="true" hidden
       title="Onglet Original : image prétraitée (activé) ou image d'origine brute">Prétraitée</button>
@@ -1262,7 +1329,14 @@
   </div>
   <div class="stage" id="stage"><div class="empty">Aucune image chargée.</div></div>
   <input type="range" id="compareRange" min="0" max="100" value="50" aria-label="Position de la comparaison" hidden>
-  <div class="metrics" id="metrics"></div>
+  <details class="foldbox warnbox" id="warnBox" hidden>
+    <summary id="warnSum"></summary>
+    <div id="warnings"></div>
+  </details>
+  <details class="foldbox" id="metricsBox" open hidden>
+    <summary>Dimensions et mesures</summary>
+    <div class="metrics" id="metrics"></div>
+  </details>
   <div class="calage" id="calage" hidden></div>
 </section>
 <div class="layercol" aria-label="Pochoirs">
@@ -1323,9 +1397,15 @@ const REG_HINT = {
   rond: "Trous pour pions ou punaises de calage (diamètre = taille). Fixez les pions sur la planche à travers la 1re couche."
 };
 
+function orientSupport() {          // width / height swapped to follow the orientation
+  const w = val("support_w_mm"), h = val("support_h_mm");
+  const land = $("orientation").value === "landscape";
+  if ((land && w < h) || (!land && w > h)) { $("support_w_mm").value = h; $("support_h_mm").value = w; }
+}
 function applyPreset() {
   const v = $("support_preset").value;
   if (v === "custom") return;
+  if (v.startsWith("user:")) { orientSupport(); return; }   // saved support: its size, oriented
   const [a, b] = v.split("x").map(Number);
   const land = $("orientation").value === "landscape";
   $("support_w_mm").value = land ? Math.max(a, b) : Math.min(a, b);
@@ -1333,6 +1413,10 @@ function applyPreset() {
 }
 function syncPresetFromSize() {
   const w = val("support_w_mm"), h = val("support_h_mm");
+  if ($("support_preset").value.startsWith("user:")) {   // a saved support stays selected (marked modified)
+    if (w !== h) $("orientation").value = w > h ? "landscape" : "portrait";
+    return;
+  }
   const k = `${Math.min(w, h)}x${Math.max(w, h)}`;
   const opt = [...$("support_preset").options].find(o => o.value === k);
   $("support_preset").value = opt ? k : "custom";
@@ -1343,8 +1427,12 @@ function syncPresetFromSize() {
 // Preset -> dimensions; "No mat" sends 0 × 0 (the engine then only checks the width).
 // ---------------- Cutting machine ----------------
 const MACHINES = { cameo4: 305, cameo5: 305, pro: 610 };
+function machineWidth(v) {         // cutting width of a list entry (★ included), or undefined ("custom")
+  if (v.startsWith("user:")) { const m = (UP.machine || {})[v.slice(5)]; return m ? +m.machine_max_mm : undefined; }
+  return MACHINES[v];
+}
 function applyMachine() {
-  const w = MACHINES[$("machine").value];
+  const w = machineWidth($("machine").value);
   if (w) $("machine_max_mm").value = w;
   syncMat();
 }
@@ -1353,9 +1441,13 @@ function machineFromWidth() {
   const w = val("machine_max_mm");
   $("machine").value = Math.abs(w - 610) < 1 ? "pro" : Math.abs(w - 305) < 1 ? "cameo4" : "custom";
 }
+function matSize(v) {              // [w, h] of a list entry (★ included), or null ("custom", "none")
+  if (v.startsWith("user:")) { const m = (UP.mat || {})[v.slice(5)]; return m ? [+m.mat_w_mm, +m.mat_h_mm] : null; }
+  return v.includes("x") ? v.split("x").map(Number) : null;
+}
 function applyMatPreset() {
-  const v = $("mat_preset").value;
-  if (v.includes("x")) { const [w, h] = v.split("x").map(Number); $("mat_w_mm").value = w; $("mat_h_mm").value = h; }
+  const s = matSize($("mat_preset").value);
+  if (s) { $("mat_w_mm").value = s[0]; $("mat_h_mm").value = s[1]; }
   syncMat();
 }
 // Stencil sheet in support coordinates (mm) — same rule as pipeline.sheet_rect
@@ -1384,22 +1476,25 @@ function syncSheetMode() {
 }
 function syncMat() {
   syncStock();
-  const v = $("mat_preset").value, none = v === "none", custom = $("machine").value === "custom";
+  const v = $("mat_preset").value, none = v === "none", mach = $("machine").value;
+  const custom = mach === "custom" || mach.startsWith("user:");
   const mmax = val("machine_max_mm");
-  // cutting width: editable only for another machine; only useful without a mat (roll)
+  // cutting width: editable only for another (or a ★) machine; only useful without a mat (roll)
   $("rowMachineW").hidden = !custom;
   $("machine_max_mm").disabled = !custom;
   // mats wider than the machine: not offered
   [...$("mat_preset").options].forEach(o => {
-    if (!o.value.includes("x")) return;
-    o.disabled = Number(o.value.split("x")[0]) > mmax + 1;
+    const s = matSize(o.value);
+    if (s) o.disabled = s[0] > mmax + 1;
   });
   if ($("mat_preset").selectedOptions[0] && $("mat_preset").selectedOptions[0].disabled) {
     $("mat_preset").value = "304.8x304.8"; return applyMatPreset();
   }
-  $("mat_w_mm").disabled = $("mat_h_mm").disabled = none || v !== "custom";
+  $("mat_w_mm").disabled = $("mat_h_mm").disabled = none || !(v === "custom" || v.startsWith("user:"));
   $("matDims").hidden = none;
-  $("mat_orient").hidden = none;
+  // without a mat (roll): nothing to orient or to save
+  $("mat_orient").hidden = $("cutMatBar").querySelector(".picons").hidden = none;
+  if (none) $("cutMatBar").querySelector(".nameform").hidden = true;
   const sr = sheetRectMM(), sw = sr.x1 - sr.x0, sh = sr.y1 - sr.y0;
   if (none) {
     const ok = Math.min(sw, sh) <= mmax + 1e-6;
@@ -1467,7 +1562,7 @@ function stockSheet() {           // material sheet as laid (mm) or null (not gi
   const name = v.startsWith("user:") ? v.slice(5)
     : v === "custom" || !o ? `${n(w)} × ${n(h)} mm`
     : o.text.split(/ — | \(/)[0];
-  return { w, h, label: `Feuille de matière ${name}` };
+  return { w, h, name, label: `Feuille de matière ${name}` };
 }
 function stockFit() {
   const st = stockSheet();
@@ -1477,10 +1572,13 @@ function stockFit() {
 }
 function syncStock() {
   const none = $("stock_preset").value === "none";
-  $("stockDims").hidden = $("stock_orient").hidden = $("stockBar").hidden = none;
+  // no sheet format: nothing to size or save (the list itself stays)
+  $("stockDims").hidden = $("stock_orient").hidden = $("stockBar").querySelector(".picons").hidden = none;
+  if (none) $("stockBar").querySelector(".nameform").hidden = true;
   const f = stockFit();
   if (!f) {
     $("stockHint").textContent = none ? "Indiquez le format de la feuille de matière pour vérifier que le pochoir peut y être découpé en entier." : "";
+    updateWarnings();
     return;
   }
   const mat = cutMat(), st = f.st;
@@ -1488,6 +1586,7 @@ function syncStock() {
   $("stockHint").textContent = `Pochoir ${Math.round(f.sw)} × ${Math.round(f.sh)} mm : ` +
     (f.fits ? "tient sur la feuille ✓" : f.rot ? `tient avec la feuille en ${st.w > st.h ? "portrait" : "paysage"}` : "dépasse de la feuille ✗") +
     (tooBig ? ". La feuille est plus grande que le tapis : recoupez-la." : "");
+  updateWarnings();
 }
 function matParams(p) {           // "No mat": no mat check
   if ($("mat_preset").value === "none") { p.mat_w_mm = 0; p.mat_h_mm = 0; }
@@ -1700,12 +1799,51 @@ function resolutionWarning() {
     return `Image bien plus grande que nécessaire pour sa taille sur le support : ${fr(hi)} px/mm, alors que le calcul en utilise ${ppm} (12 au plus). Les pixels en trop sont perdus et ralentissent le travail : ${px(18)} suffisent, même à la résolution maximale.`;
   return null;
 }
-function showResolutionWarning() {
-  const w = resolutionWarning(), e = $("resWarn"), t = w && downscaleSize();
-  e.hidden = !w;
-  e.replaceChildren();
-  if (!w) return;
-  e.append("⚠ " + w);
+// Warnings box under the view: the warnings of the last computation (RENDER_WARNS) plus the
+// resolution one, which follows the image size live. Opened whenever a warning that was not shown
+// just before appears (compared on its start, so a changed number does not reopen it).
+let RENDER_WARNS = [], WARN_SEEN = new Set(), WARN_H = 0;
+const warnKey = w => w.replace(/<[^>]*>/g, "").split(/ :|[.(]/)[0].trim();
+function showResolutionWarning() { updateWarnings(); }
+function stockWarnings() {
+  const f = stockFit();
+  if (!f) return [];
+  const out = [], st = f.st, dims = `${Math.round(f.sw)} × ${Math.round(f.sh)} mm`;
+  if (!f.fits && f.rot)
+    out.push(`Le pochoir (${dims}) ne tient sur la feuille de matière ${st.name} qu'en la tournant : passez la feuille en ${st.w > st.h ? "portrait" : "paysage"} (section Matériau & découpe).`);
+  else if (!f.fits)
+    out.push(`Le pochoir (${dims}) dépasse de la feuille de matière ${st.name} : choisissez une feuille plus grande ou réduisez la feuille du pochoir (bordure, marge ou taille du motif).`);
+  const mat = cutMat();
+  if (mat && !((st.w <= mat.w + 1e-6 && st.h <= mat.h + 1e-6) || (st.h <= mat.w + 1e-6 && st.w <= mat.h + 1e-6)))
+    out.push(`La feuille de matière ${st.name} est plus grande que le tapis de découpe : recoupez-la avant de la poser sur le tapis.`);
+  return out;
+}
+function updateWarnings() {
+  const box = $("warnBox"), res = IMG ? resolutionWarning() : null;
+  const items = (res ? [res] : []).concat(IMG ? stockWarnings() : [], RENDER_WARNS);
+  box.hidden = !items.length;
+  const keys = new Set(items.map(warnKey));
+  if ([...keys].some(k => !WARN_SEEN.has(k))) box.open = true;
+  WARN_SEEN = keys;
+  $("warnSum").textContent = `Avertissements (${items.length})`;
+  $("warnings").replaceChildren(...items.map(w => {
+    const d = document.createElement("div");
+    d.className = "warn";
+    d.innerHTML = "⚠ " + w;
+    if (w === res) resolutionButton(d);
+    return d;
+  }));
+  warnRefit();
+}
+// the view takes the height left above the box: refit it when the box changes height
+function warnRefit() {
+  const h = $("warnBox").hidden ? 0 : $("warnBox").offsetHeight;
+  if (h === WARN_H) return;
+  WARN_H = h;
+  window.dispatchEvent(new Event("resize"));
+}
+function resolutionButton(e) {
+  const t = downscaleSize();
   if (t) {
     const b = document.createElement("button");
     b.type = "button"; b.className = "vt-small"; b.style.cssText = "display:block; margin-top:6px";
@@ -1964,13 +2102,11 @@ function layoutEditor(st) {
   };
   lay.onpointerup = lay.onpointercancel = () => { DRAGGING = false; if (drag) { drag = null; syncWidth(); schedule(); } };
 }
-const CUT_FIELDS = ["blade", "force", "speed", "passes", "notes"];
 function material() {
   const k = $("material").value;
   const base = MATS[k] ? structuredClone(MATS[k]) : { label: "Personnalisé", sheet_color: "#cfd6dc" };
   MAT_FIELDS.forEach(f => base[f] = val(f));
-  base.cut = {};
-  CUT_FIELDS.forEach(f => base.cut[f] = $("cut_" + f).value);
+  delete base.cut;   // machine settings of materials saved by earlier versions: no longer used
   return base;
 }
 
@@ -1986,6 +2122,9 @@ function setVals(o) {
     if (e.type === "checkbox") e.checked = !!v; else e.value = v;
   }
   if (!$("stock_preset").value) $("stock_preset").value = "custom";   // deleted ★ format
+  if (!$("machine").value) machineFromWidth();                          // ★ machine absent here
+  if (!$("mat_preset").value) $("mat_preset").value = "custom";         // ★ mat absent here
+  if (!$("support_preset").value) { $("support_preset").value = "custom"; syncPresetFromSize(); }   // ★ support absent here
   syncSheetMode(); syncStockPreset(); syncMat();   // state of the fields, sheet, cutting mat and material sheet
   methodHint(); syncStyle(); renderFx(true); zonesAfterLoad();
   // settings saved before per-mask flat tolerances: "auto" = the loaded flat_tolerance
@@ -2001,14 +2140,32 @@ async function presetCall(method, url, body) {
   } catch (e) { status("Serveur injoignable : " + e.message, true); return false; }
 }
 function refreshUserPresets() {
-  // Supports
-  const us = $("user_support"), cur = us.value;
-  us.innerHTML = "";
+  // Machines and cutting mats: "user:<name>" options in a ★ group at the top of their list
+  for (const [id, kind, label] of [["machine", "machine", "Mes machines"], ["mat_preset", "mat", "Mes tapis"]]) {
+    const sl = $(id), cur = sl.value;
+    $(id + "UserGroup")?.remove();
+    const ns = Object.keys(UP[kind] || {}).sort((a, b) => a.localeCompare(b, "fr"));
+    if (ns.length) {
+      const g = document.createElement("optgroup"); g.label = label; g.id = id + "UserGroup";
+      ns.forEach(n => g.appendChild(new Option("★ " + n, "user:" + n)));
+      sl.insertBefore(g, sl.firstElementChild);
+    }
+    if ([...sl.options].some(o => o.value === cur)) sl.value = cur;
+    else if (id === "machine") machineFromWidth();
+    else $("mat_preset").value = "custom";
+  }
+  // Supports: "user:<name>" options in a "My supports" group at the top of the format list
+  const sp = $("support_preset"), curP = sp.value;
+  $("supUserGroup")?.remove();
   const names = Object.keys(UP.support).sort((a, b) => a.localeCompare(b, "fr"));
-  us.add(new Option(names.length ? "— Choisir un support enregistré —" : "(aucun support enregistré)", ""));
-  names.forEach(n => us.add(new Option(n, n)));
-  us.value = names.includes(cur) ? cur : "";
-  // Materials: "user:<name>" options inserted before "Custom"
+  if (names.length) {
+    const g = document.createElement("optgroup"); g.label = "Mes supports"; g.id = "supUserGroup";
+    names.forEach(n => g.appendChild(new Option("★ " + n, "user:" + n)));
+    sp.insertBefore(g, sp.firstElementChild);
+  }
+  if ([...sp.options].some(o => o.value === curP)) sp.value = curP;
+  else { sp.value = "custom"; syncPresetFromSize(); }
+  // Materials: "user:<name>" options in a "My materials" group at the top of the list
   const sel = $("material"), curM = sel.value;
   Object.keys(MATS).filter(k => k.startsWith("user:")).forEach(k => delete MATS[k]);
   sel.querySelectorAll("optgroup").forEach(g => g.remove());
@@ -2016,41 +2173,43 @@ function refreshUserPresets() {
   if (mnames.length) {
     const g = document.createElement("optgroup"); g.label = "Mes matériaux";
     mnames.forEach(n => { MATS["user:" + n] = { ...UP.material[n], label: "★ " + n }; g.appendChild(new Option("★ " + n, "user:" + n)); });
-    sel.insertBefore(g, sel.querySelector('option[value="custom"]'));
+    sel.insertBefore(g, sel.firstElementChild);
   }
   sel.value = [...sel.options].some(o => o.value === curM) ? curM : "custom";
-  // Material sheet formats: "user:<name>" options in a "My formats" group before "Custom"
+  // Material sheet formats: "user:<name>" options in a "My formats" group at the top of the list
   const ss = $("stock_preset"), curS = ss.value;
   $("stockUserGroup")?.remove();
   const snames = Object.keys(UP.sheet || {}).sort((a, b) => a.localeCompare(b, "fr"));
   if (snames.length) {
     const g = document.createElement("optgroup"); g.label = "Mes formats"; g.id = "stockUserGroup";
     snames.forEach(n => g.appendChild(new Option("★ " + n, "user:" + n)));
-    ss.insertBefore(g, ss.querySelector('option[value="custom"]'));
+    ss.insertBefore(g, ss.firstElementChild);
   }
   if ([...ss.options].some(o => o.value === curS)) ss.value = curS;
   else { ss.value = "custom"; syncStockPreset(); }
-  SUPBAR?.update(); MATBAR?.update(); STOCKBAR?.update();
+  SUPBAR?.update(); MATBAR?.update(); STOCKBAR?.update(); MACHBAR?.update(); CUTMATBAR?.update();
 }
 function applyUserSupport(name) {
   const v = UP.support[name]; if (!v) return;
   setVals(v);
+  $("support_preset").value = "user:" + name;
   syncPresetFromSize(); regHint(); syncWidth();
   if (VIEW === "layout") render();
   schedule();
 }
 
 // "Save / Save as… / Rename… / Delete" bar (shared by supports and materials)
-let SUPBAR = null, MATBAR = null, STOCKBAR = null;
+let SUPBAR = null, MATBAR = null, STOCKBAR = null, MACHBAR = null, CUTMATBAR = null;
 function makePresetBar(cfg) {
   const bar = $(cfg.bar), form = bar.querySelector(".nameform"), input = form.querySelector("input"),
         ok = form.querySelector(".ok"), cancel = form.querySelector(".cancel"), dirty = bar.querySelector(".dirty");
   const btn = a => bar.querySelector(`[data-act="${a}"]`);
   let mode = null, delTimer = null;
   const exists = n => Object.prototype.hasOwnProperty.call(UP[cfg.kind], n);
+  const delBtn = btn("delete"), delTitle = delBtn.title;
   function resetDel() {
     clearTimeout(delTimer);
-    const d = btn("delete"); d.classList.remove("confirm"); d.textContent = "Supprimer";
+    delBtn.classList.remove("confirm"); delBtn.title = delTitle;
   }
   function checkName() {
     const n = input.value.trim();
@@ -2087,7 +2246,7 @@ function makePresetBar(cfg) {
     const s = cfg.selected(); if (!s) return;
     const d = btn("delete");
     if (!d.classList.contains("confirm")) {   // 2-click confirmation, without a dialog box
-      d.classList.add("confirm"); d.textContent = "Confirmer ?";
+      d.classList.add("confirm"); d.title = "Cliquer encore pour confirmer la suppression";
       delTimer = setTimeout(resetDel, 3000);
       return;
     }
@@ -2127,8 +2286,7 @@ let DEFAULTS = null;   // interface state before the last settings are restored 
 function collectSettings(all) {
   const s = {};
   PARAMS.filter(k => all || !NOT_REMEMBERED.has(k)).forEach(k => s[k] = val(k));
-  CUT_FIELDS.forEach(f => s["cut_" + f] = $("cut_" + f).value);
-  ["material", "support_preset", "orientation", "user_support", "align_margin_mm", "keep_ratio", "preview_sim", "preview_nobridges", "show_support", "show_mat", "mat_preset", "machine", "auto_calc", "show_stock", "show_reg", "show_calage", "stock_preset", "stock_orient", "stock_w_mm", "stock_h_mm"].forEach(k => s[k] = val(k));
+  ["material", "support_preset", "orientation", "align_margin_mm", "keep_ratio", "preview_sim", "preview_nobridges", "show_support", "show_mat", "mat_preset", "machine", "auto_calc", "show_stock", "show_reg", "show_calage", "stock_preset", "stock_orient", "stock_w_mm", "stock_h_mm"].forEach(k => s[k] = val(k));
   return s;
 }
 function rememberSettings() {
@@ -2178,7 +2336,9 @@ function restoreSettings() {
   const mat = s.material;
   if (mat && [...$("material").options].some(o => o.value === mat)) $("material").value = mat;
   delete s.material;
-  if (s.user_support && !UP.support[s.user_support]) delete s.user_support;
+  // saved support chosen in its own list (earlier versions): now an entry of the format list
+  if (s.user_support && UP.support[s.user_support]) s.support_preset = "user:" + s.user_support;
+  delete s.user_support;
   setVals(migrateSens(s));
   if (!("machine" in s)) { machineFromWidth(); syncMat(); }
   return true;
@@ -2188,6 +2348,7 @@ function showValues() {
     const o = $(k + "_v");
     if (o) o.textContent = k.startsWith("image_") ? (+$(k).value).toFixed(1) : k === "pre_gamma" ? (+$(k).value).toFixed(2) : $(k).value;
   });
+  renderLayerChips();
   mergeHint();
 }
 // "Merge instead of bridges": largest visible area changed (same scale as merge_area_mm2 on the server)
@@ -2198,13 +2359,12 @@ function mergeHint() {
   $("merge_hint").textContent = `Fusion acceptée jusqu'à ${mm2 < 10 ? mm2.toFixed(1) : Math.round(mm2)} mm² modifiés (zone visible), sinon un pont.`;
 }
 function cutInfo() {
-  // Machine settings are editable fields (see applyMaterial); update the save bar
+  // update the save bar of the material
   MATBAR?.update();
 }
 function applyMaterial(k) {
   const m = MATS[k]; if (!m) return;
   MAT_FIELDS.forEach(f => { const e = $(f); if (m[f] === undefined) return; if (e.type === "checkbox") e.checked = !!m[f]; else e.value = m[f]; });
-  CUT_FIELDS.forEach(f => $("cut_" + f).value = (m.cut || {})[f] || "");
   cutInfo();
 }
 
@@ -2213,8 +2373,7 @@ function applyMaterial(k) {
 const SECTION_SUMMARY = {
   "Projet": () => PROJECT_NAME,
   "Support à peindre": () => `${val("support_w_mm")} × ${val("support_h_mm")} mm`,
-  "Image : cadrage & taille": () => IMG ? `${$("img_width_mm").value} × ${$("img_height_mm").value} mm` : "",
-  "Feuille du pochoir & calage": () => `${val("reg_corners")} coins · ${{ equerre: "équerres", croix: "croix", rond: "trous" }[val("reg_shape")] || ""}`,
+  "Position de l'image": () => IMG ? `${$("img_width_mm").value} × ${$("img_height_mm").value} mm` : "",
   "Prétraitement de l'image": () => {
     const a = [];
     if (val("pre_auto_levels")) a.push("niveaux");
@@ -2242,10 +2401,10 @@ const SECTION_SUMMARY = {
     return !n ? "aucun" : !s.on ? "désactivés" : `${n} effet${n > 1 ? "s" : ""} sur ${ls.length} couche${ls.length > 1 ? "s" : ""}`;
   },
   "Machine de découpe": () => {
-    const m = $("machine").selectedOptions[0], st = stockSheet(), mat = cutMat();
-    return [m ? m.text.split(" (")[0].replace(/^Silhouette /, "") : "", mat ? mat.label : "Rouleau", st ? st.label : ""].filter(Boolean).join(" · ");
+    const m = $("machine").selectedOptions[0], mat = cutMat();
+    return [m ? m.text.split(" (")[0].replace(/^Silhouette /, "") : "", mat ? mat.label : "Rouleau"].filter(Boolean).join(" · ");
   },
-  "Matériau & découpe": () => $("material").selectedOptions[0] ? $("material").selectedOptions[0].text : "",
+  "Matériau & découpe": () => `${$("material").selectedOptions[0] ? $("material").selectedOptions[0].text : ""} · ${val("reg_corners")} coins · ${{ equerre: "équerres", croix: "croix", rond: "trous" }[val("reg_shape")] || ""}`,
   "Vectorisation & aperçu": () => `tol. ${val("tolerance_mm")} mm`,
 };
 function setupAccordion() {
@@ -2326,7 +2485,6 @@ function setupColumns() {
 const TIPS = {
   file: "Image à transformer en pochoirs (photo, dessin, logo… en couleur ou noir et blanc). Vous pouvez aussi la glisser sur la zone.",
   projectFile: "Projet OversprayLab exporté (.zip) ou son fichier infos.json.",
-  user_support: "Vos supports enregistrés : format, couleur, marges, feuille, tapis et repères de calage.",
   orientation: "Portrait ou paysage : intervertit la largeur et la hauteur du support.",
   support_w_mm: "Largeur réelle de la surface à peindre, en millimètres.",
   support_h_mm: "Hauteur réelle de la surface à peindre, en millimètres.",
@@ -2340,9 +2498,8 @@ const TIPS = {
   align_margin_mm: "Distance au bord du support utilisée par les boutons d'alignement (coins, milieux des bords).",
   image_pos_x: "Position horizontale du centre de l'image, en % de la largeur du support (50 % = centrée).",
   image_pos_y: "Position verticale du centre de l'image, en % de la hauteur du support (50 % = centrée).",
-  layCenter: "Centre l'image sur le support sans changer sa taille.",
   auto_fit: "Au chargement d'une image, la taille et la position sont choisies pour que l'image soit la plus grande possible dans le pochoir (support, feuille ou tapis selon la mise en page).",
-  inner_margin_mm: "Marge gardée libre tout autour de l'image par « Ajuster » (et la taille 100 %).",
+  inner_margin_mm: "Marge gardée libre tout autour de l'image par « Ajuster au support » (et la taille 100 %).",
   pre_auto_levels: "Étire les tons de l'image du plus sombre au plus clair avant le découpage en teintes (utile pour les photos ternes).",
   pre_clahe: "Contraste local : accentue les volumes (visage, plis) zone par zone. 0 = désactivé.",
   pre_gamma: "Tons moyens : au-dessus de 1 éclaircit, en dessous assombrit, sans toucher au noir et au blanc.",
@@ -2414,25 +2571,11 @@ const TIPS = {
   merge_line_islands: "Quand les traits des détails clés sont mis dans une couche, ils encerclent souvent de petites zones claires qui demandent chacune un pont. Coché : ces petits îlots peuvent aussi être supprimés (peints), dans la même limite de surface ; le trait lui-même n'est jamais coupé. Attention : l'intérieur d'un petit motif cerclé (un œil…) peut alors être rempli.",
   min_bridges: "Nombre minimal de ponts par îlot (2 ou plus = îlot mieux tenu, mais plus de ponts visibles).",
   double_bridge_area_mm2: "Au-delà de cette surface (mm²), un îlot reçoit au moins 2 ponts.",
-  cut_blade: "Profondeur de lame conseillée (réglage Silhouette Studio).",
-  cut_force: "Force de coupe conseillée (réglage Silhouette Studio).",
-  cut_speed: "Vitesse de coupe conseillée (réglage Silhouette Studio).",
-  cut_passes: "Nombre de passages de la lame.",
-  cut_notes: "Notes libres sur ce matériau (test de coupe, astuces…).",
   tolerance_mm: "Tolérance de simplification des contours : plus haut = moins de nœuds, contours moins fidèles.",
   smooth_curves: "Contours en courbes de Bézier (coupe plus douce) plutôt qu'en segments droits.",
   spray_mm: "Flou de l'aérographe utilisé par le rendu simulé, en mm.",
   px_per_mm: "Résolution de calcul : plus haut = bords plus précis mais calcul plus long. Ne fait pas apparaître de détails plus fins que les contraintes du matériau.",
 };
-const PRESET_BTN_TIPS = {
-  "Enregistrer": "Écrase le réglage sélectionné avec les valeurs actuelles (sans sélection : comme « Enregistrer sous »).",
-  "Enregistrer sous…": "Enregistre les valeurs actuelles sous un nouveau nom.",
-  "Renommer…": "Renomme le réglage sélectionné.",
-  "Supprimer": "Supprime le réglage sélectionné (cliquer deux fois pour confirmer).",
-};
-// same tooltips when the buttons are already shown in English
-Object.assign(PRESET_BTN_TIPS, { "Save": PRESET_BTN_TIPS["Enregistrer"], "Save as…": PRESET_BTN_TIPS["Enregistrer sous…"],
-  "Rename…": PRESET_BTN_TIPS["Renommer…"], "Delete": PRESET_BTN_TIPS["Supprimer"] });
 function applyTips() {
   for (const [id, tip] of Object.entries(TIPS)) {
     const el = $(id);
@@ -2441,10 +2584,6 @@ function applyTips() {
     const lab = el.closest("label") || document.querySelector(`label[for="${id}"]`);
     if (lab && !lab.title) lab.title = tip;
   }
-  document.querySelectorAll("aside button").forEach(b => {
-    const t = PRESET_BTN_TIPS[b.textContent.trim()];
-    if (t && !b.title) b.title = t;
-  });
   const set = (sel, t) => document.querySelectorAll(sel).forEach(e => { if (!e.title) e.title = t; });
   set("aside button.acc", "Déplier / replier la section (une seule section ouverte à la fois). Le résumé à droite rappelle les réglages.");
   set("aside button.ok", "Valider");
@@ -2540,7 +2679,7 @@ function renderFx(force) {
   const a = document.activeElement, keep = a && box.contains(a)
     ? { id: a.closest(".fxitem")?.dataset.id, k: a.dataset.k, cls: a.className.split(" ")[0], l: a.closest(".fxlayer")?.dataset.l } : null;
   if (!layers.length) {
-    box.innerHTML = `<p class="hint">Les couches de traits apparaissent ici après le calcul.</p>`;
+    box.innerHTML = `<p class="hint keep">Les couches de traits apparaissent ici après le calcul.</p>`;
     return;
   }
   // effects grouped by category, in the order of the catalogue
@@ -2573,7 +2712,7 @@ function renderFx(force) {
           <option value="">⧉ Copier vers…</option>${others.map(o => `<option value="${o.n}">Couche ${o.n}</option>`).join("")}${others.length > 1 ? `<option value="all">toutes les couches</option>` : ""}</select>` : ""}
         ${Ly.orphan ? `<button type="button" class="fxldel" aria-label="Supprimer les effets de la couche ${Ly.n}" title="Supprimer les effets de cette couche absente">×</button>` : `<select class="fxadd" title="Ajouter un effet à cette couche (à la fin de sa pile)"><option value="">+ Ajouter…</option>${addOpts}</select>`}
       </div>
-      <div class="fxitems">${items || `<p class="hint fxnone">aucun effet</p>`}</div>
+      <div class="fxitems">${items || `<p class="hint keep fxnone">aucun effet</p>`}</div>
     </div>`;
   }).join("");
   if (keep && keep.l) {
@@ -2973,22 +3112,20 @@ async function init() {
   $("px_per_mm").addEventListener("input", showResolutionWarning);
   // Editing a field: a built-in material switches to "Custom"; a ★ material stays selected
   // (marked "modified") so it can be overwritten with "Save".
-  const MAT_EDIT_FIELDS = [...MAT_FIELDS, "cut_blade", "cut_force", "cut_speed", "cut_passes", "cut_notes"];
-  MAT_EDIT_FIELDS.forEach(f => $(f).addEventListener("input", () => {
+  MAT_FIELDS.forEach(f => $(f).addEventListener("input", () => {
     const k = $("material").value;
     if (k.startsWith("user:")) MATBAR.setDirty(true);
     else if (k !== "custom") { $("material").value = "custom"; cutInfo(); }
   }));
-  ["cut_blade", "cut_force", "cut_speed", "cut_passes", "cut_notes"].forEach(f => $(f).addEventListener("change", rememberSettings));
 
   // Saved presets: Save / Save as… / Rename… / Delete bars
   SUPBAR = makePresetBar({
     kind: "support", bar: "supBar", label: "Support",
-    selected: () => $("user_support").value || null,
-    select: n => { $("user_support").value = n; },
+    selected: () => { const k = $("support_preset").value; return k.startsWith("user:") ? k.slice(5) : null; },
+    select: n => { $("support_preset").value = "user:" + n; },
     collect: () => { const v = {}; SUPPORT_FIELDS.forEach(f => v[f] = val(f)); return v; },
     suggest: () => `Support ${val("support_w_mm")}×${val("support_h_mm")}`,
-    afterDelete: () => { $("user_support").value = ""; },
+    afterDelete: () => { $("support_preset").value = "custom"; syncPresetFromSize(); },
   });
   MATBAR = makePresetBar({
     kind: "material", bar: "matBar", label: "Matériau",
@@ -2998,6 +3135,22 @@ async function init() {
     suggest: () => { const m = MATS[$("material").value]; return (m ? m.label.replace(/^★ /, "") : "Mon matériau") + " (perso)"; },
     afterDelete: () => { $("material").value = "custom"; },
   });
+  MACHBAR = makePresetBar({
+    kind: "machine", bar: "machBar", label: "Machine",
+    selected: () => { const k = $("machine").value; return k.startsWith("user:") ? k.slice(5) : null; },
+    select: n => { $("machine").value = "user:" + n; syncMat(); updateSummaries(); },
+    collect: () => ({ machine_max_mm: val("machine_max_mm") }),
+    suggest: () => `Machine ${val("machine_max_mm")} mm`,
+    afterDelete: () => { machineFromWidth(); syncMat(); },
+  });
+  CUTMATBAR = makePresetBar({
+    kind: "mat", bar: "cutMatBar", label: "Tapis",
+    selected: () => { const k = $("mat_preset").value; return k.startsWith("user:") ? k.slice(5) : null; },
+    select: n => { $("mat_preset").value = "user:" + n; syncMat(); updateSummaries(); },
+    collect: () => ({ mat_w_mm: val("mat_w_mm"), mat_h_mm: val("mat_h_mm") }),
+    suggest: () => `Tapis ${val("mat_w_mm")} × ${val("mat_h_mm")}`,
+    afterDelete: () => { $("mat_preset").value = "custom"; syncMat(); },
+  });
   STOCKBAR = makePresetBar({
     kind: "sheet", bar: "stockBar", label: "Format",
     selected: () => { const k = $("stock_preset").value; return k.startsWith("user:") ? k.slice(5) : null; },
@@ -3006,13 +3159,10 @@ async function init() {
     suggest: () => `Feuille ${val("stock_w_mm")} × ${val("stock_h_mm")}`,
     afterDelete: () => { $("stock_preset").value = "custom"; },
   });
-  $("user_support").addEventListener("change", () => {
-    applyUserSupport($("user_support").value); SUPBAR.setDirty(false); SUPBAR.update();
-  });
   sel.addEventListener("change", () => MATBAR.setDirty(false));
   // Editing a support field marks the selected saved support as "modified"
-  [...SUPPORT_FIELDS, "support_preset", "orientation"].forEach(f => $(f).addEventListener("input", () => SUPBAR.setDirty(true)));
-  ["support_preset", "orientation", "reg_corners", "reg_shape"].forEach(f => $(f).addEventListener("change", () => SUPBAR.setDirty(true)));
+  [...SUPPORT_FIELDS, "orientation"].forEach(f => $(f).addEventListener("input", () => SUPBAR.setDirty(true)));
+  ["orientation", "reg_corners", "reg_shape"].forEach(f => $(f).addEventListener("change", () => SUPBAR.setDirty(true)));
   $("supportSwatches").addEventListener("click", () => SUPBAR.setDirty(true));
   $("resetAll").onclick = resetSettings;
   window.addEventListener("beforeunload", rememberSettings);
@@ -3084,22 +3234,34 @@ async function init() {
   ["color_mode", "skip_support"].forEach(k => $(k).addEventListener("change", () => recommend(false)));
 
   // Support
-  $("support_preset").addEventListener("change", () => { applyPreset(); schedule(); });
-  $("orientation").addEventListener("change", () => {
-    const w = val("support_w_mm"), h = val("support_h_mm");
-    const land = $("orientation").value === "landscape";
-    if ((land && w < h) || (!land && w > h)) { $("support_w_mm").value = h; $("support_h_mm").value = w; }
-    schedule();
+  $("support_preset").addEventListener("change", () => {
+    const v = $("support_preset").value;
+    if (v.startsWith("user:")) applyUserSupport(v.slice(5)); else { applyPreset(); schedule(); }
+    SUPBAR.setDirty(false); SUPBAR.update();
   });
+  $("orientation").addEventListener("change", () => { orientSupport(); schedule(); });
   ["support_w_mm", "support_h_mm"].forEach(k => $(k).addEventListener("input", syncPresetFromSize));
   ["support_w_mm", "support_h_mm", "inner_margin_mm", "machine_max_mm", "reg_size_mm"].forEach(k => $(k).addEventListener("input", schedule));
-  $("mat_preset").addEventListener("change", () => { applyMatPreset(); if (VIEW === "layout" || showMatAll()) render(); schedule(); });
-  $("machine").addEventListener("change", () => { applyMachine(); if (VIEW === "layout" || showMatAll()) render(); schedule(); });
+  $("mat_preset").addEventListener("change", () => {
+    applyMatPreset(); CUTMATBAR.setDirty(false); CUTMATBAR.update();
+    if (VIEW === "layout" || showMatAll()) render(); schedule();
+  });
+  $("machine").addEventListener("change", () => {
+    applyMachine(); MACHBAR.setDirty(false); MACHBAR.update();
+    if (VIEW === "layout" || showMatAll()) render(); schedule();
+  });
+  // editing the size of a ★ entry marks it as modified
+  $("machine_max_mm").addEventListener("input", () =>
+    MACHBAR.setDirty(machineWidth($("machine").value) !== val("machine_max_mm")));
+  ["mat_w_mm", "mat_h_mm"].forEach(k => $(k).addEventListener("input", () => {
+    const s = matSize($("mat_preset").value);
+    CUTMATBAR.setDirty(!!s && (s[0] !== val("mat_w_mm") || s[1] !== val("mat_h_mm")));
+  }));
   $("mat_orient").addEventListener("change", () => { syncMat(); if (VIEW === "layout" || showMatAll()) render(); schedule(); });
   $("show_mat").addEventListener("change", () => { render(); rememberSettings(); });
   $("show_stock").addEventListener("change", () => {
     render(); rememberSettings();
-    if ($("show_stock").checked && !stockSheet()) status("Choisissez le format de la feuille de matière (section Machine de découpe)", true);
+    if ($("show_stock").checked && !stockSheet()) status("Choisissez le format de la feuille de matière (section Matériau & découpe)", true);
   });
   // Material sheet: list, orientation, size typed in (only a check: the stencil is not changed)
   const stockChanged = () => { syncStock(); updateSummaries(); if (VIEW === "layout" || $("show_stock").checked) render(); };
@@ -3183,13 +3345,14 @@ async function init() {
     const w = Math.min(Math.max(5, L.SW - 2 * L.im), Math.max(5, L.SH - 2 * L.im) / (L.ar * L.hf));
     setLayout(w / L.fitW * 100, 50, 50);
   };
-  $("layCenter").onclick = () => setLayout(null, 50, 50);
   $("layFitStencil").onclick = fitToStencil;
   $("layFill").onclick = () => { const L = layoutCalc(); setLayout(Math.max(L.SW, L.SH / (L.ar * L.hf)) / L.fitW * 100 + 0.1, 50, 50); };
   $("alignGrid").querySelectorAll("button").forEach(b => b.onclick = () => { const [h, v] = b.dataset.a.split(",").map(Number); alignTo(h, v); });
   $("alignH").onclick = () => alignTo(0, null);
   $("alignV").onclick = () => alignTo(null, 0);
   window.addEventListener("resize", () => { if (VIEW === "layout" || VIEW === "crop" || showSup()) render(); else { fitStage(); applyZoom(); } });
+  $("warnBox").addEventListener("toggle", warnRefit);
+  $("metricsBox").addEventListener("toggle", () => { if (!$("metricsBox").hidden) savePref("metrics_open", $("metricsBox").open); window.dispatchEvent(new Event("resize")); });
   setupZoom();
   $("reg_shape").addEventListener("change", () => { $("reg_size_mm").value = REG_DEFAULT[val("reg_shape")]; regHint(); schedule(); });
   $("reg_corners").addEventListener("change", regHint);
@@ -3332,10 +3495,38 @@ function prefs() {
 function savePref(k, v) {
   try { const o = prefs(); o[k] = v; localStorage.setItem(PREFS_KEY, JSON.stringify(o)); } catch (e) { /* storage unavailable */ }
 }
+// Tooltips off: the title of the hovered element (and of its ancestors) is taken off while the
+// pointer is over it and put back unchanged afterwards (the translation layer sees the same text).
+let TIPS_OFF = false;
+const TIP_HELD = [];
+function releaseTips() {
+  while (TIP_HELD.length) { const [el, t] = TIP_HELD.pop(); if (!el.hasAttribute("title")) el.setAttribute("title", t); }
+}
+function setupTipsSwitch() {
+  document.addEventListener("mouseover", e => {
+    releaseTips();
+    if (!TIPS_OFF) return;
+    for (let el = e.target; el && el.nodeType === 1; el = el.parentElement) {
+      const t = el.getAttribute("title");
+      if (t) { TIP_HELD.push([el, t]); el.removeAttribute("title"); }
+    }
+  }, true);
+  document.addEventListener("mouseleave", releaseTips);
+}
+function applyHelpPrefs() {
+  const p = prefs();
+  document.body.classList.toggle("no-hints", p.show_hints === false);
+  TIPS_OFF = p.show_tips === false;
+  if (!TIPS_OFF) releaseTips();
+}
 function setupPrefs() {
   const btn = $("prefsBtn"), pop = $("prefPop");
   $("auto_fit").checked = prefs().auto_fit !== false;
   $("auto_fit").addEventListener("change", () => savePref("auto_fit", $("auto_fit").checked));
+  $("show_hints").checked = prefs().show_hints !== false;
+  $("show_tips").checked = prefs().show_tips !== false;
+  ["show_hints", "show_tips"].forEach(k => $(k).addEventListener("change", () => { savePref(k, $(k).checked); applyHelpPrefs(); }));
+  setupTipsSwitch(); applyHelpPrefs();
   const show = on => { pop.hidden = !on; btn.setAttribute("aria-expanded", String(on)); if (on) $("lang").focus(); };
   btn.onclick = e => { e.stopPropagation(); show(pop.hidden); };
   document.addEventListener("pointerdown", e => { if (!pop.hidden && !pop.contains(e.target) && e.target !== btn) show(false); });
@@ -3397,7 +3588,7 @@ function setupProjectName() {
   showProjectName();
 }
 function setSession(j, name) {
-  SID = j.id;
+  SID = j.id; RENDER_WARNS = [];   // warnings of the former image dropped
   IMG_FILE = String(j.filename || name || "");
   PROJECT_DEFAULT = IMG_FILE.replace(/\.[^.]+$/, "") || "projet";
   PROJECT_NAME = j.project_name || PROJECT_DEFAULT;
@@ -3427,7 +3618,6 @@ let PENDING_PROJECT = null;
 function uiState() {
   const values = {};
   [...PARAMS, ...UI_EXTRA].forEach(k => values[k] = val(k));
-  CUT_FIELDS.forEach(f => values["cut_" + f] = $("cut_" + f).value);
   values.sens_scale = 2;
   return { version: 1, values, crop: { ...CROP }, hidden_layers: [...HIDDEN], palette: projectPalette() };
 }
@@ -3467,7 +3657,6 @@ function applyProjectSettings(info) {
   } else {                          // export from an earlier version: engine parameters
     const p = (info && info.parametres) || {}, m = (info && info.materiau) || {};
     PARAMS.forEach(k => { if (p[k] !== undefined) vals[k] = p[k]; });
-    CUT_FIELDS.forEach(f => { if (m.cut && m.cut[f] != null) vals["cut_" + f] = m.cut[f]; });
     if (p.crop_w) crop = { x: p.crop_x, y: p.crop_y, w: p.crop_w, h: p.crop_h };
   }
   // settings missing from the project (saved before they existed, e.g. layer effects): default
@@ -3576,7 +3765,17 @@ function setLayers(n, run = true) {
   $("n_layers").value = n; showValues(); renderReco(); updateSummaries();
   if (run) schedule();
 }
+const N_LAYERS_MAX = 8;
+function renderLayerChips() {
+  const cur = +$("n_layers").value, de = {};
+  if (RECO) RECO.curve.forEach(c => de[c.layers] = c.delta_e);
+  $("nLayerChips").innerHTML = Array.from({ length: N_LAYERS_MAX }, (_, i) => i + 1).map(n =>
+    `<button type="button" class="chip ${RECO && n === RECO.layers ? "rec" : ""} ${n === cur ? "cur" : ""}" data-n="${n}"
+      aria-pressed="${n === cur}" title="${n} pochoir(s)${de[n] != null ? ` : ΔE ${de[n]}` : ""}">${n}</button>`).join("");
+  $("nLayerChips").querySelectorAll(".chip").forEach(c => c.onclick = () => setLayers(+c.dataset.n));
+}
 function renderReco() {
+  renderLayerChips();
   const box = $("reco");
   if (!RECO) { box.hidden = true; return; }
   const cur = +$("n_layers").value;
@@ -3585,12 +3784,8 @@ function renderReco() {
     <div class="head">Recommandé : <b>${RECO.layers} pochoir${RECO.layers > 1 ? "s" : ""}</b>
       ${cur !== RECO.layers ? `<button type="button" id="recoApply">Appliquer</button>` : ""}</div>
     <div class="why">${RECO.distinct_colors} teinte${RECO.distinct_colors > 1 ? "s" : ""} bien distincte${RECO.distinct_colors > 1 ? "s" : ""} détectée${RECO.distinct_colors > 1 ? "s" : ""} ;
-      ${RECO.colors} teintes retenues${$("skip_support").checked ? " (dont celle laissée au support)" : ""} : ${RECO.reason}.</div>
-    <div class="why" style="margin-bottom:3px">Écart à l'original (ΔE) selon le nombre de pochoirs :</div>
-    <div class="chips">${RECO.curve.map(c => `<span class="chip ${c.layers === RECO.layers ? "rec" : ""} ${c.layers === cur ? "cur" : ""}"
-      data-n="${c.layers}" title="${c.layers} pochoir(s) : ΔE ${c.delta_e}">${c.layers} · ${c.delta_e}</span>`).join("")}</div>`;
+      ${RECO.colors} teintes retenues${$("skip_support").checked ? " (dont celle laissée au support)" : ""} : ${RECO.reason}.</div>`;
   const b = $("recoApply"); if (b) b.onclick = () => setLayers(RECO.layers);
-  box.querySelectorAll(".chip").forEach(c => c.onclick = () => setLayers(+c.dataset.n));
 }
 
 // Automatic computation (on every change) or on demand: in manual mode, a change only
@@ -3828,7 +4023,7 @@ function flatTargets() {
   for (const L of (LAST && LAST.layers) || []) {
     if (L.kind === "outline" || L.tone == null || seen.has("t" + L.tone)) continue;
     seen.add("t" + L.tone);
-    out.push({ id: "t" + L.tone, label: `Couche ${L.index}`, color: L.color, title: `Aplat forcé dans la couche ${L.index}` });
+    out.push({ id: "t" + L.tone, label: `Couche ${L.index}`, num: L.index, color: L.color, title: `Aplat forcé dans la couche ${L.index}` });
   }
   if (LAST && LAST.support_label != null && !seen.has("t" + LAST.support_label)) {
     seen.add("t" + LAST.support_label);
@@ -3849,9 +4044,10 @@ function renderFlatChips() {
   box.innerHTML = flatChipsHtml();
 }
 // chips of the flat masks (Masks tab bar and Simplification section): the mask shown is pressed
-function flatChipsHtml() {
+// short: layers named by their number only (Simplification section), "Layer n" in the Masks bar
+function flatChipsHtml(short = false) {
   return flatTargets().map(t => `<button type="button" class="vt-opt fchip${FLAT_COVS[t.id] > 0 ? " painted" : ""}" data-f="${t.id}" aria-pressed="${t.id === FLAT_CUR}" title="${escH(t.title)}">` +
-    (t.color ? `<i class="fsw" style="background:${t.color}"></i>` : "") + `${escH(t.label)}</button>`).join("");
+    (t.color ? `<i class="fsw" style="background:${t.color}"></i>` : "") + `${escH(short && t.num ? String(t.num) : t.label)}</button>`).join("");
 }
 // ---- Background under the mask being painted: the image (default), the preview (every visible
 // layer on the support) or chosen layers (on the dimmed image). The layer images of the preview are
@@ -3948,7 +4144,7 @@ function flatTolToField() {
   $("flat_tolerance").value = flatTolOf(FLAT_CUR);
   if ($("flatTolFor")) {
     const s = flatTols();
-    $("flatTolFor").innerHTML = flatChipsHtml();
+    $("flatTolFor").innerHTML = flatChipsHtml(true);
     $("flatTolFor").querySelectorAll(".fchip").forEach(b => {
       const id = b.dataset.f;
       if (id !== "auto") b.title += Number.isFinite(+s[id]) ? ` — tolérance ${s[id]}` : " — tolérance générale";
@@ -4575,8 +4771,10 @@ function preprocessPreview() {
       if (!r.ok || id !== PRE_REQ || !LAST) return;
       LAST.reference_pre = j.image; LAST.histogram = j.histogram;
       SHOW_PRE = true;
-      if (VIEW !== "reference" || SEL !== null) { VIEW = "reference"; SEL = null; }
-      if (!busy) render(); else { const st = $("stage"); st.innerHTML = `<img src="${j.image}" alt="Image prétraitée sur le support" data-mm="${LAST.support_mm.join(",")}">`; fitStage(); }
+      // the view stays where it is: the preview is shown when the Original tab is open
+      if (VIEW === "reference" && SEL === null) {
+        if (!busy) render(); else { const st = $("stage"); st.innerHTML = `<img src="${j.image}" alt="Image prétraitée sur le support" data-mm="${LAST.support_mm.join(",")}">`; fitStage(); }
+      }
       drawHisto();
     } catch (e) { /* optional preview */ }
   }, 60);
@@ -4802,17 +5000,19 @@ function refreshPreviewOnly() {
 // ruler panel, so that folding the panel enlarges the view; at least 72 % of the window as before
 function stageH() {
   const view = document.querySelector("section.view"), st = $("stage");
-  let h = window.innerHeight * 0.72;
+  // the boxes under the view (warnings, dimensions) are kept on screen: taken off the minimum height too
+  const warnH = ["warnBox", "metricsBox"].reduce((a, id) => { const e = $(id); return a + (e && !e.hidden ? e.offsetHeight + 10 : 0); }, 0);
+  let h = window.innerHeight * 0.72 - warnH;
   if (view && st && view.clientHeight < window.innerHeight) {          // column with its own scrolling
     const top = st.getBoundingClientRect().top - view.getBoundingClientRect().top + view.scrollTop;
     const cs = getComputedStyle(st), num = v => parseFloat(v) || 0;
     const pad = num(cs.paddingTop) + num(cs.paddingBottom) + num(cs.borderTopWidth) + num(cs.borderBottomWidth);
     let below = 0;
-    for (const id of ["compareRange", "metrics", "calage"]) {
+    for (const id of ["compareRange", "warnBox", "metricsBox", "calage"]) {
       const e = $(id);
       if (!e || e.hidden) continue;
       const m = getComputedStyle(e);
-      below += (e.offsetHeight || (id === "metrics" ? 20 : 0)) + num(m.marginTop) + num(m.marginBottom);
+      below += e.offsetHeight + num(m.marginTop) + num(m.marginBottom);
     }
     h = Math.max(h, view.clientHeight - num(getComputedStyle(view).paddingBottom) - top - pad - below - 2);
   }
@@ -4848,9 +5048,7 @@ function render() {
   }
   renderToolbar();
 
-  const warns = [...(LAST.warnings || [])];
-  const resW = resolutionWarning();
-  if (resW) warns.push(resW);
+  const warns = [...(LAST.warnings || [])];   // the resolution warning is added by updateWarnings
   if (LAST.support_tone && lum(LAST.base) < 90 && LAST.layers.length)
     warns.push("Support foncé : les zones sombres laissées au support deviennent des îlots dans les couches claires, et leurs ponts resteront visibles. Pour des aplats foncés sans pont, décochez « La teinte la plus proche du support reste nue ».");
   const fill = val("stencil_style") !== "line";
@@ -4858,11 +5056,13 @@ function render() {
     warns.push(`Traits dans les couches : aucun détail clé ajouté${MASK_EMPTY ? "" : " dans les zones peintes du masque"}. Augmentez la sensibilité (actuellement ${val("outline_sensitivity")}) ou réduisez la longueur mini d'un trait.`);
   if (fill && val("outline") && val("outline_target") === "stencil" && !LAST.layers.some(L => L.kind === "outline"))
     warns.push(`Pochoir de contours : aucun détail clé trouvé${MASK_EMPTY ? "" : " dans les zones peintes du masque"}. Augmentez la sensibilité (actuellement ${val("outline_sensitivity")}) ou réduisez la longueur mini d'un trait.`);
-  $("warnings").innerHTML = warns.map(w => `<div class="warn">⚠ ${w}</div>`).join("");
+  RENDER_WARNS = warns;
+  updateWarnings();
 
   renderOutlineSwatches();
 
   const tot = LAST.layers.reduce((a, L) => ({ b: a.b + L.bridges, c: a.c + L.cut_length_m }), { b: 0, c: 0 });
+  if ($("metricsBox").hidden) { $("metricsBox").hidden = false; $("metricsBox").open = prefs().metrics_open !== false; }
   $("metrics").innerHTML = `
     <span>Support : <b>${LAST.support_mm[0]} × ${LAST.support_mm[1]} mm</b></span>
     <span>Feuille du pochoir : <b>${LAST.sheet_mm[0]} × ${LAST.sheet_mm[1]} mm</b></span>
@@ -4917,10 +5117,10 @@ function renderCalage() {
   box.hidden = false;
   box.classList.toggle("collapsed", !open);
   const head = `<h3><button type="button" class="calage-toggle" aria-expanded="${open}"
-    title="${open ? "Réduire" : "Afficher"} les cotes de calage"><span class="chev" aria-hidden="true">${open ? "▾" : "▸"}</span><span>Calage à la règle — depuis le coin haut-gauche du support</span></button></h3>`;
+    title="${open ? "Réduire" : "Afficher"} les cotes de calage"><span class="chev" aria-hidden="true">${open ? "▾" : "▸"}</span><span>Calage à la règle</span></button></h3>`;
   if (!open) { box.innerHTML = head; return; }
   box.innerHTML = `${head}
-    <p class="hint" style="margin:0 0 6px">Tracez au crayon une croix à chaque cote, puis posez chaque couche en alignant ses fenêtres en croix sur les traits.</p>
+    <p class="hint" style="margin:0 0 6px">Cotes mesurées depuis le coin haut-gauche du support. Tracez au crayon une croix à chaque cote, puis posez chaque couche en alignant ses fenêtres en croix sur les traits.</p>
     <table><tr><th>Croix</th><th>depuis la gauche</th><th>depuis le haut</th><th>depuis la droite</th><th>depuis le bas</th></tr>
     ${pos.reperes.map(r => `<tr class="${r.sur_support ? "" : "off"}"><td>${r.coin}${r.sur_support ? "" : " (hors du support)"}</td>
       <td><b>${fmtMM(r.x)}</b></td><td><b>${fmtMM(r.y)}</b></td><td>${fmtMM(r.depuis_droite)}</td><td>${fmtMM(r.depuis_bas)}</td></tr>`).join("")}

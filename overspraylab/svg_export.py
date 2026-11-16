@@ -27,7 +27,6 @@ _FR = {
         "OversprayLab - fichier Silhouette Studio : un tracé composé par pochoir (ouvertures, contour de la feuille et repères)",
     "Stencils for Silhouette Studio": "Pochoirs pour Silhouette Studio",
     "Layer": "Couche", "outline": "contours", "colour": "couleur", "material": "matériau", "custom": "personnalisé",
-    "blade": "lame", "force": "force", "speed": "vitesse", "passes": "passes",
     "Stencil layer": "Pochoir couche", "Overview of all layers": "Aperçu de toutes les couches",
     "OversprayLab - overview (do not cut)": "OversprayLab - aperçu (ne pas découper)",
     "Registration dimensions (do not cut)": "Cotes de calage (ne pas découper)",
@@ -192,12 +191,9 @@ def layer_svg(res: Result, L, material: dict | None = None) -> str:
     """Cut file of one layer: openings, bridges included, plus registration marks."""
     p = res.params
     W, H = res.sheet_mm
-    cut = (material or {}).get("cut", {})
     outline = f" ({T('outline')})" if L.kind == "outline" else ""
     comment = (f"OversprayLab - {T('Layer').lower()} {L.index}/{len(res.layers)}{outline} - {T('colour')} {bgr_hex(L.color)} - "
-               f"{T('material')}: {(material or {}).get('label', T('custom'))} - "
-               f"{T('blade')} {cut.get('blade', '?')}, {T('force')} {cut.get('force', '?')}, "
-               f"{T('speed')} {cut.get('speed', '?')}, {T('passes')} {cut.get('passes', '?')}")
+               f"{T('material')}: {(material or {}).get('label', T('custom'))}")
     cal = positioning_text(res)
     if cal:
         comment += " - " + cal

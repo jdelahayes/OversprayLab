@@ -90,7 +90,9 @@ selection itself runs on your computer; your images are never sent anywhere. The
 with OversprayLab (`overspraylab/edge_model/`): nothing to download.
 
 The interface is in **English** by default; the **⚙ Preferences** button at the top right holds the
-language selector (**French** is available; the exported files follow the selected language).
+language selector (**French** is available; the exported files follow the selected language). It also
+turns off the **hints** written below the settings (the states, such as "fits on the mat", stay) and
+the **tooltips** shown on hover, once you know the application.
 
 ---
 
@@ -135,7 +137,10 @@ Open the SVG files of the zip in Silhouette Studio, cut, and spray layer 1, 2, 3
   computed views (Preview, Compare, Original, a single layer); in Crop, Layout and Masks, where the
   left button edits, drag with the **middle button** or hold **Space** while dragging. A
   **double-click** (except in Masks) or the *%* button fits it back; the zoom is kept when you
-  switch views.
+  switch views. Under the view, two foldable boxes: **Warnings** gathers the current warnings
+  (image resolution, dark support, no key detail found…) and opens by itself when a new warning
+  appears; **Dimensions and measures** gives the support, stencil sheet and image sizes, the
+  difference from the original (ΔE), the number of bridges and the total cut length.
 - **Right column – the stencils**: one card per layer with its colour swatch (click it to change the
   paint), statistics (paths, nodes, islands, bridges, merges, cut length) and warnings. Click a card
   to see that layer alone in the main view.
@@ -171,28 +176,33 @@ Choose what you will paint on:
 
 - **Format**: ISO paper (A6 → A2, US Letter), common canvases and frames (20 × 20 → 70 × 100 cm),
   French stretcher sizes **Figure / Paysage / Marine** (0F → 120F, e.g. 6F = 41 × 33 cm), or a custom
-  size. Then the **orientation**.
+  size. Then the **orientation**. Your saved supports come first in the same list (★ *My supports*);
+  the icons next to *Format* save, save as, rename and delete them. A saved support keeps the format,
+  colour, margins, stencil sheet, mat and registration marks.
 - **Support colour**: the preview and the simulated render are computed on this colour. The image
   tone closest to it can be left **bare** (no stencil needed).
 - **Inner margin**: blank space kept between the image and the edge of the support.
 
-### 5.3 Image: crop & size
+### 5.3 Image position
+
+Two blocks: **Crop** (crop frame, size, fit icons, inner margin) and **Alignment**.
 
 **Crop** tab – drag the frame handles to keep only the part of the image you want. The aspect
 ratio can be free, the support's, or fixed (1:1, 4:3, 3:4, 16:9, 9:16).
 
-![Crop view, with the Image: crop & size section open](docs/screenshots/crop.jpg)
+![Crop view, with the Image position section open](docs/screenshots/crop.jpg)
 
 **Layout** tab – place the image on the support:
 
 - drag the image to move it, the bottom-right handle to resize it
   (hold **Shift** for free proportions);
-- buttons **Fit / Fill / Centre**, or type the size in mm or in % of "fitted to the support";
-- **alignment** on 9 positions (corners, edge middles, centre) at a chosen distance from the edge;
-- **Best fit in the stencil** makes the image as large as possible for the chosen stencil sheet
+- icons beside **Size**: **Fit to support**, **Fill the support**, **Fit to stencil**; or type the size in mm or in % of "fitted to the support";
+- **alignment** on 9 positions (corners, edge middles, centre) at a chosen distance from the edge,
+  or centring along one axis only;
+- **Fit to stencil** (third icon) makes the image as large as possible for the chosen stencil sheet
   and cutting mat, and picks the best orientation automatically.
 
-A warning appears when the image resolution does not suit its size on the support: below the
+A warning (under the view) appears when the image resolution does not suit its size on the support: below the
 computation resolution (default 6 px/mm, e.g. 2 460 × 1 980 px for a 6F canvas filled), the
 image is enlarged and its edges are blurred; above 24 px/mm (twice the maximum computation
 resolution), the extra pixels are useless and only slow things down; its **Reduce the image**
@@ -232,14 +242,19 @@ it, with the layer number (**S** = tone left to the support).
 
 ### 5.5 Simplification
 
+Five blocks: **Stencils** (style, number, level of detail), **Colours** (colour mode, hue weight,
+vividness), **Flat areas**, **Layers** (stacking, bare support, thin strokes; *Flat colours* style
+only) and **Merging**.
+
 - **Stencil style**:
   - **Flat colours** (default) – one paint layer per tone, with optional key-detail lines;
   - **Lines only (line drawing)** – no flat colour at all: only line stencils, one per line colour,
     sprayed from the lightest to the darkest (see *Lines only* in 5.6). The number of stencils then
     sets the number of tone zones of the colouring book; layer stacking does not apply.
-- **Number of stencils**: number of painted tones (the bare support and the outline stencil are
-  not counted). OversprayLab shows a recommendation for your image. More stencils = more faithful but
-  more cutting and more painting.
+- **Number of stencils** (buttons 1 to 8): number of painted tones (the bare support and the
+  outline stencil are not counted). OversprayLab shows a recommendation for your image (outlined
+  button); hovering a button shows the difference from the original (ΔE) for that number. More
+  stencils = more faithful but more cutting and more painting.
 - **Level of detail**: low = simple smooth shapes; high = more small details (and more bridges).
 - **Hue weight (%)** (colour mode): how much the hue counts against the lightness when the tones
   are computed. 0 % = lightness only; 40 % (default) = original behaviour, lightness dominates;
@@ -254,11 +269,11 @@ it, with the layer number (**S** = tone left to the support).
   threshold (cheek, background gradient). An island of one tone is absorbed by the area around it
   when the border between them has a low contrast and the island is smaller than that area; higher =
   more contrast tolerated and larger islands absorbed. Eyes, dark strokes and sharp edges stay.
-- **Flat zone tolerance** and **Paint the flat zones…**: see the *Flat areas mask* (5.6). Each
+- **Tolerance of the selected zone** and **Paint the flat zones…**: see the *Flat areas mask* (5.6). Each
   painted zone takes its main tone wherever the image differs from it by less than the tolerance:
   0 = nothing changes, 50 = the neighbouring tones join the main tone, 100 = the whole zone in a
   single colour. Like the settings of the key-detail zones, each flat mask keeps its own tolerance:
-  the *Flat area set* buttons (General, Layer n, Bare support, as for the key-detail zones) pick
+  the *Forced flat zone* buttons (General, 1, 2, 3… with the layer colour, Bare support, as for the key-detail zones) pick
   the mask the slider edits (also the mask shown in the Masks tab); a layer without its own value
   takes the general tolerance. The **Auto** toggle, in front of the slider, is pressed while
   the mask follows the general tolerance; releasing it (click, or moving the slider) gives the mask
@@ -272,6 +287,22 @@ it, with the layer number (**S** = tone left to the support).
   nostrils, strands) keep their own tone instead of being absorbed by the area around them.
   Strokes thinner than the material's minimum opening still disappear: redraw them with the
   key-detail lines (below).
+- **Merging** block – **Merge instead of bridges** (0 = off): many islands can be held without a bridge, by
+  - **closing a narrow channel** of opening (narrower than *Max channel width*) that separates the
+    island from the rest of the sheet: the island is welded along the whole narrow part (channels are
+    looked for at several widths up to the maximum, so a wider maximum only adds possible merges);
+  - **removing a small island**: it simply gets painted. Islands touching key-detail lines cut into
+    the layer are kept, unless *… including those enclosed by key-detail lines* is ticked (useful on
+    textures, where the lines enclose many small light areas; the lines themselves are never cut).
+
+  A merge is used when the visible area it changes stays below the limit set by the slider
+  (progressive scale: about 5 mm² at 50, 90 mm² at 100, 1500 mm² at the maximum, 150). Areas repainted later by a darker layer do not count, and
+  a change counts less when the two tones involved are close. The **merge** button of the legend
+  highlights the merged zones (violet) on the stencil cards.
+
+  On **line stencils** (*Lines only* style, separate outline stencil) only small islands enclosed by
+  lines are merged: the area inside the loop is painted, and a line is never cut. High values paint
+  large enclosed areas; to hold big loops, prefer the interruptions (*Interrupt every … mm*).
 
 ### 5.6 Masks: background removal, key details and silhouette
 
@@ -293,7 +324,7 @@ icons (key details, subject, silhouette, flat areas; the bar under each one is i
   outline stencil draws (see *Silhouette* below). Painting turns this option on.
 - **Flat areas mask** – paint, or click with the Object tool, each zone to fill with a single tone
   (face, background, clothing…). Each separate painted zone is processed on its own: it takes its
-  main tone wherever the image is close enough to it (*Flat zone tolerance*, Simplification
+  main tone wherever the image is close enough to it (*Tolerance of the selected zone*, Simplification
   section); strong details inside it (eyes, dark lines) keep their tone below 100.
   Chips under the mask bar choose the target: **General** (the main tone of each zone, as above) or a
   layer (**Layer n**, or **Bare support** when the lightest tone is left to the support): what is
@@ -448,7 +479,8 @@ computation.
 
 ### 5.7 Stencil sheet & registration
 
-Choose how the stencil sheet relates to the support:
+These settings are the *Stencil sheet* and *Registration marks* blocks of the **Material & cutting**
+section. Choose how the stencil sheet relates to the support:
 
 | Mode | When to use it | Registration |
 |---|---|---|
@@ -468,40 +500,27 @@ Choose how the stencil sheet relates to the support:
 - **Cutting mat**: standard 12 × 12″, long 12 × 24″, Cameo Pro 24 × 24″, custom, or **No mat**
   (roll material). **Mat orientation**: portrait (feed direction) or landscape. OversprayLab warns you
   when the stencil sheet does not fit on the mat or exceeds the machine width.
-- **Material sheet**: the format of the sheet of material you cut the stencil from (A5 to A2, US
-  Letter / Legal / Tabloid, 12 × 12″, 12 × 24″, 24 × 24″, custom, or *Not specified*), with its
-  orientation. It is **only a check**: the stencil is never changed. The hint tells you whether the
-  stencil fits on it (or only once the sheet is turned) and warns when the sheet is larger than the
-  mat. Your own sizes can be kept with **Save / Save as… / Rename… / Delete** (★ *My formats*).
-  The **Sheet** button above the views shows its outline (orange and dashed when the stencil
-  overflows), laid in the same corner as the stencil sheet.
 
 ### 5.9 Material & cutting
+
+The section is split into blocks, each marked by a vertical bar: *Material*, *Material sheet*,
+*Bridges*, *Stencil sheet* and *Registration marks* (the last two are described in 5.7). Merging
+islands instead of bridging them is set in *Simplification* (5.5).
 
 - **Material**: presets for thick paper, vinyl and Mylar. They set the cutting constraints:
   - **Minimum opening** – narrower openings are removed;
   - **Minimum material strip** – thinner strips of material are removed (they would tear);
   - **Minimum piece area** – tiny openings or pieces are removed.
+- **Material sheet**: the format of the sheet of material you cut the stencil from (A5 to A2, US
+  Letter / Legal / Tabloid, 12 × 12″, 12 × 24″, 24 × 24″, custom, or *Not specified*), with its
+  orientation. It is **only a check**: the stencil is never changed. The hint tells you whether the
+  stencil fits on it (or only once the sheet is turned) and warns when the sheet is larger than the
+  mat; these two problems also appear in the *Warnings* box under the view. Your own sizes are kept with the icons next to *Material sheet* (★ *My formats*, first in the list).
+  The **Sheet** button above the views shows its outline (orange and dashed when the stencil
+  overflows), laid in the same corner as the stencil sheet.
 - **Bridges**: **Automatic bridges (islands)**, **Bridge width** and **Minimum bridges per island**.
   Bridges are placed short, away from other edges, and preferably where a darker layer will paint
   over them (invisible bridges).
-- **Merge instead of bridges** (0 = off): many islands can be held without a bridge, by
-  - **closing a narrow channel** of opening (narrower than *Max channel width*) that separates the
-    island from the rest of the sheet: the island is welded along the whole narrow part (channels are
-    looked for at several widths up to the maximum, so a wider maximum only adds possible merges);
-  - **removing a small island**: it simply gets painted. Islands touching key-detail lines cut into
-    the layer are kept, unless *… including those enclosed by key-detail lines* is ticked (useful on
-    textures, where the lines enclose many small light areas; the lines themselves are never cut).
-
-  A merge is used when the visible area it changes stays below the limit set by the slider
-  (progressive scale: about 5 mm² at 50, 90 mm² at 100, 1500 mm² at the maximum, 150). Areas repainted later by a darker layer do not count, and
-  a change counts less when the two tones involved are close. The **merge** button of the legend
-  highlights the merged zones (violet) on the stencil cards.
-
-  On **line stencils** (*Lines only* style, separate outline stencil) only small islands enclosed by
-  lines are merged: the area inside the loop is painted, and a line is never cut. High values paint
-  large enclosed areas; to hold big loops, prefer the interruptions (*Interrupt every … mm*).
-- Blade, force, speed and passes can be noted with the material preset for your own reference.
 
 ### 5.10 Layer effects
 
@@ -660,7 +679,7 @@ interface is in French):
 | `simulated_render.png` | The simulated airbrush result. |
 | `spray_sheet.pdf` | **Spraying sheet** to print (A4): formats, layer colours in spraying order (swatch, hex, RGB, cut length), support colour, ruler registration dimensions and the simulated render. |
 | `inkscape.svg` | An **Inkscape document** with one layer per element (see below). |
-| `silhouette.svg` | **For Silhouette Studio**: only the stencils, one layer each, every layer being a **single compound path** (openings + sheet outline + marks). |
+| `silhouette.svg` | **For Silhouette Studio**: only the stencils, one layer each, every layer being a **single compound path** (openings + marks, plus the sheet outline when *Cut the sheet outline* is ticked). |
 | `original.<ext>` | Your original image, untouched. |
 | `outline_mask.png`, `subject_mask.png`, `silhouette_mask.png`, `flat_mask.png`… | The painted masks, if any. |
 | `infos.json` | Sizes, colours, ruler measurements, and **all the settings** of the project. |
@@ -688,7 +707,7 @@ squares with their hex codes, placed left of the page, to prepare your paints.
    path, cut entirely.
 2. Check the page / mat size and the orientation (if you chose *landscape* for the mat in
    OversprayLab, rotate the design the same way).
-3. Select the material, blade and force (note your best values in the OversprayLab material preset).
+3. Select the material, blade and force in Silhouette Studio.
    Do a test cut first.
 4. Cut each layer, and write its number on the sheet (the notches at the top also give it).
 
@@ -717,9 +736,10 @@ squares with their hex codes, placed left of the page, to prepare your paints.
   - the **infos.json** alone (or the `…_infos.json` of an earlier export) applies the settings to the loaded image (or to the next one you load);
   - the **colour palette** applied to the layers comes back too; if it is not in *My palettes* on
     this computer (or differs from the one of the same name), it is added there.
-- **Presets**: the *Surface to paint* and *Material & cutting* sections, and the material sheet
-  formats (*Cutting machine*), have **Save / Save as… /
-  Rename… / Delete** buttons. A "● modified" marker shows unsaved changes. Your presets and palettes
+- **Presets**: the support format (*Surface to paint*), the material and the material sheet format
+  (*Material & cutting*), the machine and the cutting mat (*Cutting machine*) each have one list, with
+  your saved entries first (★), and **Save / Save as… / Rename… / Delete** icons next to its title
+  (delete: click twice). A saved machine keeps its cutting width, a saved mat its size. A "● modified" marker shows unsaved changes. Your presets and palettes
   are stored in `presets_utilisateur.json` (created on first save, editable by hand). The built-in
   materials are in `overspraylab/materials.json`.
 - The **last settings used** are remembered by the browser and restored at the next start.
@@ -740,7 +760,7 @@ squares with their hex codes, placed left of the page, to prepare your paints.
 | The computed colours look dull | Raise *Colour vividness*, or pick a palette (*Closest* finds the best one). |
 | Two colours of similar lightness end up in one layer | Raise the *Hue weight*. |
 | Computing is slow | Untick *Auto compute* and use **Ctrl + Enter**. |
-| "The sheet does not fit on the mat" | Use *Best fit in the stencil*, turn the mat to landscape, or use a larger mat. |
+| "The sheet does not fit on the mat" | Use *Fit to stencil*, turn the mat to landscape, or use a larger mat. |
 | In Silhouette Studio, all the cut lines end up in one layer of the Inkscape file | Grouping objects of several layers moves them into a single layer (ungrouping does not put them back). To move everything, select all (Ctrl + A) and drag without grouping, or re-import the file. |
 | In Silhouette Studio, the hidden render image of the Inkscape file shows black areas when zooming | Display glitch of Silhouette Studio; the cutting files are not affected. Use the PNG render instead. |
 
