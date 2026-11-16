@@ -14,7 +14,7 @@ import zipfile
 import cv2
 import numpy as np
 
-from .pdf_sheet import Pdf, wrap
+from .pdf_sheet import Pdf, text_width, wrap
 from .pipeline import (Result, bgr_hex, layer_stats, positioning, registration_shapes, simulate, simulate_sheet,
                        support_overlap)
 
@@ -435,8 +435,6 @@ def sheet_pdf(res: Result, name: str) -> bytes:
     pdf = Pdf()
     L0, R0 = 15.0, 195.0                       # text margins (mm)
     colon = " : " if _LANG.get() == "fr" else ": "
-    pdf.text(L0, 20, f"OversprayLab - {name}", 16, bold=True)
-    pdf.text(L0, 27, T("Spraying sheet"), 11, color="#555555")
 
     # simulated render, top right
     sim = simulate(res)
@@ -451,6 +449,21 @@ def sheet_pdf(res: Result, name: str) -> bytes:
     pdf.image(jpg.tobytes(), sim.shape[1], sim.shape[0], ix, iy, iw, ih)
     pdf.rect(ix, iy, iw, ih, stroke="#999999", line_w=0.2)
     pdf.text(ix, iy + ih + 4, T("Simulated render"), 8, color="#777777")
+
+    # title, left of the render: smaller font for a long project name, then a second line
+    title, room = f"OversprayLab - {name}", ix - 5 - L0
+    size = 16.0
+    while size > 12 and text_width(title, size, bold=True) * 1.05 > room:
+        size -= 0.5
+    lines = [title]
+    if text_width(title, size, bold=True) * 1.05 > room:
+        lines = ["OversprayLab -", name]
+        while text_width(lines[1], size, bold=True) * 1.05 > room and len(lines[1]) > 1:
+            lines[1] = lines[1][:-2] + "…"
+    ty = 20.0 if len(lines) == 1 else 17.0
+    for i, ln in enumerate(lines):
+        pdf.text(L0, ty + i * size * 0.42, ln, size, bold=True)
+    pdf.text(L0, 27 if len(lines) == 1 else 31, T("Spraying sheet"), 11, color="#555555")
 
     sw, sh = res.support_mm
     y = 38.0
