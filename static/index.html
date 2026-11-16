@@ -3472,7 +3472,11 @@ function applyProjectSettings(info) {
   }
   // settings missing from the project (saved before they existed, e.g. layer effects): default
   // values, not the ones of the current session
-  if (DEFAULTS) PARAMS.forEach(k => { if (!(k in vals) && k in DEFAULTS) vals[k] = DEFAULTS[k]; });
+  // (not the key-detail zones of a project saved before them: setVals rebuilds them from its outline_* fields)
+  const legacyZones = "outline_method" in vals && !("outline_zones" in vals);
+  if (DEFAULTS) PARAMS.forEach(k => {
+    if (!(k in vals) && k in DEFAULTS && !(legacyZones && k === "outline_zones")) vals[k] = DEFAULTS[k];
+  });
   const mat = vals.material; delete vals.material;
   if (mat && [...$("material").options].some(o => o.value === mat)) $("material").value = mat;
   setVals(migrateSens(vals));
