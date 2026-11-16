@@ -683,6 +683,10 @@ interface is in French):
 | `original.<ext>` | Your original image, untouched. |
 | `outline_mask.png`, `subject_mask.png`, `silhouette_mask.png`, `flat_mask.png`… | The painted masks, if any. |
 | `infos.json` | Sizes, colours, ruler measurements, and **all the settings** of the project. |
+| `projet/` | The **project folder** with all its snapshots (see [§7](#7-projects-and-saved-settings)). |
+
+A current version that is not saved yet first becomes a snapshot: the first export of a project
+creates its folder and its snapshot `v0`.
 
 The **spraying sheet** sums up what you need next to the airbrush: the colour of each layer in
 spraying order and the ruler measurements of the registration crosses.
@@ -731,8 +735,22 @@ squares with their hex codes, placed left of the page, to prepare your paints.
   colours, palette – and the **painted masks** (each stroke, object selection, copy or clear is one
   step), then recompute. Up to 100 steps; the history starts again with each new image. Display
   options are not part of it, and in a text or number field Ctrl + Z stays the field's own undo.
-- **Re-open a project**: *Open a project…* (or drop the file on the image box)
-  - the **.zip** restores everything: image, masks, settings, crop, colours – then recomputes;
+- **Snapshots**: the bar under the view keeps versions of the project. **Take a snapshot** (with an
+  optional label) saves the current version – image, masks, settings and the computed result – into
+  the project folder; a snapshot never changes afterwards. Click a thumbnail to go back to that
+  version: it opens instantly, without computing. As soon as you change anything, the current
+  version becomes a new one (*v3 · not saved*), saved by the next snapshot or export; leaving it
+  unsaved (other snapshot, project or image) asks whether to save it, discard it or cancel.
+- **Projects folder**: projects are stored in `projets/` next to the application (another place:
+  environment variable `OVERSPRAYLAB_PROJECTS`), one folder per project:
+  `original.<ext>` (the source image, never reduced, stored once) and `snapshots/v0`, `v1`… (settings,
+  masks, the reduced image when the snapshot works on one, a thumbnail and the computed result).
+  The folder is created by the first snapshot or the first export.
+- **Re-open a project**: *Open a project…* lists the saved projects (opened at their last snapshot),
+  and *Open a file (zip or infos.json)…* (or drop the file on the image box) reads an export:
+  - the **.zip** restores everything: image, masks, settings, crop, colours – then recomputes; a zip
+    that holds its project folder is added to the projects folder (the snapshots it lacks are added
+    to a project already there) and opens at the snapshot it was exported from, without computing;
   - the **infos.json** alone (or the `…_infos.json` of an earlier export) applies the settings to the loaded image (or to the next one you load);
   - the **colour palette** applied to the layers comes back too; if it is not in *My palettes* on
     this computer (or differs from the one of the same name), it is added there.

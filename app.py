@@ -20,7 +20,8 @@ from overspraylab import pipeline as pl
 from overspraylab import effects as fxmod
 from overspraylab import semantic
 from overspraylab import teed
-from overspraylab.svg_export import export_zip
+from overspraylab import projects
+from overspraylab.svg_export import _LANG, export_zip, project_files
 
 ROOT = Path(__file__).parent
 MATERIALS_FILE = ROOT / "overspraylab" / "materials.json"
@@ -170,13 +171,17 @@ def api_upload():
     return jsonify(new_session(img, raw, f.filename or "image"))
 
 
-def new_session(img: np.ndarray, raw: bytes, filename: str) -> dict:
-    """Creates a session; the original file is kept as is for the project export."""
+def new_session(img: np.ndarray, raw: bytes, filename: str, original: tuple[bytes, str] | None = None) -> dict:
+    """Creates a session; the original file is kept as is for the project export.
+    `original`: (bytes, extension) of the source image when `raw` is a reduced version of it."""
     sid = uuid.uuid4().hex
+    ext = Path(filename).suffix.lower() or ".png"
     with LOCK:
         SESSIONS[sid] = {"img": img, "name": Path(filename).stem, "raw": raw,
-                         "filename": Path(filename).name,
-                         "ext": (Path(filename).suffix.lower() or ".png")}
+                         "filename": Path(filename).name, "ext": ext,
+                         # source image as loaded, never reduced (project folder)
+                         "orig_raw": original[0] if original else raw, "orig_ext": original[1] if original else ext,
+                         "reduced": original is not None}
     h, w = img.shape[:2]
     return dict(id=sid, width=w, height=h, gray=pl.is_grayscale(img), original=png_b64(img),
                 filename=Path(filename).name, project_name=Path(filename).stem)
@@ -224,6 +229,7 @@ def api_downscale():
         jpeg = sess.get("ext") in (".jpg", ".jpeg")
         ok, buf = cv2.imencode(".jpg" if jpeg else ".png", img, [cv2.IMWRITE_JPEG_QUALITY, 95] if jpeg else [])
         sess["raw"], sess["ext"] = buf.tobytes(), (sess["ext"] if jpeg else ".png")
+        sess["reduced"] = True           # the source image itself stays in sess["orig_raw"]
     return jsonify(width=w, height=h, original=png_b64(img))
 
 
@@ -343,7 +349,12 @@ def set_subject(sess, painted, exact: bool = False) -> dict:
         sess["fg"] = (painted > 0) if exact else pl.grabcut_subject(sess["img"], painted)
     sess["subject_exact"] = exact
     sess["fg_ver"] = sess.get("fg_ver", 0) + 1
-    fg = sess.get("fg")
+    return subject_info(sess)
+
+
+def subject_info(sess) -> dict:
+    """State of the subject mask and its cut-out, for the browser."""
+    painted, fg, exact = sess.get("subject"), sess.get("fg"), bool(sess.get("subject_exact"))
     return dict(coverage=round(100 * float((painted > 0).mean()), 1) if sess.get("subject") is not None else 0.0,
                 subject_pct=round(100 * float(fg.mean()), 1) if fg is not None else None, exact=exact,
                 overlay=subject_overlay(sess))
@@ -643,7 +654,7 @@ def api_process():
     ref = on_support(res.prepared.raw if res.prepared.raw is not None else res.prepared.resized)
     pre_on = pl.preprocess_active(p) or res.prepared.fg is not None
     sheet_sim = pl.simulate_sheet(res)
-    return jsonify(
+    out = dict(
         reference=png_b64(ref),
         # where the computed image area is in the preview images (fractions of the preview) and
         # which part of the source image it shows (fractions of the source): the Masks tab draws
@@ -678,6 +689,8 @@ def api_process():
         recolored=recolored,     # colours only: the cut of the previous computation was kept
         seconds=round(time.perf_counter() - t0, 2),
     )
+    sess["last_out"] = out       # answer kept for the snapshots (shown again without computing)
+    return jsonify(out)
 
 
 @app.post("/api/outline_preview")
@@ -759,49 +772,122 @@ def api_palette():
     return jsonify(ok=True)
 
 
+def png_bytes(m: np.ndarray) -> bytes:
+    ok, buf = cv2.imencode(".png", m)
+    return buf.tobytes()
+
+
+def project_args(sess) -> dict:
+    """Painted masks and interface state of the session, as `project_files` arguments."""
+    def one(k):
+        return png_bytes(sess[k]) if sess.get(k) is not None else None
+    return dict(mask_png=one("mask"), subject_png=one("subject"), sil_png=one("silmask"), flat_png=one("flatmask"),
+                flat_force_pngs={zid: png_bytes(m) for zid, m in (sess.get("flatforce") or {}).items()},
+                zone_pngs={zid: png_bytes(m) for zid, m in (sess.get("zmasks") or {}).items()},
+                ui=sess.get("ui"), subject_exact=bool(sess.get("subject_exact")), image_name=sess.get("filename"))
+
+
+def req_lang(v) -> str:
+    return "fr" if v == "fr" else "en"
+
+
 @app.get("/api/export/<sid>")
 def api_export(sid):
     sess = SESSIONS.get(sid)
     if not sess or "result" not in sess:
         return jsonify(error="Rien à exporter"), 404
-    mask_png = None
-    if sess.get("mask") is not None:
-        ok, buf = cv2.imencode(".png", sess["mask"])
-        mask_png = buf.tobytes()
-    subject_png = None
-    if sess.get("subject") is not None:
-        ok, buf = cv2.imencode(".png", sess["subject"])
-        subject_png = buf.tobytes()
-    sil_png = None
-    if sess.get("silmask") is not None:
-        ok, buf = cv2.imencode(".png", sess["silmask"])
-        sil_png = buf.tobytes()
-    flat_png = None
-    if sess.get("flatmask") is not None:
-        ok, buf = cv2.imencode(".png", sess["flatmask"])
-        flat_png = buf.tobytes()
-    flat_force_pngs = {}
-    for zid, m in (sess.get("flatforce") or {}).items():
-        ok, buf = cv2.imencode(".png", m)
-        flat_force_pngs[zid] = buf.tobytes()
-    zone_pngs = {}
-    for zid, m in (sess.get("zmasks") or {}).items():
-        ok, buf = cv2.imencode(".png", m)
-        zone_pngs[zid] = buf.tobytes()
-    lang = "fr" if request.args.get("lang") == "fr" else "en"
     name = project_name(request.args.get("name"), sess["name"])
-    data = export_zip(sess["result"], sess.get("material"), name, image_name=sess.get("filename"),
-                      original=(sess.get("raw"), sess.get("ext", ".png")), mask_png=mask_png,
-                      ui=sess.get("ui"), subject_png=subject_png, sil_png=sil_png, lang=lang,
-                      subject_exact=bool(sess.get("subject_exact")), zone_pngs=zone_pngs,
-                      flat_png=flat_png, flat_force_pngs=flat_force_pngs)
+    d = sess.get("proj_dir")
+    folder = projects.folder_files(d) if d and d.is_dir() else None
+    data = export_zip(sess["result"], sess.get("material"), name, lang=req_lang(request.args.get("lang")),
+                      original=(sess.get("raw"), sess.get("ext", ".png")), folder=folder,
+                      extra={"snapshot": sess.get("snap")} if folder else None, **project_args(sess))
     return send_file(io.BytesIO(data), mimetype="application/zip", as_attachment=True,
                      download_name=name.replace(" ", "_") + ".zip")
 
 
+def restore_session(info: dict, read, image: tuple[bytes, str], original: tuple[bytes, str] | None = None,
+                    dump: dict | None = None):
+    """New session from a saved project (export zip or snapshot folder).
+    read(name) -> bytes | None reads a file of the project; image = (bytes, file name) of the working
+    image; original = (bytes, extension) of the source image when the working image is a reduced one;
+    dump = session dump of a snapshot (computed result, caches), used as is when given.
+    Returns the answer for the browser, or (error message, status)."""
+    proj = info.get("projet") or {}
+    try:
+        img = pl.decode_image(image[0])
+    except ValueError as e:
+        return str(e), 400
+    out = new_session(img, image[0], image[1], original)
+    sess = SESSIONS[out["id"]]
+    out["project_name"] = project_name(proj.get("nom"), sess["name"])
+    h, w = img.shape[:2]
+
+    def load(name):
+        """Painted mask (full image size, 0 / 255), or None."""
+        data = read(name) if isinstance(name, str) and name else None
+        if not data:
+            return None
+        m = cv2.imdecode(np.frombuffer(data, np.uint8), cv2.IMREAD_GRAYSCALE)
+        if m is None or not m.any():
+            return None
+        return np.where(cv2.resize(m, (w, h), interpolation=cv2.INTER_NEAREST) > 127, 255, 0).astype(np.uint8)
+
+    def b64(m):
+        return "data:image/png;base64," + base64.b64encode(png_bytes(m)).decode()
+
+    def cov(m):
+        return round(100 * float((m > 0).mean()), 1)
+
+    def single(entry, key):
+        m = load(proj.get(entry))
+        if m is None:
+            return None, 0.0
+        sess[key] = m
+        return b64(m), cov(m)
+
+    mask_b64, coverage = single("masque", "mask")
+    sil_b64, sil_coverage = single("masque_silhouette", "silmask")
+    flat_b64, flat_coverage = single("masque_aplats", "flatmask")
+    zones, flat_layers = {}, {}
+    for entry, pattern, key, dest in (("masques_zones", ZONE_ID, "zmasks", zones),
+                                      ("masques_aplats_couches", FLAT_ID, "flatforce", flat_layers)):
+        for zid, z_name in (proj.get(entry) or {}).items():
+            if not (isinstance(zid, str) and pattern.match(zid)):
+                continue
+            m = load(z_name)
+            if m is not None:
+                sess.setdefault(key, {})[zid] = m
+                dest[zid] = {"png": b64(m), "coverage": cov(m)}
+    subject = None
+    m = load(proj.get("masque_sujet"))
+    if dump:
+        # computed state of the snapshot: masks, cut-out, preparation, result, caches. Its masks
+        # are the same as the files' (same snapshot) and replace them so that the "same geometry"
+        # test of the next computation (identity of the masks) still holds.
+        sess.update(dump)
+    if m is not None:
+        subject = (subject_info(sess) if dump and sess.get("subject") is not None
+                   else set_subject(sess, m, bool(proj.get("masque_sujet_exact"))))
+        subject["png"] = b64(m)
+    return {**out, "info": info, "mask": mask_b64, "mask_coverage": coverage, "subject": subject,
+            "zone_masks": zones,
+            "silmask": sil_b64, "silmask_coverage": sil_coverage,
+            "flatmask": flat_b64, "flatmask_coverage": flat_coverage, "flat_layer_masks": flat_layers}
+
+
+def answer(out):
+    """JSON answer of restore_session / open_snapshot (or its error)."""
+    if isinstance(out, tuple):
+        return jsonify(error=out[0]), out[1]
+    return jsonify(out)
+
+
 @app.post("/api/project")
 def api_project():
-    """Opens an exported project (.zip): original image, masks and full settings."""
+    """Opens an exported project (.zip): original image, masks and full settings. A zip that carries
+    its project folder (snapshots) is put into the projects folder and opened at its current
+    snapshot."""
     f = request.files.get("project")
     if not f:
         return jsonify(error="Aucun fichier reçu"), 400
@@ -810,83 +896,168 @@ def api_project():
     except zipfile.BadZipFile:
         return jsonify(error="Ce fichier n'est pas un zip de projet OversprayLab"), 400
     names = z.namelist()
-    # infos.json (files without prefix), or …_infos.json (exports of earlier versions)
-    info_name = next((n for n in names if n.rsplit("/", 1)[-1] == "infos.json"), None) \
-        or next((n for n in names if n.endswith("_infos.json")), None)
+    # infos.json (files without prefix), or …_infos.json (exports of earlier versions); not those
+    # of the snapshots in the project folder ("projet/")
+    top = [n for n in names if not n.startswith("projet/")]
+    info_name = next((n for n in top if n.rsplit("/", 1)[-1] == "infos.json"), None) \
+        or next((n for n in top if n.endswith("_infos.json")), None)
     if not info_name:
         return jsonify(error="Fichier infos.json introuvable dans le zip"), 400
     info = json.loads(z.read(info_name).decode("utf-8"))
     proj = info.get("projet") or {}
+    if "projet/" + projects.PROJECT_FILE in names:
+        folder = {n[len("projet/"):]: z.read(n) for n in names if n.startswith("projet/") and not n.endswith("/")}
+        try:
+            with LOCK:
+                d, mapping = projects.import_folder(folder)
+        except (projects.ProjectError, ValueError, KeyError, OSError) as e:
+            return jsonify(error=f"Dossier de projet illisible : {e}"), 400
+        snap = mapping.get(proj.get("snapshot")) or (projects.snap_ids(d) or [None])[-1]
+        if snap:
+            return answer(open_snapshot(d, snap))
     img_name = proj.get("image")
     if not img_name or img_name not in names:
         return jsonify(error="Ce zip ne contient pas l'image d'origine (export d'une version "
                              "antérieure) : chargez l'image puis ouvrez le fichier infos.json"), 400
-    raw = z.read(img_name)
-    try:
-        img = pl.decode_image(raw)
-    except ValueError as e:
-        return jsonify(error=str(e)), 400
     # earlier versions: no "nom_image", the image is "<image name>_original.<ext>"
-    out = new_session(img, raw, proj.get("nom_image") or re.sub(r"_original(?=\.[^.]+$)", "", img_name))
+    image_name = proj.get("nom_image") or re.sub(r"_original(?=\.[^.]+$)", "", img_name)
+    out = restore_session(info, lambda n: z.read(n) if n in names else None, (z.read(img_name), image_name))
+    if not isinstance(out, tuple):
+        out["project"] = project_state(None, None)
+    return answer(out)
+
+
+# ---------------- Project folders and snapshots ----------------
+def project_state(d, snap) -> dict:
+    """Project folder of the session for the browser: snapshots, current one, next number."""
+    if d is None:
+        return {"dir": None, "snapshots": [], "current": snap, "next": "v0"}
+    return {"dir": d.name, "name": projects.project_info(d).get("nom") or d.name,
+            "snapshots": projects.snapshots(d), "current": snap, "next": projects.next_id(d)}
+
+
+# session entries kept in a snapshot's dump (the image comes from the files)
+SESSION_DUMP = ("mask", "silmask", "subject", "subject_exact", "fg", "fg_ver", "flat_ver", "flatmask", "zmasks",
+                "flatforce", "prep", "prep_key", "result", "geom", "png_cache", "reco", "sem", "material", "ui",
+                "last_out")
+
+
+def open_snapshot(d, snap):
+    """New session on a snapshot: its image, masks and settings, and its computed result when its
+    session dump can be read (shown again without computing)."""
+    try:
+        s = projects.snap_dir(d, snap)
+    except projects.ProjectError as e:
+        return str(e), 404
+    pinfo = projects.project_info(d)
+    try:
+        info = json.loads((s / "infos.json").read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return "Snapshot illisible", 400
+    proj = info.get("projet") or {}
+    orig_name = pinfo.get("image")
+    if not (isinstance(orig_name, str) and "/" not in orig_name and (d / orig_name).is_file()):
+        return "Image d'origine du projet introuvable", 400
+    original = (d / orig_name).read_bytes()
+    image_name = pinfo.get("nom_image") or proj.get("nom_image") or orig_name
+
+    def read(name):
+        p = s / name
+        return p.read_bytes() if "/" not in name and "\\" not in name and p.is_file() else None
+
+    red = proj.get("image")
+    red = read(red) if isinstance(red, str) and red else None      # working image: reduced one
+    dump = projects.read_session(s)
+    if dump is not None:
+        dump = {k: v for k, v in dump.items() if k in SESSION_DUMP}
+    out = restore_session(info, read, (red or original, image_name),
+                          (original, Path(orig_name).suffix.lower()) if red else None, dump)
+    if isinstance(out, tuple):
+        return out
     sess = SESSIONS[out["id"]]
-    out["project_name"] = project_name(proj.get("nom"), sess["name"])
-    def read_mask(entry, key):
-        """Painted mask of the project -> session (full image size) + PNG for the browser."""
-        m_name = proj.get(entry)
-        if not (m_name and m_name in names):
-            return None, 0.0
-        m = cv2.imdecode(np.frombuffer(z.read(m_name), np.uint8), cv2.IMREAD_GRAYSCALE)
-        if m is None or not m.any():
-            return None, 0.0
-        h, w = img.shape[:2]
-        m = cv2.resize(m, (w, h), interpolation=cv2.INTER_NEAREST)
-        sess[key] = np.where(m > 127, 255, 0).astype(np.uint8)
-        ok, buf = cv2.imencode(".png", sess[key])
-        return ("data:image/png;base64," + base64.b64encode(buf.tobytes()).decode(),
-                round(100 * float((sess[key] > 0).mean()), 1))
-    mask_b64, coverage = read_mask("masque", "mask")
-    zones = {}
-    for zid, z_name in (proj.get("masques_zones") or {}).items():
-        if not (isinstance(zid, str) and ZONE_ID.match(zid) and z_name in names):
-            continue
-        m = cv2.imdecode(np.frombuffer(z.read(z_name), np.uint8), cv2.IMREAD_GRAYSCALE)
-        if m is None or not m.any():
-            continue
-        h, w = img.shape[:2]
-        m = np.where(cv2.resize(m, (w, h), interpolation=cv2.INTER_NEAREST) > 127, 255, 0).astype(np.uint8)
-        sess.setdefault("zmasks", {})[zid] = m
-        ok, buf = cv2.imencode(".png", m)
-        zones[zid] = {"png": "data:image/png;base64," + base64.b64encode(buf.tobytes()).decode(),
-                      "coverage": round(100 * float((m > 0).mean()), 1)}
-    sil_b64, sil_coverage = read_mask("masque_silhouette", "silmask")
-    flat_b64, flat_coverage = read_mask("masque_aplats", "flatmask")
-    flat_layers = {}
-    for zid, z_name in (proj.get("masques_aplats_couches") or {}).items():
-        if not (isinstance(zid, str) and FLAT_ID.match(zid) and z_name in names):
-            continue
-        m = cv2.imdecode(np.frombuffer(z.read(z_name), np.uint8), cv2.IMREAD_GRAYSCALE)
-        if m is None or not m.any():
-            continue
-        h, w = img.shape[:2]
-        m = np.where(cv2.resize(m, (w, h), interpolation=cv2.INTER_NEAREST) > 127, 255, 0).astype(np.uint8)
-        sess.setdefault("flatforce", {})[zid] = m
-        ok, buf = cv2.imencode(".png", m)
-        flat_layers[zid] = {"png": "data:image/png;base64," + base64.b64encode(buf.tobytes()).decode(),
-                            "coverage": round(100 * float((m > 0).mean()), 1)}
-    subject = None
-    s_name = proj.get("masque_sujet")
-    if s_name and s_name in names:
-        m = cv2.imdecode(np.frombuffer(z.read(s_name), np.uint8), cv2.IMREAD_GRAYSCALE)
-        if m is not None and m.any():
-            h, w = img.shape[:2]
-            m = np.where(cv2.resize(m, (w, h), interpolation=cv2.INTER_NEAREST) > 127, 255, 0).astype(np.uint8)
-            subject = set_subject(sess, m, bool(proj.get("masque_sujet_exact")))
-            ok, buf = cv2.imencode(".png", m)
-            subject["png"] = "data:image/png;base64," + base64.b64encode(buf.tobytes()).decode()
-    return jsonify({**out, "info": info, "mask": mask_b64, "mask_coverage": coverage, "subject": subject,
-                    "zone_masks": zones,
-                    "silmask": sil_b64, "silmask_coverage": sil_coverage,
-                    "flatmask": flat_b64, "flatmask_coverage": flat_coverage, "flat_layer_masks": flat_layers})
+    sess["proj_dir"], sess["snap"] = d, snap
+    out["computed"] = sess.get("last_out") if dump is not None and sess.get("result") is not None else None
+    out["project"] = project_state(d, snap)
+    return out
+
+
+@app.get("/api/projects")
+def api_projects():
+    return jsonify(projects=projects.list_projects(), folder=str(projects.ROOT))
+
+
+@app.get("/api/projects/<name>")
+def api_project_snapshots(name):
+    try:
+        d = projects.project_dir(name)
+    except projects.ProjectError as e:
+        return jsonify(error=str(e)), 404
+    return jsonify(project_state(d, None))
+
+
+@app.get("/api/projects/<name>/<snap>/thumb.jpg")
+def api_snapshot_thumb(name, snap):
+    try:
+        s = projects.snap_dir(projects.project_dir(name), snap)
+    except projects.ProjectError as e:
+        return jsonify(error=str(e)), 404
+    if not (s / "thumb.jpg").is_file():
+        return jsonify(error="Pas de vignette"), 404
+    return send_file(s / "thumb.jpg", mimetype="image/jpeg", max_age=3600)
+
+
+@app.post("/api/snapshot/open")
+def api_snapshot_open():
+    data = request.get_json(force=True)
+    try:
+        d = projects.project_dir(str(data.get("project", "")))
+    except projects.ProjectError as e:
+        return jsonify(error=str(e)), 404
+    return answer(open_snapshot(d, str(data.get("snap", ""))))
+
+
+@app.post("/api/snapshot")
+def api_snapshot():
+    """Saves the current version of the session as a new snapshot of its project folder (created
+    with the first snapshot). The session must hold an up-to-date computation."""
+    data = request.get_json(force=True)
+    sess = SESSIONS.get(data.get("id", ""))
+    if not sess:
+        return jsonify(error="Session inconnue, rechargez l'image"), 404
+    res = sess.get("result")
+    if res is None:
+        return jsonify(error="Snapshot : lancez d'abord un calcul"), 409
+    if isinstance(data.get("ui"), dict):
+        sess["ui"] = data["ui"]          # view options and palette may have changed since the computation
+    name = project_name(data.get("name"), sess["name"])
+    label = re.sub(r"[\x00-\x1f]+", " ", str(data.get("label") or "")).strip()[:80]
+    with LOCK:
+        d = sess.get("proj_dir")
+        if d is None or not d.is_dir():
+            d = projects.create_project(name, sess["orig_raw"], sess["orig_ext"], sess.get("filename"))
+            sess["proj_dir"] = d
+        else:
+            projects.rename_project(d, name)
+    token = _LANG.set(req_lang(data.get("lang")))
+    try:
+        files = project_files(res, sess.get("material"), name, image_file="reduite",
+                              original=(sess["raw"], sess["ext"]) if sess.get("reduced") else None,
+                              **project_args(sess))
+    finally:
+        _LANG.reset(token)
+    sim = pl.simulate(res)
+    k = min(1.0, 360 / max(sim.shape[:2]))
+    small = cv2.resize(sim, (max(1, round(sim.shape[1] * k)), max(1, round(sim.shape[0] * k))),
+                       interpolation=cv2.INTER_AREA)
+    ok, thumb = cv2.imencode(".jpg", small, [cv2.IMWRITE_JPEG_QUALITY, 85])
+    h, w = sess["img"].shape[:2]
+    last = sess.get("last_out") or {}
+    meta = {"libelle": label, "date": projects.now(), "delta_e": last.get("delta_e"), "pochoirs": len(res.layers),
+            "image_reduite": bool(sess.get("reduced")), "taille_image": [w, h]}
+    dump = {k: sess[k] for k in SESSION_DUMP if k in sess}
+    snap = projects.write_snapshot(d, files, meta, thumb.tobytes(), dump)
+    sess["snap"] = snap
+    return jsonify({**project_state(d, snap), "snap": snap})
 
 
 if __name__ == "__main__":

@@ -197,6 +197,42 @@
              background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 8px 12px 10px;
              box-shadow: 0 10px 28px rgba(0,0,0,.4); font-size: 13px; }
   .prefpop h4 { margin: 4px 0 6px; font-size: 13px; }
+  /* Snapshots (bar under the view), saved projects (pop-up of "Open a project…"), leave dialog */
+  .snapbar { margin-top: 8px; border: 1px solid var(--line); border-radius: 10px; background: var(--panel); padding: 6px 8px; }
+  .snaphead { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; font-size: 12px; }
+  .snaphead b { font-size: 12px; margin-right: 4px; }
+  .snaphead input { flex: 1 1 140px; min-width: 0; max-width: 260px; padding: 4px 6px; border: 1px solid var(--line);
+                    border-radius: 6px; background: var(--soft); color: var(--ink); font: inherit; }
+  .snaplist { display: flex; gap: 6px; overflow-x: auto; padding: 6px 0 2px; }
+  .snap { flex: none; display: grid; grid-template-columns: auto; justify-items: center; gap: 1px; width: 96px; padding: 4px;
+          border: 1px solid var(--line); border-radius: 8px; background: var(--soft); color: var(--ink); cursor: pointer; font-size: 11px; }
+  button.snap:hover { border-color: var(--accent); }
+  .snap.cur { border: 2px solid var(--accent); padding: 3px; cursor: default; }
+  .snap.unsaved { border-style: dashed; }
+  .snap img, .snap .nothumb, .projitem img, .projitem .nothumb { width: 84px; height: 60px; object-fit: contain; border-radius: 4px;
+          background: var(--panel); display: flex; align-items: center; justify-content: center; color: var(--accent); }
+  .snap .sid { font-weight: 600; }
+  .snap .slabel { max-width: 88px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--ink); }
+  .snap .sdate { color: var(--muted); }
+  .projpop { position: fixed; z-index: 60; width: 340px; max-width: calc(100vw - 24px); max-height: 70vh; overflow-y: auto;
+             background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 8px 10px 10px;
+             box-shadow: 0 10px 28px rgba(0,0,0,.4); font-size: 13px; }
+  .projpop h4 { margin: 4px 0 6px; font-size: 13px; }
+  .projlist { display: grid; gap: 4px; margin-bottom: 8px; }
+  .projitem { display: grid; grid-template-columns: 84px 1fr; grid-template-rows: auto auto; column-gap: 8px; text-align: left;
+              padding: 4px; border: 1px solid var(--line); border-radius: 8px; background: var(--soft); color: var(--ink); cursor: pointer; }
+  .projitem:hover, .projitem:focus-visible { border-color: var(--accent); }
+  .projitem img, .projitem .nothumb { grid-row: 1 / 3; }
+  .projitem .pname { font-weight: 600; align-self: end; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .projitem .pmeta { color: var(--muted); font-size: 12px; }
+  .projpop .folder { word-break: break-all; }
+  .modalback { position: fixed; inset: 0; z-index: 80; background: rgba(0,0,0,.45); display: flex; align-items: center; justify-content: center; }
+  .modalback[hidden] { display: none; }
+  .modal { width: 380px; max-width: calc(100vw - 32px); background: var(--panel); color: var(--ink); border: 1px solid var(--line);
+           border-radius: 12px; padding: 14px 16px; box-shadow: 0 16px 40px rgba(0,0,0,.45); }
+  .modal h4 { margin: 0 0 6px; font-size: 14px; }
+  .modal p { margin: 0 0 12px; font-size: 13px; color: var(--muted); }
+  .modal .btns { display: flex; flex-wrap: wrap; gap: 6px; justify-content: flex-end; }
   .colorpop { position: fixed; z-index: 60; width: 236px; background: var(--panel); border: 1px solid var(--line); border-radius: 10px;
               padding: 8px 10px 10px; box-shadow: 0 10px 28px rgba(0,0,0,.4); font-size: 12px; }
   .colorpop h4 { margin: 6px 0 4px; font-size: 11px; font-weight: 500; color: var(--muted); }
@@ -521,6 +557,23 @@
   <p class="hint">Décoché : seuls restent les états (tient sur le tapis, sujet peint…).</p>
   <div class="check"><input type="checkbox" id="show_tips" checked><label for="show_tips">Afficher les infobulles au survol</label></div>
 </div>
+<div class="projpop" id="projPop" role="dialog" aria-label="Projets enregistrés" hidden>
+  <h4>Projets enregistrés</h4>
+  <div class="projlist" id="projList"></div>
+  <button type="button" id="projFileBtn" title="Zip exporté par OversprayLab (image, masques, réglages et snapshots), ou seulement son fichier infos.json (réglages appliqués à l'image chargée)">Ouvrir un fichier (zip ou infos.json)…</button>
+  <p class="hint"><span>Dossier des projets :</span> <span class="folder" id="projFolder" data-noi18n></span></p>
+</div>
+<div class="modalback" id="leaveAsk" hidden>
+  <div class="modal" role="alertdialog" aria-modal="true" aria-labelledby="leaveTitle" aria-describedby="leaveText">
+    <h4 id="leaveTitle">La version courante n'est pas enregistrée</h4>
+    <p id="leaveText">Ses modifications seront perdues si vous la quittez sans créer de snapshot.</p>
+    <div class="btns">
+      <button type="button" data-a="cancel">Annuler</button>
+      <button type="button" data-a="drop">Abandonner les modifications</button>
+      <button type="button" class="primary" data-a="save">Créer la snapshot</button>
+    </div>
+  </div>
+</div>
 <div class="colorpop" id="colorPop" role="dialog" aria-label="Couleur de la couche" hidden></div>
 <div class="paledit" id="palEdit" role="dialog" aria-label="Éditeur de palette" hidden></div>
 <div class="colorpop" id="pickPop" role="dialog" aria-label="Choix de la couleur" hidden></div>
@@ -534,8 +587,8 @@
     <input type="file" id="file" accept="image/*" hidden>
   </div>
   <div class="projbar">
-    <button type="button" id="openProject" title="Rouvrir un zip exporté par OversprayLab (image, masque et tous les réglages), ou seulement son fichier infos.json">Ouvrir un projet…</button>
-    <button type="button" class="primary" id="export" disabled title="Pochoirs SVG + projet rechargeable (image d'origine, masque, réglages)">Exporter le projet</button>
+    <button type="button" id="openProject" aria-haspopup="dialog" aria-expanded="false" aria-controls="projPop" title="Rouvrir un projet enregistré (dossier des projets) à une de ses snapshots, ou un zip exporté par OversprayLab, ou seulement son fichier infos.json">Ouvrir un projet…</button>
+    <button type="button" class="primary" id="export" disabled title="Pochoirs SVG + projet rechargeable (image d'origine, masques, réglages et snapshots). Une version courante non enregistrée devient d'abord une snapshot.">Exporter le projet</button>
     <button type="button" id="resetAll" title="Rétablit tous les réglages par défaut ; l'image chargée et ses masques sont conservés, ainsi que les réglages enregistrés">Réglages par défaut</button>
     <input type="file" id="projectFile" accept=".zip,.json,application/zip,application/json" hidden>
   </div>
@@ -1329,6 +1382,14 @@
   </div>
   <div class="stage" id="stage"><div class="empty">Aucune image chargée.</div></div>
   <input type="range" id="compareRange" min="0" max="100" value="50" aria-label="Position de la comparaison" hidden>
+  <div class="snapbar" id="snapBar" hidden>
+    <div class="snaphead">
+      <b>Snapshots</b>
+      <input type="text" id="snapLabel" maxlength="80" placeholder="Libellé (facultatif)" aria-label="Libellé de la snapshot">
+      <button type="button" id="snapBtn" title="Enregistre la version courante (image, masques, réglages et résultat calculé) comme nouvelle snapshot dans le dossier du projet ; une snapshot ne change plus ensuite">Créer une snapshot</button>
+    </div>
+    <div class="snaplist" id="snapList"></div>
+  </div>
   <details class="foldbox warnbox" id="warnBox" hidden>
     <summary id="warnSum"></summary>
     <div id="warnings"></div>
@@ -3472,12 +3533,15 @@ async function init() {
     const f = e.dataTransfer.files[0];
     if (f) (/\.(zip|json)$/i.test(f.name) ? openProject(f) : upload(f));
   };
-  $("openProject").onclick = () => $("projectFile").click();
+  setupProjects();
   $("projectFile").onchange = e => { const f = e.target.files[0]; e.target.value = ""; f && openProject(f); };
 
   $("tabs").querySelectorAll("button[data-v]").forEach(b => b.onclick = () => { VIEW = b.dataset.v; SEL = null; render(); });
   $("export").onclick = async () => {
     if (!SID) return;
+    // a current version not saved yet becomes a snapshot first (the first export of a project
+    // creates its folder and its snapshot v0)
+    if (!isSaved() && !(await createSnapshot())) return;
     try {      // the palette shown can change without a new computation: sent just before the export
       await fetch("/api/palette", { method: "POST", headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ id: SID, palette: projectPalette() }) });
@@ -3533,6 +3597,7 @@ function setupPrefs() {
   document.addEventListener("keydown", e => { if (e.key === "Escape" && !pop.hidden) { show(false); btn.focus(); } });
 }
 async function upload(file) {
+  if (!(await leaveOk())) return;
   status("Chargement…");
   const fd = new FormData(); fd.append("image", file);
   const r = await fetch("/api/upload", { method: "POST", body: fd });
@@ -3589,6 +3654,7 @@ function setupProjectName() {
 }
 function setSession(j, name) {
   SID = j.id; RENDER_WARNS = [];   // warnings of the former image dropped
+  PROJ = { dir: null, snapshots: [], current: null, next: "v0" }; SNAP_KEY = null; CALC_KEY = null;
   IMG_FILE = String(j.filename || name || "");
   PROJECT_DEFAULT = IMG_FILE.replace(/\.[^.]+$/, "") || "projet";
   PROJECT_NAME = j.project_name || PROJECT_DEFAULT;
@@ -3675,7 +3741,7 @@ function applyProjectSettings(info) {
   ((ui && ui.hidden_layers) || []).forEach(i => HIDDEN.add(i));
   $("outline_color").disabled = $("outline_auto_color").checked;
   showValues(); cutInfo(); regHint(); cropInfo(); syncWidth(); updateSummaries(); renderOutlineSwatches();
-  restoreProjectPalette(ui && ui.palette);
+  return restoreProjectPalette(ui && ui.palette);
 }
 function loadMaskImage(src, coverage, kind = "outline:z1") {
   if (kind === "outline") kind = "outline:z1";
@@ -3720,6 +3786,7 @@ async function openProject(file) {
     }
     return;
   }
+  if (!(await leaveOk())) return;
   status("Ouverture du projet…");
   const fd = new FormData(); fd.append("project", file);
   let j;
@@ -3728,9 +3795,15 @@ async function openProject(file) {
     j = await r.json();
     if (!r.ok) return status(j.error || "Projet illisible", true);
   } catch (e) { return status("Serveur injoignable : " + e.message, true); }
+  await applyOpened(j, `${file.name} (projet)`);
+  status(`Projet ouvert : ${file.name}`);
+}
+// Session opened from a project (zip or snapshot): image, settings, masks; the computed result of
+// a snapshot is shown as it was (no computation), otherwise it is computed.
+async function applyOpened(j, name) {
   PENDING_PROJECT = null;
-  setSession(j, `${file.name} (projet)`);
-  applyProjectSettings(j.info);
+  setSession(j, name);
+  await applyProjectSettings(j.info);
   if (j.mask) await loadMaskImage(j.mask, j.mask_coverage, "outline:z1");
   for (const [zid, m] of Object.entries(j.zone_masks || {})) await loadMaskImage(m.png, m.coverage, zkey(zid));
   zoneActivate(ZONE_CUR);
@@ -3742,10 +3815,150 @@ async function openProject(file) {
   if (j.silmask) await loadMaskImage(j.silmask, j.silmask_coverage, "silhouette");
   if (j.flatmask) await loadMaskImage(j.flatmask, j.flatmask_coverage, "flat:auto");
   for (const [fid, m] of Object.entries(j.flat_layer_masks || {})) await loadMaskImage(m.png, m.coverage, "flat:" + fid);
-  status(`Projet ouvert : ${file.name}`);
+  PROJ = j.project || PROJ;
   render();
   await recommend(false);
-  process();
+  if (j.computed) {
+    historyRecord();
+    j.computed.sid = SID; IMG_CACHE = new Map(); LAST = j.computed; DIRTY = false; CALC_KEY = snapKey();
+    render(); updateSummaries(); updateCalcBtn(); $("export").disabled = false;
+  } else process();
+  SNAP_KEY = PROJ.current ? snapKey() : null;
+  renderSnaps();
+}
+
+// ---------------- Snapshots: saved versions of the project ----------------
+// The current version lives in memory, as always. "Create a snapshot" writes it into the project
+// folder (projets/<name>/snapshots/v<n>, the folder is created with the first snapshot or the first
+// export); a snapshot never changes afterwards. Opening one restores its image, masks, settings and
+// computed result, without computing. SNAP_KEY = state of the current version when it was saved or
+// opened (null: never saved): as soon as the state differs, the current version is a new one (next
+// number), saved by the next snapshot or export. CALC_KEY = state of the last computation.
+let PROJ = { dir: null, snapshots: [], current: null, next: "v0" }, SNAP_KEY = null, CALC_KEY = null, SNAP_BUSY = false;
+const VIEW_ONLY = ["preview_sim", "show_support", "show_mat", "show_stock", "show_reg"];   // display options: not a change
+function snapKey() {
+  const s = historySnap();
+  VIEW_ONLY.forEach(k => delete s.values[k]);
+  return JSON.stringify([s.values, s.crop, s.pal, s.masks, IMG && IMG.w, IMG && IMG.h]);
+}
+const isSaved = () => !!(SID && PROJ.current && SNAP_KEY !== null && SNAP_KEY === snapKey());
+function snapDate(d) {
+  if (!d) return "";
+  const t = new Date(d);
+  if (isNaN(t)) return "";
+  return t.toLocaleString(I18N.lang === "fr" ? "fr-FR" : "en-GB", { day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" });
+}
+const thumbUrl = (dir, snap) => `/api/projects/${encodeURIComponent(dir)}/${snap}/thumb.jpg`;
+function renderSnaps() {
+  const bar = $("snapBar");
+  if (!bar) return;
+  bar.hidden = !SID;
+  if (!SID) return;
+  const saved = isSaved();
+  const items = PROJ.snapshots.map(s => {
+    const cur = saved && s.id === PROJ.current;
+    return `<${cur ? "div" : "button type=\"button\""} class="snap${cur ? " cur" : ""}" data-snap="${s.id}"
+      title="${cur ? "Version courante" : "Ouvrir cette snapshot : image, masques, réglages et résultat, sans recalcul"}">
+      ${s.thumb ? `<img src="${thumbUrl(PROJ.dir, s.id)}" alt="">` : `<span class="nothumb"></span>`}
+      <span class="sid">${s.id}</span><span class="slabel" data-noi18n>${escH(s.label || "")}</span>
+      <span class="sdate">${snapDate(s.date)}</span></${cur ? "div" : "button"}>`;
+  });
+  if (!saved) items.push(`<div class="snap cur unsaved" title="Version courante, pas encore enregistrée : la prochaine snapshot ou le prochain export l'enregistre">
+      <span class="nothumb">●</span><span class="sid">${PROJ.next}</span><span class="slabel">non enregistrée</span><span class="sdate"></span></div>`);
+  $("snapList").innerHTML = items.join("");
+  $("snapBtn").disabled = saved || SNAP_BUSY;
+  const cur = $("snapList").querySelector(".cur");
+  if (cur) cur.scrollIntoView({ block: "nearest", inline: "nearest" });
+}
+// Computation up to date with the current state (waits for the one running); false if it failed
+async function settle() {
+  const sid = SID, wait = async () => { while (busy) await new Promise(ok => setTimeout(ok, 100)); };
+  await wait();
+  if (SID !== sid) return false;
+  if (DIRTY || !LAST || LAST.sid !== SID || CALC_KEY !== snapKey()) {
+    clearTimeout(timer);
+    await process();
+    await wait();
+  }
+  return SID === sid && !!LAST && LAST.sid === SID && !DIRTY;
+}
+async function createSnapshot() {
+  if (!SID || SNAP_BUSY) return false;
+  SNAP_BUSY = true; renderSnaps();
+  try {
+    if (!(await settle())) { status("Snapshot impossible : le calcul n'a pas abouti", true); return false; }
+    const r = await fetch("/api/snapshot", { method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ id: SID, name: PROJECT_NAME, label: $("snapLabel").value.trim(), ui: uiState(), lang: I18N.lang }) });
+    const j = await r.json();
+    if (!r.ok) { status(j.error || "Snapshot impossible", true); return false; }
+    PROJ = j; SNAP_KEY = snapKey(); $("snapLabel").value = "";
+    status(`Snapshot ${j.snap} enregistrée`);
+    return true;
+  } catch (e) { status("Serveur injoignable : " + e.message, true); return false; }
+  finally { SNAP_BUSY = false; renderSnaps(); }
+}
+// Leaving the current version (another snapshot, project or image): when it belongs to a project
+// folder and is not saved, asks whether to save it first. true = go on.
+function askLeave() {
+  const back = $("leaveAsk");
+  return new Promise(done => {
+    const end = a => { back.hidden = true; back.onclick = null; document.removeEventListener("keydown", key, true); done(a); };
+    const key = e => { if (e.key === "Escape") { e.preventDefault(); e.stopPropagation(); end("cancel"); } };
+    back.onclick = e => { const b = e.target.closest("button[data-a]"); if (b) end(b.dataset.a); else if (e.target === back) end("cancel"); };
+    document.addEventListener("keydown", key, true);
+    back.hidden = false;
+    back.querySelector("[data-a=save]").focus();
+  });
+}
+async function leaveOk() {
+  if (!SID || !PROJ.dir || isSaved()) return true;
+  const a = await askLeave();
+  return a === "save" ? await createSnapshot() : a === "drop";
+}
+async function openSnapshot(dir, snap) {
+  if (!(await leaveOk())) return;
+  status("Ouverture de la snapshot…");
+  let j;
+  try {
+    const r = await fetch("/api/snapshot/open", { method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ project: dir, snap }) });
+    j = await r.json();
+    if (!r.ok) return status(j.error || "Snapshot illisible", true);
+  } catch (e) { return status("Serveur injoignable : " + e.message, true); }
+  await applyOpened(j, j.filename);
+  status(j.computed ? `Snapshot ${snap} ouverte` : `Snapshot ${snap} ouverte (recalculée)`);
+}
+async function showProjects() {
+  const pop = $("projPop"), btn = $("openProject"), list = $("projList");
+  const r = btn.getBoundingClientRect();
+  pop.style.left = Math.max(8, Math.min(r.left, innerWidth - 350)) + "px"; pop.style.top = (r.bottom + 6) + "px";
+  pop.hidden = false; btn.setAttribute("aria-expanded", "true");
+  list.innerHTML = `<p class="hint">Chargement…</p>`;
+  let j;
+  try { j = await (await fetch("/api/projects")).json(); } catch (e) { list.innerHTML = `<p class="hint">Serveur injoignable</p>`; return; }
+  $("projFolder").textContent = j.folder || "";
+  const ps = (j.projects || []).filter(p => p.last);
+  list.innerHTML = ps.length ? ps.map(p => `<button type="button" class="projitem" data-dir="${escH(p.dir)}" data-snap="${p.last}">
+      ${p.thumb ? `<img src="${thumbUrl(p.dir, p.last)}" alt="">` : `<span class="nothumb"></span>`}
+      <span class="pname" data-noi18n>${escH(p.name)}</span>
+      <span class="pmeta">${p.count} snapshot${p.count > 1 ? "s" : ""} · ${snapDate(p.date)}</span></button>`).join("")
+    : `<p class="hint">Aucun projet enregistré : la première snapshot (ou le premier export) d'un projet le crée ici.</p>`;
+  list.querySelectorAll(".projitem").forEach(b => b.onclick = () => { hideProjects(); openSnapshot(b.dataset.dir, b.dataset.snap); });
+  const first = list.querySelector(".projitem"); if (first) first.focus();
+}
+function hideProjects() { $("projPop").hidden = true; $("openProject").setAttribute("aria-expanded", "false"); }
+function setupProjects() {
+  const btn = $("openProject"), pop = $("projPop");
+  btn.onclick = e => { e.stopPropagation(); pop.hidden ? showProjects() : hideProjects(); };
+  $("projFileBtn").onclick = () => { hideProjects(); $("projectFile").click(); };
+  document.addEventListener("pointerdown", e => { if (!pop.hidden && !pop.contains(e.target) && e.target !== btn) hideProjects(); });
+  document.addEventListener("keydown", e => { if (e.key === "Escape" && !pop.hidden) { hideProjects(); btn.focus(); } });
+  $("snapBtn").onclick = () => createSnapshot();
+  $("snapLabel").addEventListener("keydown", e => { if (e.key === "Enter") { e.preventDefault(); createSnapshot(); } });
+  $("snapList").addEventListener("click", e => {
+    const b = e.target.closest("button[data-snap]");
+    if (b && PROJ.dir) openSnapshot(PROJ.dir, b.dataset.snap);
+  });
 }
 
 let RECO = null;
@@ -3826,6 +4039,7 @@ function historyRecord() {
 }
 function historySoon() { clearTimeout(HIST.timer); HIST.timer = setTimeout(historyRecord, 300); }
 function historyButtons() {
+  renderSnaps();
   $("undoBtn").disabled = !(HIST.sid === SID && HIST.pos > 0);
   $("redoBtn").disabled = !(HIST.sid === SID && HIST.pos < HIST.list.length - 1);
 }
@@ -3864,6 +4078,7 @@ async function process() {
   if (!SID) return;
   historyRecord();
   if (busy) { again = true; return; }
+  CALC_KEY = snapKey();       // state being computed (a snapshot needs an up-to-date result)
   busy = true; status("Calcul en cours…");
   document.querySelector("header").classList.add("busy");
   const gen = GEN; updateCalcBtn();

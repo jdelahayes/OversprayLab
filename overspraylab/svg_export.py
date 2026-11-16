@@ -558,16 +558,82 @@ def sheet_pdf(res: Result, name: str) -> bytes:
 PROJECT_VERSION = 1
 
 
-def export_zip(res: Result, material: dict | None, name: str = "stencil",
-               original: tuple[bytes | None, str] | None = None, mask_png: bytes | None = None,
-               sil_png: bytes | None = None,
-               ui: dict | None = None, subject_png: bytes | None = None, lang: str = "en",
-               subject_exact: bool = False, zone_pngs: dict | None = None,
-               flat_png: bytes | None = None, flat_force_pngs: dict | None = None,
-               image_name: str | None = None) -> bytes:
-    """Zip of the stencils + reloadable project (original image, masks, interface settings).
-    `name`: project name (titles of the sheets; the zip is named after it, the files inside have
-    no prefix). `image_name`: file name of the original image, given back when reopening.
+def project_files(res: Result, material: dict | None, name: str = "stencil",
+                  original: tuple[bytes | None, str] | None = None, mask_png: bytes | None = None,
+                  sil_png: bytes | None = None,
+                  ui: dict | None = None, subject_png: bytes | None = None,
+                  subject_exact: bool = False, zone_pngs: dict | None = None,
+                  flat_png: bytes | None = None, flat_force_pngs: dict | None = None,
+                  image_name: str | None = None, image_file: str = "original",
+                  extra: dict | None = None) -> dict[str, bytes]:
+    """Reloadable project part of an export (also a snapshot): image, painted masks and infos.json.
+    `image_file`: base name of the image file; `extra`: more keys of the "projet" block.
+    Call within the export language (`_LANG`)."""
+    files: dict[str, bytes] = {}
+    raw, ext = original or (None, ".png")
+    img_file = f"{image_file}{ext}" if raw else None
+    mask_file = f"{T('outline_mask')}.png" if mask_png else None
+    subject_file = f"{T('subject_mask')}.png" if subject_png else None
+    sil_file = f"{T('silhouette_mask')}.png" if sil_png else None
+    flat_file = f"{T('flat_mask')}.png" if flat_png else None
+    for f, data in ((img_file, raw), (mask_file, mask_png), (subject_file, subject_png), (sil_file, sil_png),
+                    (flat_file, flat_png)):
+        if f:
+            files[f] = data
+    # flat zones forced into a layer (tone index t<n>)
+    flat_layer_files = {}
+    for zid, png in sorted((flat_force_pngs or {}).items()):
+        flat_layer_files[zid] = f"{T('flat_mask')}_{zid}.png"
+        files[flat_layer_files[zid]] = png
+    # painted masks of the other key-detail zones (the first zone's is `masque`)
+    zone_files = {}
+    for zid, png in sorted((zone_pngs or {}).items()):
+        zone_files[zid] = f"{T('outline_mask')}_{zid}.png"
+        files[zone_files[zid]] = png
+    info = {
+        # Project: reopen this zip (or this file) in OversprayLab with "Open a project…"
+        "projet": {
+            "version": PROJECT_VERSION,
+            "logiciel": "OversprayLab",
+            "nom": name,
+            "nom_image": image_name,
+            "image": img_file,
+            "masque": mask_file,
+            "masque_sujet": subject_file,
+            "masque_sujet_exact": bool(subject_png and subject_exact),
+            "masque_silhouette": sil_file,
+            "masque_aplats": flat_file,
+            "masques_aplats_couches": flat_layer_files,
+            "masques_zones": zone_files,
+            "interface": ui,
+            **(extra or {}),
+        },
+        "format_feuille_mm": [round(v, 1) for v in res.sheet_mm],
+        "format_support_mm": [round(v, 1) for v in res.support_mm],
+        "feuille_dans_support_mm": [round(v, 1) for v in res.sheet_rect_mm],
+        "calage_a_la_regle": positioning(res) if res.params.sheet_mode != "around" else None,
+        "format_image_mm": [round(v, 1) for v in res.image_mm],
+        "couleur_support": bgr_hex(res.support_color),
+        "teinte_laissee_au_support": (bgr_hex(res.prepared.palette[res.support_label])
+                                     if res.support_label is not None else None),
+        "calage": {"coins": res.params.reg_corners, "forme": res.params.reg_shape,
+                   "taille_mm": res.params.reg_size_mm},
+        "ordre_de_pulverisation": [
+            {"couche": L.index, "couleur": bgr_hex(L.color), **layer_stats(L)} for L in res.layers
+        ],
+        "materiau": material,
+        "parametres": res.params.__dict__,
+    }
+    files["infos.json"] = json.dumps(info, ensure_ascii=False, indent=2).encode("utf-8")
+    return files
+
+
+def export_zip(res: Result, material: dict | None, name: str = "stencil", lang: str = "en",
+               folder: dict | None = None, **project) -> bytes:
+    """Zip of the stencils + reloadable project (original image, masks, interface settings; see
+    `project_files` for the keyword arguments). `name`: project name (titles of the sheets; the zip
+    is named after it, the files inside have no prefix). `folder`: {path: bytes} of the project
+    folder (snapshots), stored under "projet/".
 
     The JSON keys of infos.json are a file format and stay unchanged whatever the language
     (projects reopen in both languages); only human-readable text and file names are translated.
@@ -575,33 +641,9 @@ def export_zip(res: Result, material: dict | None, name: str = "stencil",
     token = _LANG.set("fr" if lang == "fr" else "en")
     try:
         buf = io.BytesIO()
-        raw, ext = original or (None, ".png")
-        img_file = f"original{ext}" if raw else None
-        mask_file = f"{T('outline_mask')}.png" if mask_png else None
-        subject_file = f"{T('subject_mask')}.png" if subject_png else None
-        sil_file = f"{T('silhouette_mask')}.png" if sil_png else None
-        flat_file = f"{T('flat_mask')}.png" if flat_png else None
         with zipfile.ZipFile(buf, "w", zipfile.ZIP_DEFLATED) as z:
-            if raw:
-                z.writestr(img_file, raw)
-            if mask_png:
-                z.writestr(mask_file, mask_png)
-            if subject_png:
-                z.writestr(subject_file, subject_png)
-            if sil_png:
-                z.writestr(sil_file, sil_png)
-            if flat_png:
-                z.writestr(flat_file, flat_png)
-            # flat zones forced into a layer (tone index t<n>)
-            flat_layer_files = {}
-            for zid, png in sorted((flat_force_pngs or {}).items()):
-                flat_layer_files[zid] = f"{T('flat_mask')}_{zid}.png"
-                z.writestr(flat_layer_files[zid], png)
-            # painted masks of the other key-detail zones (the first zone's is `masque`)
-            zone_files = {}
-            for zid, png in sorted((zone_pngs or {}).items()):
-                zone_files[zid] = f"{T('outline_mask')}_{zid}.png"
-                z.writestr(zone_files[zid], png)
+            for f, data in project_files(res, material, name, **project).items():
+                z.writestr(f, data)
             n = len(res.layers)
             for L in res.layers:
                 kind = T("_outline") if L.kind == "outline" else ""
@@ -613,40 +655,10 @@ def export_zip(res: Result, material: dict | None, name: str = "stencil",
             ok, png = cv2.imencode(".png", simulate(res))
             z.writestr(f"{T('simulated_render')}.png", png.tobytes())
             z.writestr(f"{T('spray_sheet')}.pdf", sheet_pdf(res, name))
-            info = {
-                # Project: reopen this zip (or this file) in OversprayLab with "Open a project…"
-                "projet": {
-                    "version": PROJECT_VERSION,
-                    "logiciel": "OversprayLab",
-                    "nom": name,
-                    "nom_image": image_name,
-                    "image": img_file,
-                    "masque": mask_file,
-                    "masque_sujet": subject_file,
-                    "masque_sujet_exact": bool(subject_png and subject_exact),
-                    "masque_silhouette": sil_file,
-                    "masque_aplats": flat_file,
-                    "masques_aplats_couches": flat_layer_files,
-                    "masques_zones": zone_files,
-                    "interface": ui,
-                },
-                "format_feuille_mm": [round(v, 1) for v in res.sheet_mm],
-                "format_support_mm": [round(v, 1) for v in res.support_mm],
-                "feuille_dans_support_mm": [round(v, 1) for v in res.sheet_rect_mm],
-                "calage_a_la_regle": positioning(res) if res.params.sheet_mode != "around" else None,
-                "format_image_mm": [round(v, 1) for v in res.image_mm],
-                "couleur_support": bgr_hex(res.support_color),
-                "teinte_laissee_au_support": (bgr_hex(res.prepared.palette[res.support_label])
-                                             if res.support_label is not None else None),
-                "calage": {"coins": res.params.reg_corners, "forme": res.params.reg_shape,
-                           "taille_mm": res.params.reg_size_mm},
-                "ordre_de_pulverisation": [
-                    {"couche": L.index, "couleur": bgr_hex(L.color), **layer_stats(L)} for L in res.layers
-                ],
-                "materiau": material,
-                "parametres": res.params.__dict__,
-            }
-            z.writestr("infos.json", json.dumps(info, ensure_ascii=False, indent=2))
+            for f, data in sorted((folder or {}).items()):
+                # already compressed files (images, session dump) stored as is
+                packed = f.lower().endswith((".gz", ".jpg", ".jpeg", ".png", ".webp"))
+                z.writestr("projet/" + f, data, compress_type=zipfile.ZIP_STORED if packed else zipfile.ZIP_DEFLATED)
         return buf.getvalue()
     finally:
         _LANG.reset(token)

@@ -19,3 +19,6 @@ tools/*.json
 
 # Object selection models (downloaded on first use)
 models/
+
+# Saved projects and their snapshots (created by the application)
+projets/

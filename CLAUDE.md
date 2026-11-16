@@ -64,6 +64,20 @@ Hard-won constraints, verified by the author in Silhouette Studio – do not "cl
   smoothed logits (a skeleton gave the same lines 5x slower). Uses `outline_follow_mm`
   (advised 8 mm); the zone's channel setting is ignored (hidden in the UI).
 
+## Projects folder and snapshots
+
+- `overspraylab/projects.py`: one folder per project in `projets/` (git-ignored; `OVERSPRAYLAB_PROJECTS`
+  moves it – tests must point it to a temporary folder, never to the author's `projets/`).
+  `original.<ext>` = source image as loaded, never reduced (`sess["orig_raw"]`); each `snapshots/v<n>/`
+  is written once (temp folder renamed) and never changed.
+- `session.pkl.gz` = pickle of the session entries in `SESSION_DUMP` (app.py), restored as is so the
+  next computation still reuses the geometry (identity of the masks in `sess["geom"]`). Bump
+  `projects.SESSION_FORMAT` when those objects change incompatibly: older dumps are then ignored and
+  the snapshot is recomputed. Unpickling an imported zip is not safe: accepted for now (author's
+  choice), to be dealt with later.
+- The client compares `snapKey()` with the key saved at the last snapshot / opening to know whether
+  the current version is saved; display-only options (`VIEW_ONLY`) are not changes.
+
 ## Testing in the browser
 
 - Never alter the author's saved state: set `NO_REMEMBER = true` in the page before changing
