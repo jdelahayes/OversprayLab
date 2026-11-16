@@ -199,7 +199,7 @@ EN = [
     "Transparent overlays (BGRA, sheet size) of the bridges and removed details,\n    to stack on `layer_view(..., bridges=False, lost=False)` so they can be shown or hidden.",
     "Mean difference (Lab ΔE) between the original image and the simulated render, over the image area.",
     # ---------------- __init__.py, tools
-    "StencilIt: multi-layer airbrush stencil generation.",
+    "OversprayLab: multi-layer airbrush stencil generation.",
     "Inventory of the texts to translate (static HTML, JavaScript strings, Python messages).\n\nUsage: python tools/extract_strings.py  -> writes tools/strings_fr.json",
     # ---------------- index.html (JS + CSS)
     "---------------- Cutting mat ----------------",
@@ -362,7 +362,7 @@ EN = [
     "\"a · b · c\" summaries: each part translated separately",
     "text node -> original French text",
     "element -> { attribute: French value }",
-    "StencilIt — internationalisation (English by default, French).\n *\n * The application code writes its texts in French; this layer translates them on display:\n *  - EN: exact French -> English matches (texts, tooltips, options…);\n *  - PATTERNS: dynamic texts (with numbers, names…) recognised by regular expression;\n *  - an observer translates everything that appears in the page (server messages included) and\n *    remembers the original, to switch back to French instantly.\n * Elements marked data-noi18n (user-entered names, language selector) are ignored.",
+    "OversprayLab — internationalisation (English by default, French).\n *\n * The application code writes its texts in French; this layer translates them on display:\n *  - EN: exact French -> English matches (texts, tooltips, options…);\n *  - PATTERNS: dynamic texts (with numbers, names…) recognised by regular expression;\n *  - an observer translates everything that appears in the page (server messages included) and\n *    remembers the original, to switch back to French instantly.\n * Elements marked data-noi18n (user-entered names, language selector) are ignored.",
 ]
 
 if __name__ == "__main__":

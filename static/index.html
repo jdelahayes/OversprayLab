@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>StencilIt</title>
+<title>OversprayLab</title>
 <style>
   :root {
     --bg: #f4f2ee; --panel: #ffffff; --ink: #1f2328; --muted: #6b7280;
@@ -479,7 +479,7 @@
 </head>
 <body>
 <header>
-  <h1>StencilIt</h1>
+  <h1>OversprayLab</h1>
   <span style="color:var(--muted)">pochoirs multicouches pour l'aérographe</span>
   <span class="status" id="status">Chargez une image pour commencer</span>
   <label class="autocalc" title="Coché : chaque modification relance le calcul. Décoché : le calcul ne se fait qu'à la demande (bouton à côté, ou Ctrl + Entrée).">
@@ -511,7 +511,7 @@
     <input type="file" id="file" accept="image/*" hidden>
   </div>
   <div class="projbar">
-    <button type="button" id="openProject" title="Rouvrir un zip exporté par StencilIt (image, masque et tous les réglages), ou seulement son fichier infos.json">Ouvrir un projet…</button>
+    <button type="button" id="openProject" title="Rouvrir un zip exporté par OversprayLab (image, masque et tous les réglages), ou seulement son fichier infos.json">Ouvrir un projet…</button>
     <button type="button" class="primary" id="export" disabled title="Pochoirs SVG + projet rechargeable (image d'origine, masque, réglages)">Exporter le projet</button>
     <button type="button" id="resetAll" title="Rétablit tous les réglages par défaut ; l'image chargée et ses masques sont conservés, ainsi que les réglages enregistrés">Réglages par défaut</button>
     <input type="file" id="projectFile" accept=".zip,.json,application/zip,application/json" hidden>
@@ -2120,7 +2120,7 @@ function makePresetBar(cfg) {
 }
 
 // ---------------- Automatic memory of the last settings (browser) ----------------
-const LS_KEY = "stencilit.derniers_reglages";
+const LS_KEY = "overspraylab.derniers_reglages";
 const NOT_REMEMBERED = new Set(["image_scale", "image_height_factor", "image_pos_x", "image_pos_y"]); // specific to each image
 let NO_REMEMBER = false;
 let DEFAULTS = null;   // interface state before the last settings are restored ("Default settings")
@@ -2293,13 +2293,13 @@ function setColWidth(side, w, save = true) {
   w = Math.round(clamp(w, c.min, Math.min(c.max, innerWidth * 0.45)));
   document.querySelector("main").style.setProperty(`--col-${side}`, w + "px");
   if (save) try {
-    const o = JSON.parse(localStorage.getItem("stencilit.colonnes") || "{}"); o[side] = w;
-    localStorage.setItem("stencilit.colonnes", JSON.stringify(o));
+    const o = JSON.parse(localStorage.getItem("overspraylab.colonnes") || "{}"); o[side] = w;
+    localStorage.setItem("overspraylab.colonnes", JSON.stringify(o));
   } catch (e) { /* storage unavailable */ }
 }
 function setupColumns() {
   try {
-    const o = JSON.parse(localStorage.getItem("stencilit.colonnes") || "{}");
+    const o = JSON.parse(localStorage.getItem("overspraylab.colonnes") || "{}");
     ["left", "right"].forEach(k => { if (o[k]) setColWidth(k, o[k], false); });
   } catch (e) { /* storage unavailable */ }
   document.querySelectorAll(".colgrip").forEach(g => {
@@ -2325,7 +2325,7 @@ function setupColumns() {
 // Added to the field and its label, without overwriting a tooltip already defined in the HTML.
 const TIPS = {
   file: "Image à transformer en pochoirs (photo, dessin, logo… en couleur ou noir et blanc). Vous pouvez aussi la glisser sur la zone.",
-  projectFile: "Projet StencilIt exporté (.zip) ou son fichier infos.json.",
+  projectFile: "Projet OversprayLab exporté (.zip) ou son fichier infos.json.",
   user_support: "Vos supports enregistrés : format, couleur, marges, feuille, tapis et repères de calage.",
   orientation: "Portrait ou paysage : intervertit la largeur et la hauteur du support.",
   support_w_mm: "Largeur réelle de la surface à peindre, en millimètres.",
@@ -2453,7 +2453,7 @@ function applyTips() {
 }
 
 // ---------------- Layer effects (one ordered stack per colour layer) ----------------
-// State in the hidden field `layer_effects` (JSON, read by stencilit/effects.py):
+// State in the hidden field `layer_effects` (JSON, read by overspraylab/effects.py):
 // {on, layers: {"1": {on, fx: [{id, type, on, p: {param: value}}]}}}
 let FXCAT = {};                  // effect catalogue (/api/effects)
 const FXOPEN = new Set();        // effects whose settings are unfolded (ids)
@@ -2957,7 +2957,7 @@ async function init() {
   Object.entries(MATS).forEach(([k, m]) => sel.add(new Option(m.label, k)));
   sel.add(new Option("Personnalisé", "custom"));
   sel.value = "mylar"; applyMaterial("mylar");
-  // catalogue as a list (keeps the order of stencilit/effects.py)
+  // catalogue as a list (keeps the order of overspraylab/effects.py)
   try { FXCAT = Object.fromEntries((await (await fetch("/api/effects")).json()).map(d => [d.type, d])); } catch (e) { FXCAT = {}; }
   setupFx();
   setupZones();
@@ -3118,7 +3118,7 @@ async function init() {
     stockChanged();
   }));
   try {
-    const ov = JSON.parse(localStorage.getItem("stencilit.surlignages") || "{}");
+    const ov = JSON.parse(localStorage.getItem("overspraylab.surlignages") || "{}");
     setOverlay("lgBridges", "no-bridges", ov.bridges !== false);
     setOverlay("lgLost", "no-lost", ov.lost !== false);
     setOverlay("lgMerged", "no-merged", ov.merged !== false);
@@ -3126,7 +3126,7 @@ async function init() {
   } catch (e) { /* storage unavailable */ }
   const saveOverlays = () => {
     try {
-      localStorage.setItem("stencilit.surlignages", JSON.stringify({
+      localStorage.setItem("overspraylab.surlignages", JSON.stringify({
         bridges: $("lgBridges").getAttribute("aria-pressed") === "true",
         lost: $("lgLost").getAttribute("aria-pressed") === "true",
         merged: $("lgMerged").getAttribute("aria-pressed") === "true",
@@ -3325,7 +3325,7 @@ async function init() {
 
 // ---------------- Preferences (gear button in the header) ----------------
 // Application preferences, not project settings: kept apart from the last settings (localStorage).
-const PREFS_KEY = "stencilit.preferences";
+const PREFS_KEY = "overspraylab.preferences";
 function prefs() {
   try { return JSON.parse(localStorage.getItem(PREFS_KEY) || "{}") || {}; } catch (e) { return {}; }
 }
@@ -3516,7 +3516,7 @@ async function openProject(file) {
   if (/\.json$/i.test(file.name)) {
     let info;
     try { info = JSON.parse(await file.text()); } catch (e) { return status("Fichier JSON illisible", true); }
-    if (!info.projet && !info.parametres) return status("Ce JSON n'est pas un fichier infos.json de StencilIt", true);
+    if (!info.projet && !info.parametres) return status("Ce JSON n'est pas un fichier infos.json de OversprayLab", true);
     if (SID) {
       applyProjectSettings(info);
       status("Réglages du projet appliqués à l'image chargée");
@@ -5599,7 +5599,7 @@ function layerColors() {
   });
   return m;
 }
-const RECENT_KEY = "stencilit.couleurs_recentes";
+const RECENT_KEY = "overspraylab.couleurs_recentes";
 function recentColors() {
   try { return (JSON.parse(localStorage.getItem(RECENT_KEY) || "[]") || []).filter(c => /^#[0-9a-f]{6}$/i.test(c)).slice(0, 6); }
   catch (e) { return []; }

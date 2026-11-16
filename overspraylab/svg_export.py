@@ -21,19 +21,19 @@ from .pipeline import (Result, bgr_hex, layer_stats, positioning, registration_s
 CUT = 'fill="none" stroke="#ff0000" stroke-width="0.1"'
 
 # ---------------------------------------------------------------- export language
-_LANG = contextvars.ContextVar("stencilit_export_lang", default="en")
+_LANG = contextvars.ContextVar("overspraylab_export_lang", default="en")
 _FR = {
-    "StencilIt - Silhouette Studio file: one compound path per stencil (openings, sheet outline and marks)":
-        "StencilIt - fichier Silhouette Studio : un tracé composé par pochoir (ouvertures, contour de la feuille et repères)",
+    "OversprayLab - Silhouette Studio file: one compound path per stencil (openings, sheet outline and marks)":
+        "OversprayLab - fichier Silhouette Studio : un tracé composé par pochoir (ouvertures, contour de la feuille et repères)",
     "Stencils for Silhouette Studio": "Pochoirs pour Silhouette Studio",
     "Layer": "Couche", "outline": "contours", "colour": "couleur", "material": "matériau", "custom": "personnalisé",
     "blade": "lame", "force": "force", "speed": "vitesse", "passes": "passes",
     "Stencil layer": "Pochoir couche", "Overview of all layers": "Aperçu de toutes les couches",
-    "StencilIt - overview (do not cut)": "StencilIt - aperçu (ne pas découper)",
+    "OversprayLab - overview (do not cut)": "OversprayLab - aperçu (ne pas découper)",
     "Registration dimensions (do not cut)": "Cotes de calage (ne pas découper)",
-    "StencilIt stencils": "Pochoirs StencilIt",
-    "StencilIt - Inkscape project: one layer per stencil, image and previews as background layers":
-        "StencilIt - projet Inkscape : un calque par pochoir, image et aperçus en calques de fond",
+    "OversprayLab stencils": "Pochoirs OversprayLab",
+    "OversprayLab - Inkscape project: one layer per stencil, image and previews as background layers":
+        "OversprayLab - projet Inkscape : un calque par pochoir, image et aperçus en calques de fond",
     "Support": "Support", "Original image (layout)": "Image d'origine (mise en page)",
     "Preview (flat colours)": "Aperçu (aplats)", "Preview (simulated render)": "Aperçu (rendu simulé)",
     "Layer colours (do not cut)": "Couleurs des couches (ne pas découper)",
@@ -194,7 +194,7 @@ def layer_svg(res: Result, L, material: dict | None = None) -> str:
     W, H = res.sheet_mm
     cut = (material or {}).get("cut", {})
     outline = f" ({T('outline')})" if L.kind == "outline" else ""
-    comment = (f"StencilIt - {T('Layer').lower()} {L.index}/{len(res.layers)}{outline} - {T('colour')} {bgr_hex(L.color)} - "
+    comment = (f"OversprayLab - {T('Layer').lower()} {L.index}/{len(res.layers)}{outline} - {T('colour')} {bgr_hex(L.color)} - "
                f"{T('material')}: {(material or {}).get('label', T('custom'))} - "
                f"{T('blade')} {cut.get('blade', '?')}, {T('force')} {cut.get('force', '?')}, "
                f"{T('speed')} {cut.get('speed', '?')}, {T('passes')} {cut.get('passes', '?')}")
@@ -216,7 +216,7 @@ def overview_svg(res: Result) -> str:
     """Overview of all layers as flat colours on the support (not for cutting)."""
     p = res.params
     W, H = res.sheet_mm
-    s = [_header(W, H, T("Overview of all layers"), T("StencilIt - overview (do not cut)"))]
+    s = [_header(W, H, T("Overview of all layers"), T("OversprayLab - overview (do not cut)"))]
     bg = bgr_hex(res.support_color)
     s.append(f'<rect x="0" y="0" width="{_f(W)}" height="{_f(H)}" fill="#ffffff"/>')
     mx, my = res.sup_off_mm
@@ -281,12 +281,12 @@ def inkscape_svg(res: Result, material: dict | None = None) -> str:
     sw, sh = res.support_mm
     out = [
         '<?xml version="1.0" encoding="UTF-8"?>',
-        f"<!-- {T('StencilIt - Inkscape project: one layer per stencil, image and previews as background layers')} -->",
+        f"<!-- {T('OversprayLab - Inkscape project: one layer per stencil, image and previews as background layers')} -->",
         f'<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" '
         f'xmlns:inkscape="http://www.inkscape.org/namespaces/inkscape" '
         f'xmlns:sodipodi="http://sodipodi.sourceforge.net/DTD/sodipodi-0.dtd" '
         f'width="{_f(W)}mm" height="{_f(H)}mm" viewBox="0 0 {_f(W)} {_f(H)}">',
-        f"<title>{T('StencilIt stencils')}</title>",
+        f"<title>{T('OversprayLab stencils')}</title>",
         f'<sodipodi:namedview id="namedview" inkscape:document-units="mm" pagecolor="#ffffff" '
         f'inkscape:current-layer="layer{len(res.layers):02d}"/>',
     ]
@@ -375,7 +375,7 @@ def silhouette_svg(res: Result, material: dict | None = None) -> str:
     W, H = res.sheet_mm
     out = [
         '<?xml version="1.0" encoding="UTF-8"?>',
-        f"<!-- {T('StencilIt - Silhouette Studio file: one compound path per stencil (openings, sheet outline and marks)')} -->",
+        f"<!-- {T('OversprayLab - Silhouette Studio file: one compound path per stencil (openings, sheet outline and marks)')} -->",
         f'<svg xmlns="http://www.w3.org/2000/svg" '
         f'xmlns:inkscape="http://www.inkscape.org/namespaces/inkscape" '
         f'width="{_f(W)}mm" height="{_f(H)}mm" viewBox="0 0 {_f(W)} {_f(H)}">',
@@ -435,7 +435,7 @@ def sheet_pdf(res: Result, name: str) -> bytes:
     pdf = Pdf()
     L0, R0 = 15.0, 195.0                       # text margins (mm)
     colon = " : " if _LANG.get() == "fr" else ": "
-    pdf.text(L0, 20, f"StencilIt - {name}", 16, bold=True)
+    pdf.text(L0, 20, f"OversprayLab - {name}", 16, bold=True)
     pdf.text(L0, 27, T("Spraying sheet"), 11, color="#555555")
 
     # simulated render, top right
@@ -605,10 +605,10 @@ def export_zip(res: Result, material: dict | None, name: str = "stencil",
             z.writestr(f"{T('simulated_render')}.png", png.tobytes())
             z.writestr(f"{T('spray_sheet')}.pdf", sheet_pdf(res, name))
             info = {
-                # Project: reopen this zip (or this file) in StencilIt with "Open a project…"
+                # Project: reopen this zip (or this file) in OversprayLab with "Open a project…"
                 "projet": {
                     "version": PROJECT_VERSION,
-                    "logiciel": "StencilIt",
+                    "logiciel": "OversprayLab",
                     "nom": name,
                     "nom_image": image_name,
                     "image": img_file,

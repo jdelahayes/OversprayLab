@@ -1,4 +1,4 @@
-"""Serveur web local StencilIt.  Lancer : python app.py  puis ouvrir http://127.0.0.1:5000"""
+"""Serveur web local OversprayLab.  Lancer : python app.py  puis ouvrir http://127.0.0.1:5000"""
 from __future__ import annotations
 
 import base64
@@ -16,14 +16,14 @@ import numpy as np
 from flask import Flask, jsonify, request, send_file, send_from_directory
 import io
 
-from stencilit import pipeline as pl
-from stencilit import effects as fxmod
-from stencilit import semantic
-from stencilit import teed
-from stencilit.svg_export import export_zip
+from overspraylab import pipeline as pl
+from overspraylab import effects as fxmod
+from overspraylab import semantic
+from overspraylab import teed
+from overspraylab.svg_export import export_zip
 
 ROOT = Path(__file__).parent
-MATERIALS_FILE = ROOT / "stencilit" / "materials.json"
+MATERIALS_FILE = ROOT / "overspraylab" / "materials.json"
 
 app = Flask(__name__, static_folder=str(ROOT / "static"))
 app.config["MAX_CONTENT_LENGTH"] = 60 * 1024 * 1024
@@ -808,7 +808,7 @@ def api_project():
     try:
         z = zipfile.ZipFile(io.BytesIO(f.read()))
     except zipfile.BadZipFile:
-        return jsonify(error="Ce fichier n'est pas un zip de projet StencilIt"), 400
+        return jsonify(error="Ce fichier n'est pas un zip de projet OversprayLab"), 400
     names = z.namelist()
     # infos.json (files without prefix), or …_infos.json (exports of earlier versions)
     info_name = next((n for n in names if n.rsplit("/", 1)[-1] == "infos.json"), None) \
@@ -891,7 +891,7 @@ def api_project():
 
 if __name__ == "__main__":
     import os
-    # STENCILIT_PORT: run a second instance (e.g. for tests) next to the usual one on 5000
-    port = int(os.environ.get("STENCILIT_PORT", "5000"))
-    print(f"StencilIt : http://127.0.0.1:{port}")
+    # OVERSPRAYLAB_PORT: run a second instance (e.g. for tests) next to the usual one on 5000
+    port = int(os.environ.get("OVERSPRAYLAB_PORT", "5000"))
+    print(f"OversprayLab : http://127.0.0.1:{port}")
     app.run(host="127.0.0.1", port=port, debug=False, threaded=True)

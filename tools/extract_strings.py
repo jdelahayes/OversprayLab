@@ -47,7 +47,7 @@ def js_strings(src):
 
 def py_strings():
     out = set()
-    for f in ("app.py", "stencilit/pipeline.py"):
+    for f in ("app.py", "overspraylab/pipeline.py"):
         src = (ROOT / f).read_text(encoding="utf-8")
         for m in re.finditer(r'f?"((?:[^"\\\n]|\\.)*)"', src):
             v = m.group(1)

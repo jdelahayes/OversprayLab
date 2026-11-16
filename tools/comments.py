@@ -17,7 +17,7 @@ import tokenize
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
-PY = ["app.py", "stencilit/pipeline.py", "stencilit/svg_export.py", "stencilit/__init__.py", "tools/extract_strings.py"]
+PY = ["app.py", "overspraylab/pipeline.py", "overspraylab/svg_export.py", "overspraylab/__init__.py", "tools/extract_strings.py"]
 WEB = ["static/index.html", "static/i18n.js"]
 JS_LINE = re.compile(r"(?:(?<=\s)|^)//\s?(.*)$")
 BLOCK = re.compile(r"/\*(.*?)\*/", re.S)

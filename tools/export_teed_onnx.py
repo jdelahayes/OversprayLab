@@ -1,13 +1,13 @@
-"""Exports TEED (github.com/xavysp/TEED, MIT) to the ONNX model used by stencilit/teed.py.
+"""Exports TEED (github.com/xavysp/TEED, MIT) to the ONNX model used by overspraylab/teed.py.
 
-Only needed to regenerate stencilit/edge_model/teed_biped7.onnx; StencilIt itself does not need
+Only needed to regenerate overspraylab/edge_model/teed_biped7.onnx; OversprayLab itself does not need
 PyTorch. In a separate environment:
 
     python -m venv teed_venv
     teed_venv/Scripts/python -m pip install torch --index-url https://download.pytorch.org/whl/cpu
     teed_venv/Scripts/python -m pip install onnx
     git clone https://github.com/xavysp/TEED.git
-    teed_venv/Scripts/python tools/export_teed_onnx.py TEED stencilit/edge_model/teed_biped7.onnx
+    teed_venv/Scripts/python tools/export_teed_onnx.py TEED overspraylab/edge_model/teed_biped7.onnx
 
 Exported from TEED commit 40fa4b1 (checkpoints/BIPED/7/7_model.pth): opset 17, input "input"
 (1x3xHxW, BGR minus the BIPED mean, H and W multiples of 8), output "edges" = fused logits.

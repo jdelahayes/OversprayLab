@@ -1,4 +1,4 @@
-/* StencilIt — internationalisation (English by default, French).
+/* OversprayLab — internationalisation (English by default, French).
  *
  * The application code writes its texts in French; this layer translates them on display:
  *  - EN: exact French -> English matches (texts, tooltips, options…);
@@ -7,9 +7,20 @@
  *    remembers the original, to switch back to French instantly.
  * Elements marked data-noi18n (user-entered names, language selector) are ignored.
  */
+// The project was called StencilIt: move the settings saved under the old localStorage prefix
+// (this file is the first script of the page, so this runs before anything reads them).
+try {
+  for (const k of Object.keys(localStorage)) {
+    if (!k.startsWith("stencilit.")) continue;
+    const nk = "overspraylab." + k.slice("stencilit.".length);
+    if (localStorage.getItem(nk) === null) localStorage.setItem(nk, localStorage.getItem(k));
+    localStorage.removeItem(k);
+  }
+} catch (e) { /* storage unavailable: nothing to migrate */ }
+
 (function () {
   "use strict";
-  const LS = "stencilit.lang";
+  const LS = "overspraylab.lang";
 
   // ------------------------------------------------------------------ exact
   const EN = {
@@ -48,7 +59,7 @@
     "Aucune image chargée.": "No image loaded.",
     "Glissez une image ici": "Drop an image here", "ou cliquez pour choisir": "or click to choose",
     "Ouvrir un projet…": "Open a project…",
-    "Rouvrir un zip exporté par StencilIt (image, masque et tous les réglages), ou seulement son fichier infos.json": "Reopen a zip exported by StencilIt (image, masks and all settings), or just its infos.json file",
+    "Rouvrir un zip exporté par OversprayLab (image, masque et tous les réglages), ou seulement son fichier infos.json": "Reopen a zip exported by OversprayLab (image, masks and all settings), or just its infos.json file",
     "Projet": "Project", "Nom du projet": "Project name", "Image d'origine :": "Original image:", "(aucune image)": "(no image)",
     "Cliquer pour renommer le projet : il nomme le zip exporté et figure sur la fiche de pulvérisation": "Click to rename the project: it names the exported zip and appears on the spraying sheet",
     "Par défaut, le nom de l'image. Le zip exporté porte ce nom ; les fichiers qu'il contient n'ont pas de préfixe.": "By default, the image name. The exported zip bears this name; the files inside have no prefix.",
@@ -466,10 +477,10 @@
     "Image chargée — réglages du projet appliqués": "Image loaded — project settings applied",
     "Réglages du projet appliqués à l'image chargée": "Project settings applied to the loaded image",
     "Réglages du projet chargés — chargez maintenant l'image d'origine": "Project settings loaded — now load the original image",
-    "Ce JSON n'est pas un fichier infos.json de StencilIt": "This JSON is not a StencilIt infos.json file", "Fichier JSON illisible": "Unreadable JSON file",
+    "Ce JSON n'est pas un fichier infos.json de OversprayLab": "This JSON is not a OversprayLab infos.json file", "Fichier JSON illisible": "Unreadable JSON file",
     "Projet illisible": "Unreadable project", "Erreur du masque": "Mask error", "Erreur du masque sujet": "Subject mask error", "Erreur": "Error",
     "Masque illisible": "Unreadable mask", "Session inconnue, rechargez l'image": "Unknown session, reload the image", "Aucune image reçue": "No image received",
-    "Aucun fichier reçu": "No file received", "Ce fichier n'est pas un zip de projet StencilIt": "This file is not a StencilIt project zip",
+    "Aucun fichier reçu": "No file received", "Ce fichier n'est pas un zip de projet OversprayLab": "This file is not a OversprayLab project zip",
     "Fichier infos.json introuvable dans le zip": "infos.json file not found in the zip", "Rien à exporter": "Nothing to export",
     "Nom ou valeurs manquants": "Missing name or values", "Type de réglage inconnu": "Unknown preset type", "Nouveau nom manquant": "New name missing",
     "Image illisible": "Unreadable image",
@@ -522,7 +533,7 @@
     "Les couches de traits apparaissent ici après le calcul.": "The line layers appear here after the computation.",
     "Pochoir de traits (détails clés, silhouette…) : ses effets ne changent que lui": "Line stencil (key details, silhouette…): its effects change it alone",
     "Effets copiés vers toutes les couches": "Effects copied to all layers",
-    // effect catalogue (stencilit/effects.py)
+    // effect catalogue (overspraylab/effects.py)
     "Lissage": "Smoothing",
     "Arrondit les angles et adoucit les contours de la couche (rendu plus organique, coupe plus facile dans les angles). La surface peinte reste à peu près la même.": "Rounds the corners and softens the outlines of the layer (more organic look, easier cutting in the corners). The painted area stays about the same.",
     "Rayon": "Radius",
@@ -601,7 +612,7 @@
     "Un trait par contour, comme à la plume.": "One line per contour, like a pen.",
     "Trait dessiné qui suit les courbes : traits plus continus, moins de miettes ; calcul plus long.": "Drawn line that follows the curves: more continuous lines, fewer crumbs; slower to compute.",
     "Contours trouvés par un petit réseau de neurones, comme un dessin au trait : formes nettes, logos, vêtements.": "Edges found by a small neural network, like a line drawing: clean shapes, logos, clothes.",
-    "Modèle de contours appris (TEED) introuvable : stencilit/edge_model/teed_biped7.onnx": "Learned edges model (TEED) not found: stencilit/edge_model/teed_biped7.onnx",
+    "Modèle de contours appris (TEED) introuvable : overspraylab/edge_model/teed_biped7.onnx": "Learned edges model (TEED) not found: overspraylab/edge_model/teed_biped7.onnx",
     "Ligne centrale des traits fins (cils, mèches).": "Centre line of thin strokes (lashes, strands).",
     "Pochoir de contours peint après les couleurs ; les zones de même destination y sont fusionnées.": "Outline stencil painted after the colours; zones with the same destination are merged into it.",
     "Découpés dans la couche la plus foncée (plus d'îlots et de ponts).": "Cut into the darkest layer (more islands and bridges).",
@@ -652,7 +663,7 @@
     "Empilement exclusif : ce que deviennent les zones qu'un effet retire d'une couche (entre les points d'une trame, à l'intérieur d'un contour seul…). Couche qui entoure la zone : chaque zone de la couche prend la teinte qu'on trouve le plus le long de son bord (ou reste nue si c'est le support).": "Exclusive stacking: what becomes of the areas an effect removes from a layer (between the dots of a halftone, inside an outline only…). Surrounding layer: each area of the layer takes the tone found most along its border (or stays bare if it is the support).",
     "support nu": "bare support", "couche qui entoure la zone": "layer surrounding the area", "couche plus claire précédente": "previous (lighter) layer",
     "Empilement cumulatif : ces deux options sont sans effet (les couches se recouvrent déjà).": "Cumulative stacking: these two options have no effect (the layers already overlap).",
-    // layer effects (catalogue of stencilit/effects.py)
+    // layer effects (catalogue of overspraylab/effects.py)
     "Contour": "Outline",
     "Remplissage": "Fill",
     "Structure": "Structure",
@@ -829,7 +840,7 @@
   // ------------------------------------------------------------------ setting tooltips (TIPS)
   Object.assign(EN, {
     "Image à transformer en pochoirs (photo, dessin, logo… en couleur ou noir et blanc). Vous pouvez aussi la glisser sur la zone.": "Image to turn into stencils (photo, drawing, logo… in colour or black and white). You can also drop it on the area.",
-    "Projet StencilIt exporté (.zip) ou son fichier infos.json.": "Exported StencilIt project (.zip) or its infos.json file.",
+    "Projet OversprayLab exporté (.zip) ou son fichier infos.json.": "Exported OversprayLab project (.zip) or its infos.json file.",
     "Vos supports enregistrés : format, couleur, marges, feuille, tapis et repères de calage.": "Your saved supports: format, colour, margins, sheet, mat and registration marks.",
     "Portrait ou paysage : intervertit la largeur et la hauteur du support.": "Portrait or landscape: swaps the support width and height.",
     "Largeur réelle de la surface à peindre, en millimètres.": "Real width of the surface to paint, in millimetres.",

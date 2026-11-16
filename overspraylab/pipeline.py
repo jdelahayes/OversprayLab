@@ -128,7 +128,7 @@ class Params:
     # Paint colours chosen for the layers: "1=#rrggbb;3=#rrggbb" (layer number -> colour).
     # Layers not listed keep their computed tone.
     layer_colors: str = ""
-    # Effects stacks of the colour layers (JSON, see stencilit/effects.py); "" = none
+    # Effects stacks of the colour layers (JSON, see overspraylab/effects.py); "" = none
     layer_effects: str = ""
     # Key-detail zones (JSON, see outline_plan); "" = one zone from the outline_* settings above
     outline_zones: str = ""
@@ -1612,7 +1612,7 @@ def layer_job(job):
 
 
 # Parallelism between layers: "thread" (default), "process" (separate processes), or "none" (serial)
-PARALLEL = os.environ.get("STENCILIT_PARALLEL", "thread")
+PARALLEL = os.environ.get("OVERSPRAYLAB_PARALLEL", "thread")
 _POOL = None
 
 

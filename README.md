@@ -1,17 +1,17 @@
-# StencilIt
+# OversprayLab
 
 **Turn any picture into a set of multi-layer airbrush stencils, ready to cut on a Silhouette Cameo.**
 
-StencilIt is a small web application that runs on your own computer. You give it a photo or a
+OversprayLab is a small web application that runs on your own computer. You give it a photo or a
 drawing; it reduces the image to a few paint tones, builds one cuttable stencil per tone, adds
 the bridges that keep the stencils in one piece and the registration marks that let you line
 them up, and exports everything as **SVG files in millimetres**.
 
-![StencilIt main window: a breakdance photo turned into three stencils](docs/screenshots/main.jpg)
+![OversprayLab main window: a dancer's leap turned into three stencils and an outline stencil](docs/screenshots/main.jpg)
 
-*The screenshots of this guide follow one example project: a breakdance photo turned into
-**3 stencils** in pink, violet and ink on white paper (A4 landscape), with key-detail lines and the
-dancer's silhouette cut into the darkest layer.*
+*The screenshots of this guide follow one example project: a photo of a dancer's leap turned into
+**3 stencils** in light grey, slate and navy on white paper (330 × 410 mm, portrait), plus a 4th
+**outline stencil** carrying the key-detail lines (learned edges, TEED) and the dancer's silhouette.*
 
 ---
 
@@ -42,9 +42,9 @@ stencil after another:
  └──────────┘      └──────────┘       └──────────┘      └──────────┘      └──────────┘
 ```
 
-StencilIt does all the tedious work for you:
+OversprayLab does all the tedious work for you:
 
-| Problem | What StencilIt does |
+| Problem | What OversprayLab does |
 |---|---|
 | A photo has millions of colours | Reduces it to **2 – 8 paint tones**, sorted from light to dark (spraying order). |
 | A hole inside a hole falls out of the stencil (the inside of an "O") | Detects these **islands** and adds thin **bridges** to hold them, preferably where a darker layer will paint over them. |
@@ -87,7 +87,7 @@ the application. Nothing leaves your computer.
 The **Object** selection tool (Masks tab) downloads its model once, on first use: MobileSAM in
 ONNX format, about 45 MB, from Hugging Face, checked by its SHA-256 and kept in `models/`. The
 selection itself runs on your computer; your images are never sent anywhere. The **Learned edges (TEED)** detection method uses a 250 kB network that ships
-with StencilIt (`stencilit/edge_model/`): nothing to download.
+with OversprayLab (`overspraylab/edge_model/`): nothing to download.
 
 The interface is in **English** by default; the **⚙ Preferences** button at the top right holds the
 language selector (**French** is available; the exported files follow the selected language).
@@ -114,7 +114,7 @@ Open the SVG files of the zip in Silhouette Studio, cut, and spray layer 1, 2, 3
 
 ```
 ┌──────────────────────────────────────────────────────────────────────────────────────┐
-│ StencilIt            status · Auto compute · Recompute · ⚙                           │  ← header
+│ OversprayLab            status · Auto compute · Recompute · ⚙                           │  ← header
 ├────────────────────┬────────────────────────────────────────────┬────────────────────┤
 │ Image box          │ Crop | Layout | Masks | Preview |          │ Stencils           │
 │ Open a project…    │ Compare with original | Original    1 2 3  │ palette · Closest  │
@@ -238,7 +238,7 @@ it, with the layer number (**S** = tone left to the support).
     sprayed from the lightest to the darkest (see *Lines only* in 5.6). The number of stencils then
     sets the number of tone zones of the colouring book; layer stacking does not apply.
 - **Number of stencils**: number of painted tones (the bare support and the outline stencil are
-  not counted). StencilIt shows a recommendation for your image. More stencils = more faithful but
+  not counted). OversprayLab shows a recommendation for your image. More stencils = more faithful but
   more cutting and more painting.
 - **Level of detail**: low = simple smooth shapes; high = more small details (and more bridges).
 - **Hue weight (%)** (colour mode): how much the hue counts against the lightness when the tones
@@ -281,7 +281,7 @@ opacity) and the actions (*Clear all*, *Copy to…*). Choose which mask you edit
 icons (key details, subject, silhouette, flat areas; the bar under each one is its display colour):
 
 - **Subject mask** (background removal) – roughly paint over the subject, overflowing a little.
-  StencilIt finds the exact edge by itself (GrabCut): outside the painted area = background,
+  OversprayLab finds the exact edge by itself (GrabCut): outside the painted area = background,
   centre of the area = subject. The detected background is shown darkened; it stays bare support and
   no longer influences the choice of tones. Painting the subject turns on *Remove the background*.
   Or use the **Object** tool (below): the selected outline is then used as is, without GrabCut.
@@ -466,7 +466,7 @@ Choose how the stencil sheet relates to the support:
 
 - **Machine**: Cameo 4 / Cameo 5 (305 mm wide), Cameo Pro (610 mm) or another machine.
 - **Cutting mat**: standard 12 × 12″, long 12 × 24″, Cameo Pro 24 × 24″, custom, or **No mat**
-  (roll material). **Mat orientation**: portrait (feed direction) or landscape. StencilIt warns you
+  (roll material). **Mat orientation**: portrait (feed direction) or landscape. OversprayLab warns you
   when the stencil sheet does not fit on the mat or exceeds the machine width.
 - **Material sheet**: the format of the sheet of material you cut the stencil from (A5 to A2, US
   Letter / Legal / Tabloid, 12 × 12″, 12 × 24″, 24 × 24″, custom, or *Not specified*), with its
@@ -687,8 +687,8 @@ squares with their hex codes, placed left of the page, to prepare your paints.
    of a layer made of many separate polygons: in `silhouette.svg` each layer is a single compound
    path, cut entirely.
 2. Check the page / mat size and the orientation (if you chose *landscape* for the mat in
-   StencilIt, rotate the design the same way).
-3. Select the material, blade and force (note your best values in the StencilIt material preset).
+   OversprayLab, rotate the design the same way).
+3. Select the material, blade and force (note your best values in the OversprayLab material preset).
    Do a test cut first.
 4. Cut each layer, and write its number on the sheet (the notches at the top also give it).
 
@@ -721,7 +721,7 @@ squares with their hex codes, placed left of the page, to prepare your paints.
   formats (*Cutting machine*), have **Save / Save as… /
   Rename… / Delete** buttons. A "● modified" marker shows unsaved changes. Your presets and palettes
   are stored in `presets_utilisateur.json` (created on first save, editable by hand). The built-in
-  materials are in `stencilit/materials.json`.
+  materials are in `overspraylab/materials.json`.
 - The **last settings used** are remembered by the browser and restored at the next start.
   **Default settings** (right of the image box, under *Export the project*) starts again from scratch.
 
@@ -744,19 +744,19 @@ squares with their hex codes, placed left of the page, to prepare your paints.
 | In Silhouette Studio, all the cut lines end up in one layer of the Inkscape file | Grouping objects of several layers moves them into a single layer (ungrouping does not put them back). To move everything, select all (Ctrl + A) and drag without grouping, or re-import the file. |
 | In Silhouette Studio, the hidden render image of the Inkscape file shows black areas when zooming | Display glitch of Silhouette Studio; the cutting files are not affected. Use the PNG render instead. |
 
-Advanced: the layers are computed in parallel. The environment variable `STENCILIT_PARALLEL`
+Advanced: the layers are computed in parallel. The environment variable `OVERSPRAYLAB_PARALLEL`
 selects `thread` (default), `process` or `none`.
 
 ---
 
 ## 9. How it works (for the curious)
 
-The engine lives in `stencilit/pipeline.py`; the exports in `stencilit/svg_export.py`; the web server
+The engine lives in `overspraylab/pipeline.py`; the exports in `overspraylab/svg_export.py`; the web server
 in `app.py` (Flask) and the interface in `static/index.html` (+ `static/i18n.js` for translations).
 
 1. **Scaling** – the image is cropped, placed and resampled at its real size (mm → pixels).
 2. **Preprocessing** – levels, CLAHE, gamma, saturation, sharpening, background removal (GrabCut
-   around a painted area, or objects selected with MobileSAM, see `stencilit/semantic.py`).
+   around a painted area, or objects selected with MobileSAM, see `overspraylab/semantic.py`).
 3. **Simplification** – k-means clustering in the Lab colour space, chroma weighted by the hue
    weight (or on luminance, or with manual thresholds) plus a majority filter; tones sorted from light to dark = spraying order.
    Optional flat areas: connected areas of each tone absorbed by a larger neighbour across a
@@ -769,7 +769,7 @@ in `app.py` (Flask) and the interface in `static/index.html` (+ `static/i18n.js`
    outline of a mask (silhouette). Optionally, thin strokes found by a Hessian ridge filter escape
    the majority filter of the simplification.
 5. **Material constraints** – morphological opening and closing, removal of tiny pieces.
-   Then the optional **layer effects** (`stencilit/effects.py`) reshape each layer mask, in
+   Then the optional **layer effects** (`overspraylab/effects.py`) reshape each layer mask, in
    spraying order, before the material limits are checked again.
 6. **Merges and bridges** – optionally, islands are first held by merging zones (morphological
    closing of narrow channels, removal of small islands), cheapest visible change first; each
@@ -778,14 +778,14 @@ in `app.py` (Flask) and the interface in `static/index.html` (+ `static/i18n.js`
 7. **Vectorisation** – smoothed, simplified outlines turned into Bézier curves.
 8. **Export** – one SVG per layer with registration marks, overview, simulated render, Inkscape
    and Silhouette Studio documents, spraying sheet (PDF, written by the small dependency-free
-   `stencilit/pdf_sheet.py`) and JSON project.
+   `overspraylab/pdf_sheet.py`) and JSON project.
 
 ```
-StencilIt/
+OversprayLab/
 ├── app.py                 web server (Flask) and API
 ├── lancer.bat             one-click launcher (Windows)
 ├── requirements.txt
-├── stencilit/
+├── overspraylab/
 │   ├── pipeline.py        image → layers → bridges → paths
 │   ├── effects.py         layer effects (outline, fill, structure, practical)
 │   ├── svg_export.py      SVG / Inkscape / PDF sheet / zip export
@@ -807,9 +807,9 @@ StencilIt/
 
 ## License
 
-StencilIt is released under the [MIT License](LICENSE).
+OversprayLab is released under the [MIT License](LICENSE).
 
 The learned edges method uses TEED (*Tiny and Efficient Edge Detector*, X. Soria, Y. Li, M. Rouhani,
 A. D. Sappa, 2023, [github.com/xavysp/TEED](https://github.com/xavysp/TEED)), MIT License,
-Copyright (c) 2022 Xavier Soria Poma: see `stencilit/edge_model/LICENSE_TEED.txt`. The ONNX file was
+Copyright (c) 2022 Xavier Soria Poma: see `overspraylab/edge_model/LICENSE_TEED.txt`. The ONNX file was
 exported from its BIPED checkpoint by `tools/export_teed_onnx.py`.

@@ -32,7 +32,7 @@ class TeedError(RuntimeError):
 def _load():
     """Inference function of the model: onnxruntime if available, else OpenCV DNN."""
     if not MODEL.is_file():
-        raise TeedError("Modèle de contours appris (TEED) introuvable : stencilit/edge_model/teed_biped7.onnx")
+        raise TeedError("Modèle de contours appris (TEED) introuvable : overspraylab/edge_model/teed_biped7.onnx")
     try:
         import onnxruntime as ort
     except ImportError:
