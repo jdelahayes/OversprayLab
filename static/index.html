@@ -173,7 +173,7 @@
   .ibtn:disabled { opacity: .35; cursor: default; }
   .ibtn[aria-pressed="true"] { background: var(--accent); color: var(--accent-ink); border-color: var(--accent); }
   .card.hidden-layer img { opacity: .35; }
-  .comparebar { display: flex; align-items: center; gap: 6px 10px; flex-wrap: wrap; margin: 6px 0 0; font-size: 12px; }
+  .comparebar { display: flex; align-items: center; gap: 6px 10px; flex-wrap: wrap; flex: 1 1 auto; font-size: 12px; }
   .comparebar label { display: inline-flex; align-items: center; gap: 4px; color: var(--muted); }
   .comparebar select { max-width: 180px; }
   .comparebar .cmpside { display: inline-flex; align-items: center; gap: 4px 6px; flex-wrap: wrap; }
@@ -1329,6 +1329,16 @@
       <input type="checkbox" id="preview_sim" hidden>
       <input type="checkbox" id="preview_nobridges" hidden>
     </span>
+    <!-- Compare: versions on each side, their layers, slider and side by side (toolbar above the view) -->
+    <div class="comparebar" id="compareBar" hidden>
+      <span class="cmpside"><label title="Version affichée à gauche du curseur">Gauche <select id="cmpLeft"></select></label>
+        <span class="vt-toggles" id="cmpLayL" role="group" aria-label="Couches affichées à gauche"></span></span>
+      <button type="button" class="vt-opt cmpslide" id="cmpSwap" aria-pressed="false" title="Affiche toute la version de gauche, puis toute celle de droite, à chaque clic ; le curseur reprend la main dès qu'on le déplace">⇄ Gauche / droite</button>
+      <input type="range" class="cmpslide" id="compareRange" min="0" max="100" value="50" aria-label="Position de la comparaison">
+      <span class="cmpside"><label title="Version affichée à droite du curseur">Droite <select id="cmpRight"></select></label>
+        <span class="vt-toggles" id="cmpLayR" role="group" aria-label="Couches affichées à droite"></span></span>
+      <button type="button" class="vt-opt" id="cmpSbs" aria-pressed="false" title="Affiche les deux versions l'une à côté de l'autre, au lieu de les superposer avec le curseur">Côte à côte</button>
+    </div>
   </div>
   <div class="viewtools masktools" id="masktools" hidden>
     <div class="mrow">
@@ -1410,15 +1420,6 @@
     </div>
   </div>
   <div class="stage" id="stage"><div class="empty">Aucune image chargée.</div></div>
-  <div class="comparebar" id="compareBar" hidden>
-    <span class="cmpside"><label title="Version affichée à gauche du curseur">Gauche <select id="cmpLeft"></select></label>
-      <span class="vt-toggles" id="cmpLayL" role="group" aria-label="Couches affichées à gauche"></span></span>
-    <button type="button" class="vt-opt cmpslide" id="cmpSwap" aria-pressed="false" title="Affiche toute la version de gauche, puis toute celle de droite, à chaque clic ; le curseur reprend la main dès qu'on le déplace">⇄ Gauche / droite</button>
-    <input type="range" class="cmpslide" id="compareRange" min="0" max="100" value="50" aria-label="Position de la comparaison">
-    <span class="cmpside"><label title="Version affichée à droite du curseur">Droite <select id="cmpRight"></select></label>
-      <span class="vt-toggles" id="cmpLayR" role="group" aria-label="Couches affichées à droite"></span></span>
-    <button type="button" class="vt-opt" id="cmpSbs" aria-pressed="false" title="Affiche les deux versions l'une à côté de l'autre, au lieu de les superposer avec le curseur">Côte à côte</button>
-  </div>
   <!-- Info dock: snapshots, warnings, dimensions and ruler placement as tabs of one foldable box.
        A pane's `hidden` = nothing to show (its tab is hidden too); the active pane is the shown one. -->
   <div class="viewspacer"></div>
@@ -5622,7 +5623,7 @@ function refreshPreviewOnly() {
 // ruler panel, so that folding the panel enlarges the view; at least 72 % of the window as before
 function stageH() {
   const view = document.querySelector("section.view"), st = $("stage");
-  // compare bar shown before measuring (applyZoom shows it too, but after the view is fitted)
+  // compare bar (above the view) shown before measuring (applyZoom shows it too, but after the view is fitted)
   $("compareBar").hidden = !(LAST && SEL === null && VIEW === "compare");
   // the boxes under the view (warnings, dimensions) are kept on screen: taken off the minimum height too
   const warnH = ["infoDock"].reduce((a, id) => { const e = $(id); return a + (e && !e.hidden ? e.offsetHeight + 10 : 0); }, 0);
@@ -5632,7 +5633,7 @@ function stageH() {
     const cs = getComputedStyle(st), num = v => parseFloat(v) || 0;
     const pad = num(cs.paddingTop) + num(cs.paddingBottom) + num(cs.borderTopWidth) + num(cs.borderBottomWidth);
     let below = 0;
-    for (const id of ["compareBar", "infoDock"]) {
+    for (const id of ["infoDock"]) {
       const e = $(id);
       if (!e || e.hidden) continue;
       const m = getComputedStyle(e);
