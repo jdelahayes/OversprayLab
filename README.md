@@ -551,7 +551,7 @@ The effects are grouped by category in the **+ Add…** list.
 | | **Wavy edges** | Regular waves, saw teeth or scallops along the outlines (amplitude, period). |
 | | **Drips** | Paint drips hanging from the edges facing down: strokes ending in a drop (length, width, spacing, variation, seed). |
 | | **Grow / shrink** | Moves the whole outline outwards (thicker) or inwards (thinner). |
-| Fill | **Halftone dots** | Round holes on a grid (pitch, min / max diameter, angle); dot size constant, growing with the distance to the edge, or following the tones of the original image (halftone gradient). |
+| Fill | **Halftone dots** | Round holes on a grid (pitch, min / max diameter, angle); dot size constant, growing with the distance to the edge, or following the tones of the original image (halftone gradient). Dots at the edge of the layer are either cut by it, removed (whole dots only) or shrunk to fit (never below the min diameter, otherwise removed). |
 | | **Hatching** | Parallel bands, single or crossed (pitch, width, angle). Crossed hatching leaves squares of material held by bridges. |
 | | **Engraving** | Lines whose width follows the tones of the original image (min / max width, pitch); straight, wavy or following the outline: intaglio look. |
 | | **Contour lines** | Bands following the outline, further and further inside (topographic / op art). |

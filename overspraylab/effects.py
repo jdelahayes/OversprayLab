@@ -145,6 +145,12 @@ EFFECTS: dict[str, dict] = {
             _f("fade_mm", "Fondu depuis le bord", 0.5, 50, 0.5, 6, "mm",
                "Distance au bord sur laquelle les points grossissent (taille selon la distance au bord)",
                when={"source": "edge"}),
+            _c("partial", "Points au bord",
+               [["cut", "coupés par le bord"], ["whole", "entiers seulement"], ["fit", "réduits pour tenir"]],
+               "cut",
+               "Coupés : les points qui débordent de la couche sont coupés par son bord (points partiels). "
+               "Entiers seulement : ces points sont supprimés. Réduits : ils sont rétrécis pour tenir "
+               "entièrement dans la couche, sans descendre sous le Ø mini (sinon ils sont supprimés)"),
         ],
     },
     "hatch": {
@@ -696,18 +702,33 @@ def fx_halftone(mask, ctx, a):
     d = np.hypot(u - cu, v - cv_)
     del u, v, X, Y
     # cell centre back in image pixels, to sample the size of the dot there (one size per dot)
-    px = np.clip(((cu * c - cv_ * s) * ppm - ctx.off_px[0]).astype(np.int32), 0, W - 1)
-    py = np.clip(((cu * s + cv_ * c) * ppm - ctx.off_px[1]).astype(np.int32), 0, H - 1)
+    pxf = np.floor((cu * c - cv_ * s) * ppm - ctx.off_px[0])
+    pyf = np.floor((cu * s + cv_ * c) * ppm - ctx.off_px[1])
     del cu, cv_
+    px = np.clip(pxf, 0, W - 1).astype(np.int32)
+    py = np.clip(pyf, 0, H - 1).astype(np.int32)
+    partial = a.get("partial", "cut")
+    dist = None
+    if a["source"] == "edge" or partial != "cut":
+        # distance (mm) to the outside of the layer; the image border counts as outside
+        dist = _dist_inside(np.pad(mask, 1))[1:-1, 1:-1] / ppm
     src = a["source"]
     if src == "flat":
         t = np.ones((H, W), np.float32)
     elif src == "edge":
-        dist = _dist_inside(mask) / ppm
         t = np.clip(dist / max(a["fade_mm"], 1e-3), 0, 1)[py, px]
     else:                                          # tone: dark in the image = big dot
         t = _darkness(ctx, mask, pitch * ppm * 0.5)[py, px]
     r = (dmin + (dmax - dmin) * t) * 0.5
+    if partial != "cut":
+        # room around the dot centre (0 when the centre is outside the image or the layer)
+        room = np.where((pxf >= 0) & (pxf < W) & (pyf >= 0) & (pyf < H), dist[py, px], 0.0)
+        room = room - 0.5 / ppm                    # pixel rounding margin
+        if partial == "fit":                       # shrunk, but never below the min Ø
+            r = np.minimum(r, room)
+            r = np.where(r >= dmin * 0.5, r, 0.0)
+        else:
+            r = np.where(r <= room, r, 0.0)
     return _u8((d <= r) & (r > 0) & (mask > 0))
 
 
