@@ -24,7 +24,13 @@ from . import teed
 
 
 OUTLINE_METHODS = ("canny", "xdog", "fdog", "ridge", "teed")
-OUTLINE_TARGETS = ("stencil", "darkest", "nearest")
+OUTLINE_TARGETS = ("stencil", "darkest", "nearest")   # + "L<n>": into the colour layer at position n
+_LAYER_DEST = re.compile(r"^L[1-9]\d?$")
+
+
+def into_layers(d) -> bool:
+    """Destination in the colour layers: darkest, nearest tone, or a given layer ("L<n>")."""
+    return d in ("darkest", "nearest") or (isinstance(d, str) and bool(_LAYER_DEST.match(d)))
 OUTLINE_REFS = ("layers", "effects", "image")
 CLOSE_LINES = ("", "median", "outer", "inner")
 OUTLINE_CHANNELS = ("light", "colour", "both")
@@ -247,7 +253,7 @@ class Params:
             p.outline_color = "#1e1e1e"
         p.outline_sensitivity = float(np.clip(p.outline_sensitivity, 0, 100))
         p.outline_method = p.outline_method if p.outline_method in OUTLINE_METHODS else "canny"
-        p.outline_target = p.outline_target if p.outline_target in OUTLINE_TARGETS else "stencil"
+        p.outline_target = p.outline_target if (p.outline_target in OUTLINE_TARGETS or into_layers(p.outline_target)) else "stencil"
         p.outline_ref = p.outline_ref if p.outline_ref in OUTLINE_REFS else "layers"
         p.outline_close_lines = p.outline_close_lines if p.outline_close_lines in CLOSE_LINES else ""
         p.outline_channel = p.outline_channel if p.outline_channel in OUTLINE_CHANNELS else "light"
@@ -1746,7 +1752,7 @@ def build(prep: Prepared, p: Params, outline_region: np.ndarray | None = None,
     # Key-detail lines merged into the colour layers (instead of a separate outline stencil):
     # searched against the render of the layers before bridges, then added to the chosen layer.
     detect_sim, detect_painted, lines_added, strokes = None, None, 0, {}
-    into = [e for e in entries if e[2] in ("darkest", "nearest")]
+    into = [e for e in entries if into_layers(e[2])]
     # render of the colour layers before their effects, for the zones that search "before effects"
     need_pre = bool(fx) and any(e[0].outline_ref == "layers" for e in entries)
     flat = np.empty((H, W, 3), np.uint8)       # "image alone": compared with the bare support
@@ -1855,7 +1861,7 @@ def build(prep: Prepared, p: Params, outline_region: np.ndarray | None = None,
 # --------------------------------------------------------------------------
 # Key-detail zones: each zone (painted area, or the whole image) has its own detection settings and
 # a destination: an outline layer (A, B... several zones sent to the same one are merged into one
-# stencil) or the colour layers (darkest / nearest). The colour belongs to the outline layer.
+# stencil) or the colour layers (darkest / nearest / "L<n>" = the layer at position n). The colour belongs to the outline layer.
 #   {"zones": [{"id": "z1", "name": "Zone 1", "on": true, "method": "canny", "sensitivity": 50,
 #               "width_mm": 0.8, "min_length_mm": 4, "dest": "A"}],
 #    "groups": {"A": {"auto": true, "color": "#1e1e1e"}}, "sil_dest": "A"}
@@ -1885,7 +1891,7 @@ def outline_plan(p: Params) -> tuple[list, dict, str]:
         data = None
     if not isinstance(data, dict) or not isinstance(data.get("zones"), list) or not data["zones"]:
         return zones, groups, sil
-    ok_dest = lambda d: d in ("darkest", "nearest") or (isinstance(d, str) and bool(_GROUP.match(d)))
+    ok_dest = lambda d: into_layers(d) or (isinstance(d, str) and bool(_GROUP.match(d)))
     groups = {}
     for k, g in (data.get("groups") or {}).items():
         if isinstance(k, str) and _GROUP.match(k) and isinstance(g, dict):
@@ -2177,13 +2183,18 @@ def lines_into_layers(prep: Prepared, sim: np.ndarray, p: Params, region: np.nda
     Each line goes to a layer painted after the one(s) under it (darker tone, otherwise the paint
     would not show): the darkest layer, or (`nearest`) the one whose tone is closest to the line's
     colour in the original. Lines over an area already painted by the last layer are left out
-    (they are already cut). With `stages`, returns the detection stages instead, the stroke
-    limited to the lines added and `present` = lines already in the layers."""
+    (they are already cut). A given layer ("L<n>", beyond the last = the last): the parts of the
+    lines over a layer painted after it are left out (they would be covered). With `stages`,
+    returns the detection stages instead, the stroke limited to the lines added and `present` =
+    lines already in the layers (or covered)."""
     st = detect_key_details(prep, sim, p, region, dark=True, stages=True)
     width = max(p.outline_width_mm, p.min_opening_mm * 1.05)
     k = disk(width * p.px_per_mm / 2)
     # The silhouette (one long closed line) is placed piece by piece below; the other lines whole
     sil = subject_silhouette(prep, p, sim)
+    if _LAYER_DEST.match(p.outline_target or ""):
+        return _lines_into_layer(st, sil, k, min(int(p.outline_target[1:]), len(color_ids)) - 1,
+                                 painted, stages)
     kept = st["kept"] & ~sil if sil is not None else st["kept"]
     n, comp = cv2.connectedComponents(kept.astype(np.uint8), connectivity=8)
     if n <= 1 and sil is None:
@@ -2240,6 +2251,30 @@ def lines_into_layers(prep: Prepared, sim: np.ndarray, p: Params, region: np.nda
             stroke |= m > 0
         return dict(st, stroke=stroke, present=present)
     return out, added
+
+
+def _lines_into_layer(st: dict, sil, k: np.ndarray, li: int, painted: np.ndarray, stages: bool):
+    """Lines (and silhouette) cut into the colour layer at position `li`: only where the lightest
+    layer under the stroke is painted before it (elsewhere the line is already cut or would be
+    covered by a later layer). Same return values as `lines_into_layers`."""
+    line = st["kept"] | sil if sil is not None else st["kept"].copy()
+    keep = np.zeros_like(line)
+    if li >= 0 and line.any():
+        under = cv2.erode(painted.astype(np.int16), k)           # lightest layer under the stroke
+        keep = line & (under < li)
+        # pieces left by the cut shorter than the stroke width: dropped (nothing would show)
+        n, comp, stats, _ = cv2.connectedComponentsWithStats(keep.astype(np.uint8), connectivity=8)
+        size = np.maximum(stats[:, cv2.CC_STAT_WIDTH], stats[:, cv2.CC_STAT_HEIGHT])
+        ok = size >= max(2, k.shape[0])
+        ok[0] = False
+        keep = ok[comp]
+    present = line & ~keep
+    stroke = cv2.dilate(keep.astype(np.uint8) * 255, k)
+    if stages:
+        return dict(st, stroke=stroke > 0, present=present)
+    if not keep.any():
+        return {}, 0
+    return {li: stroke}, cv2.connectedComponents(keep.astype(np.uint8), connectivity=8)[0] - 1
 
 
 def outline_keep_share(sensitivity: float) -> float:

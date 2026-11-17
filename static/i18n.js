@@ -719,6 +719,7 @@ try {
     "+ nouvelle couche de contours": "+ new outline layer",
     "dans la couche la plus foncée": "into the darkest layer",
     "dans la couche de teinte la plus proche": "into the layer of the nearest tone",
+    "Découpés dans cette couche, sauf là où une couche peinte après la recouvrirait (au-delà de la dernière couche : la dernière).": "Cut into this layer, except where a layer painted after it would cover them (beyond the last layer: the last one).",
     "Couche de contours : un pochoir de plus, peint après les couleurs, de la couleur du trait choisie ci-dessous. Les zones envoyées vers la même couche y sont fusionnées.": "Outline layer: one more stencil, painted after the colours, in the line colour chosen below. The zones sent to the same layer are merged into it.",
     "Les ajouts d'un effet passent devant les couches plus foncées": "What an effect adds goes in front of the darker layers",
     "Empilement exclusif : ce qu'un effet ajoute à une couche (gonflement, ombre, halo peint…) est retiré des couches plus foncées, qui sinon le recouvriraient. Décoché : les couches plus foncées gardent leurs zones et l'ajout n'est découpé que là où elles ne peignent pas. Le Recouvrement n'est pas concerné (il passe dessous exprès).": "Exclusive stacking: what an effect adds to a layer (grow, shadow, painted halo…) is removed from the darker layers, which would cover it otherwise. Unticked: the darker layers keep their areas and the addition is only cut where they do not paint. Overlap is not concerned (it goes under on purpose).",
@@ -983,6 +984,7 @@ try {
   const P = [
     [/^([\s\S]*)\nProchain trait à (\d+)\.$/, (m, t, n) => `${tr(t)}\nNext line at ${n}.`],
     [/^Contours ([A-Z])$/, (m, g) => `Outline ${g}`],
+    [/^dans la couche (\d+)$/, (m, n) => `into layer ${n}`],
     [/^Couleur du trait — Contours ([A-Z])$/, (m, g) => `Line colour — Outline ${g}`],
     [/^Zone ajoutée : (.+) \(non peinte = toute l'image : peignez-la dans l'onglet Masques\)$/, (m, n) => `Zone added: ${n} (not painted = whole image: paint it in the Masks tab)`],
     [/^Zone supprimée : (.+)$/, (m, n) => `Zone deleted: ${n}`],

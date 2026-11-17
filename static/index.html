@@ -2997,7 +2997,8 @@ function colourGroup(s, z) {
   if (val("stencil_style") === "line") return Object.keys(s.groups).sort()[0] || "A";
   return null;
 }
-const destLabel = d => d === "darkest" ? "dans la couche la plus foncée" : d === "nearest" ? "dans la couche de teinte la plus proche" : `Contours ${d}`;
+const isLayerDest = d => /^L[1-9]\d?$/.test(d || "");
+const destLabel = d => d === "darkest" ? "dans la couche la plus foncée" : d === "nearest" ? "dans la couche de teinte la plus proche" : isLayerDest(d) ? `dans la couche ${d.slice(1)}` : `Contours ${d}`;
 // fields of the section -> zone shown (and the colour of its outline layer)
 function fieldsToZone() {
   const s = zState(), z = zCur(s);
@@ -3020,7 +3021,9 @@ function zoneToFields() {
   $("outline_line_sens").value = Number.isFinite(+z.line_sens) ? z.line_sens : 50;
   $("outline_follow_mm").value = z.follow_mm != null && Number.isFinite(+z.follow_mm) ? z.follow_mm : 12;   // zones of earlier versions: 12
   syncLineSens();
-  $("outline_target").value = isGroup(z.dest) ? "stencil" : z.dest;
+  const tsel = $("outline_target"), tv = isGroup(z.dest) ? "stencil" : z.dest;
+  if (![...tsel.options].some(o => o.value === tv)) tsel.add(new Option(destLabel(tv), tv));   // "L<n>"
+  tsel.value = tv;
   const g = colourGroup(s, z), gc = g && (s.groups[g] || { auto: true, color: "#1e1e1e" });
   if (gc) { $("outline_auto_color").checked = gc.auto !== false; $("outline_color").value = gc.color || "#1e1e1e"; }
   $("outline_color").disabled = $("outline_auto_color").checked;
@@ -3053,16 +3056,26 @@ function zoneActivate(id) {
   if (!MASK_EMPTY) { const d = MASK.getContext("2d").getImageData(0, 0, MASK.width, MASK.height).data; for (let i = 3; i < d.length; i += 4) if (d[i]) n++; }
   maskInfo(Math.round(1000 * n / (MASK.width * MASK.height)) / 10);
 }
+// colour layers of the last computation (position, colour), offered as destinations "L<n>"
+function destLayers(s) {
+  const L = LAST && val("stencil_style") !== "line" ? LAST.layers.filter(x => x.kind !== "outline") : [];
+  const out = L.map((x, i) => [i + 1, x.color]);
+  // a destination beyond the layers of the last computation: kept (the computation uses the last layer)
+  for (const d of [...s.zones.map(z => z.dest), s.sil_dest].filter(isLayerDest))
+    if (!out.some(o => o[0] === +d.slice(1))) out.push([+d.slice(1), null]);
+  return out.sort((a, b) => a[0] - b[0]);
+}
 function destOptions(s) {
   const gs = [...new Set([...Object.keys(s.groups), ...zUsed(s)])].sort();
   return gs.map(g => `<option value="${g}">Contours ${g}</option>`).join("") +
     `<option value="new">+ nouvelle couche de contours</option>` +
-    `<option value="darkest">dans la couche la plus foncée</option><option value="nearest">dans la couche de teinte la plus proche</option>`;
+    `<option value="darkest">dans la couche la plus foncée</option><option value="nearest">dans la couche de teinte la plus proche</option>` +
+    destLayers(s).map(([n]) => `<option value="L${n}">dans la couche ${n}</option>`).join("");
 }
 function renderZones() {
   if (!$("zoneBar")) return;
   const s = zState(), z = zCur(s);
-  const html = s.zones.map(x => `<button type="button" class="vt-opt zchip${x.on === false ? " off" : ""}" data-z="${x.id}" aria-pressed="${x.id === z.id}" title="${escH(destLabel(x.dest))}" data-noi18n>${escH(x.name)}</button>`).join("") +
+  const html = s.zones.map(x => `<button type="button" class="vt-opt zchip${x.on === false ? " off" : ""}" data-z="${x.id}" aria-pressed="${x.id === z.id}" title="${escH(I18N.t(destLabel(x.dest)))}" data-noi18n>${escH(x.name)}</button>`).join("") +
     `<button type="button" class="vt-opt zadd" title="Ajouter une zone de contours (copie des réglages de la zone affichée)" aria-label="Ajouter une zone de contours">+</button>`;
   $("zoneBar").innerHTML = html; $("mZones").innerHTML = html;
   $("mZones").hidden = maskKind() !== "outline";
@@ -3873,7 +3886,7 @@ async function applyOpened(j, name) {
   if (j.computed) {
     historyRecord();
     j.computed.sid = SID; IMG_CACHE = new Map(); LAST = j.computed; DIRTY = false; CALC_KEY = snapKey();
-    render(); updateSummaries(); updateCalcBtn(); $("export").disabled = false;
+    render(); renderZones(); updateSummaries(); updateCalcBtn(); $("export").disabled = false;
   } else process();
   SNAP_KEY = PROJ.current ? snapKey() : null;
   renderSnaps();
@@ -4258,7 +4271,7 @@ async function process() {
     const j = await r.json();
     if (!r.ok) throw new Error(j.error || "Erreur");
     j.sid = sid;              // image the result belongs to (the mask background checks it)
-    IMG_CACHE = new Map(); LAST = j; render(); rememberSettings(); updateSummaries();
+    IMG_CACHE = new Map(); LAST = j; render(); renderZones(); rememberSettings(); updateSummaries();
     status(j.recolored ? `Couleurs mises à jour en ${j.seconds} s (découpe inchangée)` : `Calculé en ${j.seconds} s`);
     if (GEN === gen) DIRTY = false;               // nothing changed during the computation
     $("export").disabled = false;
@@ -4787,9 +4800,10 @@ const TARGET_HINTS = {
   darkest: "Découpés dans la couche la plus foncée (plus d'îlots et de ponts).",
   nearest: "Découpés dans la couche de teinte la plus proche de celle du trait.",
 };
+const LAYER_HINT = "Découpés dans cette couche, sauf là où une couche peinte après la recouvrirait (au-delà de la dernière couche : la dernière).";
 function syncOutlineTarget() {
   const t = $("outline_target").value;
-  $("outline_target_hint").textContent = TARGET_HINTS[t] || "";
+  $("outline_target_hint").textContent = TARGET_HINTS[t] || (isLayerDest(t) ? LAYER_HINT : "");
   const zs = zState(), g = colourGroup(zs, zCur(zs));
   $("outlineColorBox").hidden = !g;
   $("olColorLbl").textContent = g ? `Couleur du trait — Contours ${g}` : "Couleur du trait";

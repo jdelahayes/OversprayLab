@@ -394,7 +394,10 @@ stencil, the rest of the image with a low sensitivity into the darkest layer.
   on its outline layer gets a **dedicated** stencil. *+ new outline layer* creates the next one;
 - **Into the darkest layer** – no extra stencil: the lines are cut into the last layer;
 - **Into the layer of the nearest tone** – no extra stencil: each line goes into the layer whose tone
-  is closest to its own, among those darker than the area it crosses.
+  is closest to its own, among those darker than the area it crosses;
+- **Into layer 1, 2…** – no extra stencil: the lines are cut into that colour layer (by its
+  position, the colour layers of the last computation are listed), except where a layer painted
+  after it would cover them. Beyond the last layer (fewer tones since), the last one is used.
 
 The **line colour belongs to the outline layer** (zones merged together are painted together): the
 section shows the colour of the outline layer of the zone shown, and the card of each outline
@@ -531,7 +534,7 @@ Line stencils – the outline layers that receive the key details and the silhou
 stencil of the lines-only style – have effects too (listed as *Layer n (outline)* once computed).
 Painted over the colour layers, they are processed alone: their effects see the other layers but
 change only their own stencil (a halo or shadow given to another layer is left out). Lines added
-into a colour layer (destination *darkest* / *nearest layer*) are not changed by that layer's
+into a colour layer (destination *darkest* / *nearest* / a given layer) are not changed by that layer's
 effects.
 
 The effects are grouped by category in the **+ Add…** list.
