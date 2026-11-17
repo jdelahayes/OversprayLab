@@ -68,8 +68,13 @@ try {
     "Créer une snapshot": "Take a snapshot",
     "Enregistre la version courante (image, masques, réglages et résultat calculé) comme nouvelle snapshot dans le dossier du projet ; une snapshot ne change plus ensuite":
       "Saves the current version (image, masks, settings and computed result) as a new snapshot in the project folder; a snapshot never changes afterwards",
-    "Libellé (facultatif)": "Label (optional)", "Libellé de la snapshot": "Snapshot label",
+    "Nom (facultatif)": "Name (optional)", "Nom de la snapshot": "Snapshot name",
+    "Cliquer pour renommer la snapshot": "Click to rename the snapshot",
     "Version courante": "Current version",
+    "Exporter cette snapshot en zip : pochoirs et projet rechargeable ne contenant qu'elle": "Export this snapshot as a zip: stencils and a reloadable project holding only this snapshot",
+    "Exporter la snapshot": "Export the snapshot",
+    "Supprimer cette snapshot (définitivement : son répertoire est effacé)": "Delete this snapshot (for good: its folder is erased)",
+    "Supprimer la snapshot": "Delete the snapshot",
     "Ouvrir cette snapshot : image, masques, réglages et résultat, sans recalcul": "Open this snapshot: image, masks, settings and result, without computing",
     "Version courante, pas encore enregistrée : la prochaine snapshot ou le prochain export l'enregistre": "Current version, not saved yet: the next snapshot or export saves it",
     "non enregistrée": "not saved",
@@ -1114,6 +1119,13 @@ try {
     [/^Projet ouvert : (.+)$/, (m, f) => `Project opened: ${f}`], [/^Serveur injoignable : (.+)$/, (m, e) => `Server unreachable: ${e}`],
     [/^(.+) \(projet\)$/, (m, f) => `${f} (project)`],
     [/^Snapshot (v\d+) enregistrée$/, (m, v) => `Snapshot ${v} saved`],
+    // snapshot tooltips: technical id (and creation date) above the text
+    // (line break turned into a space by the normalisation; put back)
+    [/^(v\d+(?: — [\d/:, ]+)?) ([A-ZÀ-Ý].*)$/, (m, v, t) => `${v.trim()}\n${tr(t)}`],
+    [/^Snapshot (v\d+) renommée$/, (m, v) => `Snapshot ${v} renamed`],
+    [/^Snapshot (v\d+) supprimée$/, (m, v) => `Snapshot ${v} deleted`],
+    [/^Export de la snapshot (v\d+)…$/, (m, v) => `Exporting snapshot ${v}…`],
+    [/^Suppression impossible : ([\s\S]+)$/, (m, e) => `Deletion impossible: ${e}`],
     [/^Snapshot (v\d+) ouverte$/, (m, v) => `Snapshot ${v} opened`],
     [/^Snapshot (v\d+) ouverte \(recalculée\)$/, (m, v) => `Snapshot ${v} opened (recomputed)`],
     [/^Dossier de projet illisible : ([\s\S]+)$/, (m, e) => `Unreadable project folder: ${tr(e)}`],

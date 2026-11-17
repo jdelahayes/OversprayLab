@@ -1006,6 +1006,77 @@ def api_snapshot_thumb(name, snap):
     return send_file(s / "thumb.jpg", mimetype="image/jpeg", max_age=3600)
 
 
+def snapshot_of(name, snap):
+    """(project folder, snapshot id) of a URL, or raises ProjectError."""
+    d = projects.project_dir(name)
+    projects.snap_dir(d, snap)
+    return d
+
+
+@app.post("/api/projects/<name>/<snap>/label")
+def api_snapshot_label(name, snap):
+    """Renames a snapshot (its label: the only thing of a snapshot that can change)."""
+    try:
+        d = snapshot_of(name, snap)
+    except projects.ProjectError as e:
+        return jsonify(error=str(e)), 404
+    label = re.sub(r"[\x00-\x1f]+", " ", str(request.get_json(force=True).get("label") or "")).strip()[:80]
+    projects.set_label(d, snap, label)
+    return jsonify(project_state(d, None))
+
+
+@app.delete("/api/projects/<name>/<snap>")
+def api_snapshot_delete(name, snap):
+    """Deletes a snapshot (its folder). Sessions opened on it keep their state, now unsaved."""
+    try:
+        d = snapshot_of(name, snap)
+        with LOCK:
+            projects.delete_snapshot(d, snap)
+            for sess in SESSIONS.values():
+                if sess.get("proj_dir") == d and sess.get("snap") == snap:
+                    sess["snap"] = None
+    except projects.ProjectError as e:
+        return jsonify(error=str(e)), 404
+    except OSError as e:
+        return jsonify(error=f"Suppression impossible : {e}"), 500
+    return jsonify(project_state(d, None))
+
+
+@app.get("/api/projects/<name>/<snap>/export")
+def api_snapshot_export(name, snap):
+    """Export zip of one snapshot (stencils + reloadable project holding only this snapshot), made
+    from its saved result (computed again if its session dump cannot be read), without touching
+    the current session."""
+    try:
+        d = snapshot_of(name, snap)
+    except projects.ProjectError as e:
+        return jsonify(error=str(e)), 404
+    out = open_snapshot(d, snap)
+    if isinstance(out, tuple):
+        return answer(out)
+    sid = out["id"]
+    try:
+        sess = SESSIONS[sid]
+        if sess.get("result") is None:
+            info = out["info"]
+            with app.test_request_context(json={"id": sid, "params": info.get("parametres") or {},
+                                                "material": info.get("materiau"),
+                                                "ui": (info.get("projet") or {}).get("interface")}):
+                r = api_process()
+            if sess.get("result") is None:
+                return r
+        pname = project_name(out.get("project_name"), sess["name"])
+        data = export_zip(sess["result"], sess.get("material"), pname, lang=req_lang(request.args.get("lang")),
+                          original=(sess.get("raw"), sess.get("ext", ".png")),
+                          folder=projects.folder_files(d, only=snap), extra={"snapshot": snap},
+                          **project_args(sess))
+    finally:
+        with LOCK:
+            SESSIONS.pop(sid, None)
+    return send_file(io.BytesIO(data), mimetype="application/zip", as_attachment=True,
+                     download_name=f"{pname.replace(' ', '_')}_{snap}.zip")
+
+
 @app.post("/api/snapshot/open")
 def api_snapshot_open():
     data = request.get_json(force=True)

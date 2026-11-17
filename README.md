@@ -735,12 +735,19 @@ squares with their hex codes, placed left of the page, to prepare your paints.
   colours, palette – and the **painted masks** (each stroke, object selection, copy or clear is one
   step), then recompute. Up to 100 steps; the history starts again with each new image. Display
   options are not part of it, and in a text or number field Ctrl + Z stays the field's own undo.
-- **Snapshots**: the bar under the view keeps versions of the project. **Take a snapshot** (with an
-  optional label) saves the current version – image, masks, settings and the computed result – into
+- **Snapshots**: the *Snapshots* box under the view (click its title to fold it; folded, it shows the
+  number of snapshots and the current one) keeps versions of the project. **Take a snapshot** (with an
+  optional name) saves the current version – image, masks, settings and the computed result – into
   the project folder; a snapshot never changes afterwards. Click a thumbnail to go back to that
   version: it opens instantly, without computing. As soon as you change anything, the current
   version becomes a new one (*v3 · not saved*), saved by the next snapshot or export; leaving it
   unsaved (other snapshot, project or image) asks whether to save it, discard it or cancel.
+  A snapshot is named after its number (`v0`, `v1`…) unless you give it a name; **click the name**
+  under the thumbnail to change it (Enter saves, Escape gives up, an empty name goes back to the
+  number). Hovering the thumbnail shows its number and creation date. Its two icons: **export** (a
+  zip of that snapshot alone: its stencils and a reloadable project holding only it, made from its
+  saved result) and **delete** (click twice; its folder is erased, and its number is never given
+  again).
 - **Projects folder**: projects are stored in `projets/` next to the application (another place:
   environment variable `OVERSPRAYLAB_PROJECTS`), one folder per project:
   `original.<ext>` (the source image, never reduced, stored once) and `snapshots/v0`, `v1`… (settings,

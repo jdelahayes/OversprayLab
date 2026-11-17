@@ -80,8 +80,33 @@ def snap_ids(d: Path) -> list[str]:
 
 
 def next_id(d: Path | None) -> str:
-    ids = snap_ids(d) if d else []
-    return f"v{int(ids[-1][1:]) + 1}" if ids else "v0"
+    """Number of the next snapshot: never one already used, even by a deleted snapshot."""
+    if not d:
+        return "v0"
+    ids = snap_ids(d)
+    last = max([int(i[1:]) for i in ids] + [int(project_info(d).get("dernier_numero", -1))])
+    return f"v{last + 1}"
+
+
+def delete_snapshot(d: Path, sid: str) -> None:
+    s = snap_dir(d, sid)
+    _note_number(d, sid)
+    shutil.rmtree(s)
+
+
+def set_label(d: Path, sid: str, label: str) -> None:
+    s = snap_dir(d, sid)
+    meta = _read_json(s / SNAP_FILE)
+    meta["libelle"] = label
+    _write_json(s / SNAP_FILE, meta)
+
+
+def _note_number(d: Path, sid: str) -> None:
+    """Highest snapshot number used, kept in projet.json (deleted numbers are not given again)."""
+    info = project_info(d)
+    if int(sid[1:]) > int(info.get("dernier_numero", -1)):
+        info["dernier_numero"] = int(sid[1:])
+        _write_json(d / PROJECT_FILE, info)
 
 
 def project_info(d: Path) -> dict:
@@ -92,7 +117,7 @@ def snapshots(d: Path) -> list[dict]:
     out = []
     for sid in snap_ids(d):
         meta = _read_json(d / "snapshots" / sid / SNAP_FILE)
-        out.append({"id": sid, "label": str(meta.get("libelle") or ""), "date": meta.get("date"),
+        out.append({"id": sid, "uid": meta.get("uid"), "label": str(meta.get("libelle") or ""), "date": meta.get("date"),
                     "delta_e": meta.get("delta_e"), "layers": meta.get("pochoirs"),
                     "reduced": bool(meta.get("image_reduite")),
                     "thumb": (d / "snapshots" / sid / "thumb.jpg").is_file()})
@@ -171,9 +196,11 @@ def write_snapshot(d: Path, files: dict[str, bytes], meta: dict, thumb: bytes | 
                 pass                     # no cache: the snapshot is recomputed when opened
         while True:
             sid = next_id(d)
-            _write_json(tmp / SNAP_FILE, {**meta, "id": sid, "date": meta.get("date") or now()})
+            _write_json(tmp / SNAP_FILE, {**meta, "id": sid, "date": meta.get("date") or now(),
+                                          "uid": meta.get("uid") or uuid.uuid4().hex})
             try:
                 tmp.rename(base / sid)
+                _note_number(d, sid)
                 return sid
             except FileExistsError:      # taken meanwhile: next number
                 continue
@@ -196,13 +223,17 @@ def read_session(s: Path) -> dict | None:
     return data["session"]
 
 
-def folder_files(d: Path) -> dict[str, bytes]:
-    """Every file of the project folder (relative paths with /), for the export zip."""
+def folder_files(d: Path, only: str | None = None) -> dict[str, bytes]:
+    """Every file of the project folder (relative paths with /), for the export zip; `only`: just
+    this snapshot (with the project files)."""
     out = {}
     for p in sorted(d.rglob("*")):
         rel = p.relative_to(d).as_posix()
-        if p.is_file() and not rel.split("/")[-1].startswith(".tmp") and "/.tmp_" not in "/" + rel:
-            out[rel] = p.read_bytes()
+        if not p.is_file() or rel.split("/")[-1].startswith(".tmp") or "/.tmp_" in "/" + rel:
+            continue
+        if only and rel.startswith("snapshots/") and not rel.startswith(f"snapshots/{only}/"):
+            continue
+        out[rel] = p.read_bytes()
     return out
 
 
@@ -225,7 +256,10 @@ def import_folder(files: dict[str, bytes]) -> tuple[Path, dict[str, str]]:
     if target is None:
         target = create_project(str(info.get("nom") or "projet"), files[img], Path(img).suffix,
                                 info.get("nom_image"), pid or None)
-    have = {(m["date"], m["label"]) for m in snapshots(target)}
+    # a snapshot is known by its uid (snapshots of earlier versions: by date and label)
+    def key_of(meta):
+        return meta.get("uid") or (meta.get("date"), str(meta.get("libelle") or meta.get("label") or ""))
+    have = {key_of(m): m["id"] for m in snapshots(target)}
     groups: dict[str, dict[str, bytes]] = {}
     for rel, data in files.items():
         parts = rel.split("/")
@@ -242,10 +276,9 @@ def import_folder(files: dict[str, bytes]) -> tuple[Path, dict[str, str]]:
         except ValueError:
             meta = {}
         meta = meta if isinstance(meta, dict) else {}
-        key = (meta.get("date"), str(meta.get("libelle") or ""))
-        if key in have:                  # already there (same date and label)
-            mapping[sid] = next((m["id"] for m in snapshots(target)
-                                 if (m["date"], m["label"]) == key), sid)
+        key = key_of(meta)
+        if key in have:                  # already there
+            mapping[sid] = have[key]
             continue
         thumb = g.pop("thumb.jpg", None)
         session = g.pop(SESSION_FILE, None)
@@ -253,5 +286,5 @@ def import_folder(files: dict[str, bytes]) -> tuple[Path, dict[str, str]]:
         if session:
             (target / "snapshots" / new / SESSION_FILE).write_bytes(session)
         mapping[sid] = new
-        have.add(key)
+        have[key] = new
     return target, mapping               # mapping: snapshot ids of the zip -> ids in the folder

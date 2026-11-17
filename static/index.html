@@ -198,22 +198,30 @@
              box-shadow: 0 10px 28px rgba(0,0,0,.4); font-size: 13px; }
   .prefpop h4 { margin: 4px 0 6px; font-size: 13px; }
   /* Snapshots (bar under the view), saved projects (pop-up of "Open a project…"), leave dialog */
-  .snapbar { margin-top: 8px; border: 1px solid var(--line); border-radius: 10px; background: var(--panel); padding: 6px 8px; }
+  .snapbox > summary .hint { font-weight: 400; margin: 0; }
   .snaphead { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; font-size: 12px; }
   .snaphead b { font-size: 12px; margin-right: 4px; }
   .snaphead input { flex: 1 1 140px; min-width: 0; max-width: 260px; padding: 4px 6px; border: 1px solid var(--line);
                     border-radius: 6px; background: var(--soft); color: var(--ink); font: inherit; }
-  .snaplist { display: flex; gap: 6px; overflow-x: auto; padding: 6px 0 2px; }
-  .snap { flex: none; display: grid; grid-template-columns: auto; justify-items: center; gap: 1px; width: 96px; padding: 4px;
+  .snaplist { display: flex; gap: 6px; overflow-x: auto; padding: 8px 0 2px; }
+  .snap { flex: none; display: grid; grid-template-columns: auto; justify-items: center; gap: 1px; width: 104px; padding: 4px;
           border: 1px solid var(--line); border-radius: 8px; background: var(--soft); color: var(--ink); cursor: pointer; font-size: 11px; }
-  button.snap:hover { border-color: var(--accent); }
-  .snap.cur { border: 2px solid var(--accent); padding: 3px; cursor: default; }
+  .snap:hover, .snap:focus-within { border-color: var(--accent); }
+  .snap.cur { border: 2px solid var(--accent); padding: 3px; }
+  .snapopen { display: grid; justify-items: center; gap: 1px; padding: 0; border: 0; background: none; color: inherit;
+              font: inherit; cursor: pointer; }
+  .snap.cur .snapopen { cursor: default; }
+  .snap .slabel.edit { width: 94px; max-width: 94px; padding: 1px 4px; border: 1px solid var(--accent); border-radius: 4px;
+                       background: var(--panel); color: var(--ink); font: inherit; text-align: center; }
+  .snapacts { display: flex; gap: 3px; margin-top: 2px; }
+  .snapacts .ibtn { padding: 3px 5px; }
   .snap.unsaved { border-style: dashed; }
   .snap img, .snap .nothumb, .projitem img, .projitem .nothumb { width: 84px; height: 60px; object-fit: contain; border-radius: 4px;
           background: var(--panel); display: flex; align-items: center; justify-content: center; color: var(--accent); }
-  .snap .sid { font-weight: 600; }
-  .snap .slabel { max-width: 88px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--ink); }
-  .snap .sdate { color: var(--muted); }
+  button.slabel { padding: 0 2px; border: 1px solid transparent; border-radius: 4px; background: none; font: inherit;
+                  font-weight: 600; cursor: text; }
+  button.slabel:hover, button.slabel:focus-visible { border-color: var(--line); }
+  .snap .slabel { min-height: 1.2em; max-width: 94px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--ink); }
   .projpop { position: fixed; z-index: 60; width: 340px; max-width: calc(100vw - 24px); max-height: 70vh; overflow-y: auto;
              background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 8px 10px 10px;
              box-shadow: 0 10px 28px rgba(0,0,0,.4); font-size: 13px; }
@@ -1382,14 +1390,14 @@
   </div>
   <div class="stage" id="stage"><div class="empty">Aucune image chargée.</div></div>
   <input type="range" id="compareRange" min="0" max="100" value="50" aria-label="Position de la comparaison" hidden>
-  <div class="snapbar" id="snapBar" hidden>
+  <details class="foldbox snapbox" id="snapBar" open hidden>
+    <summary>Snapshots <span class="hint" id="snapSum"></span></summary>
     <div class="snaphead">
-      <b>Snapshots</b>
-      <input type="text" id="snapLabel" maxlength="80" placeholder="Libellé (facultatif)" aria-label="Libellé de la snapshot">
+      <input type="text" id="snapLabel" maxlength="80" placeholder="Nom (facultatif)" aria-label="Nom de la snapshot">
       <button type="button" id="snapBtn" title="Enregistre la version courante (image, masques, réglages et résultat calculé) comme nouvelle snapshot dans le dossier du projet ; une snapshot ne change plus ensuite">Créer une snapshot</button>
     </div>
     <div class="snaplist" id="snapList"></div>
-  </div>
+  </details>
   <details class="foldbox warnbox" id="warnBox" hidden>
     <summary id="warnSum"></summary>
     <div id="warnings"></div>
@@ -3414,6 +3422,7 @@ async function init() {
   window.addEventListener("resize", () => { if (VIEW === "layout" || VIEW === "crop" || showSup()) render(); else { fitStage(); applyZoom(); } });
   $("warnBox").addEventListener("toggle", warnRefit);
   $("metricsBox").addEventListener("toggle", () => { if (!$("metricsBox").hidden) savePref("metrics_open", $("metricsBox").open); window.dispatchEvent(new Event("resize")); });
+  $("snapBar").addEventListener("toggle", () => { if (!$("snapBar").hidden) savePref("snaps_open", $("snapBar").open); window.dispatchEvent(new Event("resize")); });
   setupZoom();
   $("reg_shape").addEventListener("change", () => { $("reg_size_mm").value = REG_DEFAULT[val("reg_shape")]; regHint(); schedule(); });
   $("reg_corners").addEventListener("change", regHint);
@@ -3842,33 +3851,105 @@ function snapKey() {
   return JSON.stringify([s.values, s.crop, s.pal, s.masks, IMG && IMG.w, IMG && IMG.h]);
 }
 const isSaved = () => !!(SID && PROJ.current && SNAP_KEY !== null && SNAP_KEY === snapKey());
-function snapDate(d) {
+function snapDate(d, full = false) {
   if (!d) return "";
   const t = new Date(d);
   if (isNaN(t)) return "";
-  return t.toLocaleString(I18N.lang === "fr" ? "fr-FR" : "en-GB", { day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" });
+  return t.toLocaleString(I18N.lang === "fr" ? "fr-FR" : "en-GB",
+    { day: "2-digit", month: "2-digit", ...(full ? { year: "numeric" } : {}), hour: "2-digit", minute: "2-digit" });
 }
 const thumbUrl = (dir, snap) => `/api/projects/${encodeURIComponent(dir)}/${snap}/thumb.jpg`;
+const SNAP_ICONS = {
+  export: '<svg class="ico" viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3v12"/><path d="m7 10 5 5 5-5"/><path d="M5 21h14"/></svg>',
+  delete: '<svg class="ico" viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 6h18"/><path d="M8 6V4h8v2"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/><path d="M10 11v6"/><path d="M14 11v6"/></svg>',
+};
+// SNAP_EDIT: snapshot whose label is being edited; SNAP_DEL: snapshot whose delete icon waits for
+// the confirming second click
+let SNAP_EDIT = null, SNAP_DEL = null, SNAP_DEL_TIMER = null;
 function renderSnaps() {
   const bar = $("snapBar");
   if (!bar) return;
-  bar.hidden = !SID;
+  if (bar.hidden === !!SID) {          // shown / hidden: folded as last time, the view height follows
+    bar.hidden = !SID;
+    if (SID) bar.open = prefs().snaps_open !== false;
+    window.dispatchEvent(new Event("resize"));
+  }
   if (!SID) return;
   const saved = isSaved();
-  const items = PROJ.snapshots.map(s => {
-    const cur = saved && s.id === PROJ.current;
-    return `<${cur ? "div" : "button type=\"button\""} class="snap${cur ? " cur" : ""}" data-snap="${s.id}"
-      title="${cur ? "Version courante" : "Ouvrir cette snapshot : image, masques, réglages et résultat, sans recalcul"}">
-      ${s.thumb ? `<img src="${thumbUrl(PROJ.dir, s.id)}" alt="">` : `<span class="nothumb"></span>`}
-      <span class="sid">${s.id}</span><span class="slabel" data-noi18n>${escH(s.label || "")}</span>
-      <span class="sdate">${snapDate(s.date)}</span></${cur ? "div" : "button"}>`;
-  });
-  if (!saved) items.push(`<div class="snap cur unsaved" title="Version courante, pas encore enregistrée : la prochaine snapshot ou le prochain export l'enregistre">
-      <span class="nothumb">●</span><span class="sid">${PROJ.next}</span><span class="slabel">non enregistrée</span><span class="sdate"></span></div>`);
-  $("snapList").innerHTML = items.join("");
+  // folded box: number of snapshots and current version in its title
+  const curSnap = saved && PROJ.snapshots.find(x => x.id === PROJ.current);
+  $("snapSum").innerHTML = (PROJ.snapshots.length ? `${PROJ.snapshots.length} · ` : "")
+    + (curSnap ? `<span data-noi18n>${escH(snapName(curSnap))}</span>` : `<span>non enregistrée</span>`);
   $("snapBtn").disabled = saved || SNAP_BUSY;
+  // label being typed: the list is not rebuilt under the cursor
+  if (SNAP_EDIT && document.activeElement && document.activeElement.classList.contains("edit")) return;
+  const act = (a, title, label, extra = "") => `<button type="button" class="ibtn${extra}" data-act="${a}" aria-label="${label}" title="${title}">${SNAP_ICONS[a]}</button>`;
+  const items = PROJ.snapshots.map(s => {
+    const cur = saved && s.id === PROJ.current, armed = SNAP_DEL === s.id, name = snapName(s);
+    // technical id and creation date: only in the tooltips ("v3 — date" + what a click does)
+    const tip = what => escH(`${s.id} — ${snapDate(s.date, true)}\n${what}`);
+    return `<div class="snap${cur ? " cur" : ""}" data-snap="${s.id}">
+      <${cur ? "div" : "button type=\"button\""} class="snapopen" data-act="open"
+        title="${tip(cur ? "Version courante" : "Ouvrir cette snapshot : image, masques, réglages et résultat, sans recalcul")}">
+      ${s.thumb ? `<img src="${thumbUrl(PROJ.dir, s.id)}" alt="">` : `<span class="nothumb"></span>`}</${cur ? "div" : "button"}>
+      ${SNAP_EDIT === s.id
+        ? `<input type="text" class="slabel edit" maxlength="80" value="${escH(name)}" aria-label="Nom de la snapshot" data-noi18n>`
+        : `<button type="button" class="slabel" data-act="rename" title="${tip("Cliquer pour renommer la snapshot")}"><span data-noi18n>${escH(name)}</span></button>`}
+      <div class="snapacts">
+        ${act("export", "Exporter cette snapshot en zip : pochoirs et projet rechargeable ne contenant qu'elle", "Exporter la snapshot")}
+        ${act("delete", armed ? "Cliquer encore pour confirmer la suppression" : "Supprimer cette snapshot (définitivement : son répertoire est effacé)", "Supprimer la snapshot", armed ? " confirm" : "")}
+      </div></div>`;
+  });
+  if (!saved) items.push(`<div class="snap cur unsaved" title="${escH(`${PROJ.next}\nVersion courante, pas encore enregistrée : la prochaine snapshot ou le prochain export l'enregistre`)}">
+      <span class="nothumb">●</span><span class="slabel">non enregistrée</span></div>`);
+  $("snapList").innerHTML = items.join("");
+  const edit = $("snapList").querySelector("input.edit");
+  if (edit) { edit.focus(); edit.select(); return; }
   const cur = $("snapList").querySelector(".cur");
   if (cur) cur.scrollIntoView({ block: "nearest", inline: "nearest" });
+}
+async function snapCall(method, url, body) {
+  try {
+    const r = await fetch(url, { method, headers: { "Content-Type": "application/json" }, body: body && JSON.stringify(body) });
+    const j = await r.json();
+    if (!r.ok) { status(j.error || "Erreur", true); return null; }
+    return j;
+  } catch (e) { status("Serveur injoignable : " + e.message, true); return null; }
+}
+const snapUrl = id => `/api/projects/${encodeURIComponent(PROJ.dir)}/${id}`;
+// the list of the folder changed: the current version keeps its number (unless deleted)
+function snapUpdated(j, deleted) {
+  const cur = PROJ.current === deleted ? null : PROJ.current;
+  PROJ = { ...j, current: cur };
+  if (!cur) SNAP_KEY = null;
+}
+// name of a snapshot: its label, by default its technical id (v0, v1…)
+const snapName = s => s.label || s.id;
+async function renameSnapshot(id, label) {
+  SNAP_EDIT = null;
+  if (label === id) label = "";           // the default name: nothing stored
+  const old = (PROJ.snapshots.find(s => s.id === id) || {}).label || "";
+  if (label !== old) {
+    const j = await snapCall("POST", snapUrl(id) + "/label", { label });
+    if (j) { snapUpdated(j); status(`Snapshot ${id} renommée`); }
+  }
+  renderSnaps();
+}
+async function deleteSnapshot(id) {
+  clearTimeout(SNAP_DEL_TIMER);
+  if (SNAP_DEL !== id) {          // 2-click confirmation, without a dialog box
+    SNAP_DEL = id; renderSnaps();
+    SNAP_DEL_TIMER = setTimeout(() => { SNAP_DEL = null; renderSnaps(); }, 3000);
+    return;
+  }
+  SNAP_DEL = null;
+  const j = await snapCall("DELETE", snapUrl(id));
+  if (j) { snapUpdated(j, id); status(`Snapshot ${id} supprimée`); }
+  renderSnaps();
+}
+function exportSnapshot(id) {
+  status(`Export de la snapshot ${id}…`);
+  location.href = snapUrl(id) + "/export?lang=" + I18N.lang;
 }
 // Computation up to date with the current state (waits for the one running); false if it failed
 async function settle() {
@@ -3955,9 +4036,27 @@ function setupProjects() {
   document.addEventListener("keydown", e => { if (e.key === "Escape" && !pop.hidden) { hideProjects(); btn.focus(); } });
   $("snapBtn").onclick = () => createSnapshot();
   $("snapLabel").addEventListener("keydown", e => { if (e.key === "Enter") { e.preventDefault(); createSnapshot(); } });
-  $("snapList").addEventListener("click", e => {
-    const b = e.target.closest("button[data-snap]");
-    if (b && PROJ.dir) openSnapshot(PROJ.dir, b.dataset.snap);
+  const list = $("snapList");
+  list.addEventListener("click", e => {
+    const b = e.target.closest("button[data-act]"), card = e.target.closest(".snap[data-snap]");
+    if (!b || !card || !PROJ.dir) return;
+    const id = card.dataset.snap, a = b.dataset.act;
+    if (a !== "delete" && SNAP_DEL) { SNAP_DEL = null; clearTimeout(SNAP_DEL_TIMER); }
+    if (a === "open") openSnapshot(PROJ.dir, id);
+    else if (a === "rename") { SNAP_EDIT = id; renderSnaps(); }
+    else if (a === "export") exportSnapshot(id);
+    else if (a === "delete") deleteSnapshot(id);
+  });
+  // label: Enter or leaving the field saves it, Escape gives up
+  list.addEventListener("keydown", e => {
+    if (!e.target.classList.contains("edit")) return;
+    if (e.key === "Enter") { e.preventDefault(); e.target.blur(); }
+    else if (e.key === "Escape") { e.preventDefault(); e.stopPropagation(); SNAP_EDIT = null; e.target.blur(); renderSnaps(); }
+  });
+  list.addEventListener("focusout", e => {
+    if (!e.target.classList.contains("edit") || !SNAP_EDIT) return;
+    const id = SNAP_EDIT;
+    renameSnapshot(id, e.target.value.replace(/[\x00-\x1f]+/g, " ").trim().slice(0, 80));
   });
 }
 
@@ -5216,14 +5315,14 @@ function refreshPreviewOnly() {
 function stageH() {
   const view = document.querySelector("section.view"), st = $("stage");
   // the boxes under the view (warnings, dimensions) are kept on screen: taken off the minimum height too
-  const warnH = ["warnBox", "metricsBox"].reduce((a, id) => { const e = $(id); return a + (e && !e.hidden ? e.offsetHeight + 10 : 0); }, 0);
+  const warnH = ["snapBar", "warnBox", "metricsBox"].reduce((a, id) => { const e = $(id); return a + (e && !e.hidden ? e.offsetHeight + 10 : 0); }, 0);
   let h = window.innerHeight * 0.72 - warnH;
   if (view && st && view.clientHeight < window.innerHeight) {          // column with its own scrolling
     const top = st.getBoundingClientRect().top - view.getBoundingClientRect().top + view.scrollTop;
     const cs = getComputedStyle(st), num = v => parseFloat(v) || 0;
     const pad = num(cs.paddingTop) + num(cs.paddingBottom) + num(cs.borderTopWidth) + num(cs.borderBottomWidth);
     let below = 0;
-    for (const id of ["compareRange", "warnBox", "metricsBox", "calage"]) {
+    for (const id of ["compareRange", "snapBar", "warnBox", "metricsBox", "calage"]) {
       const e = $(id);
       if (!e || e.hidden) continue;
       const m = getComputedStyle(e);
