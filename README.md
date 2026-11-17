@@ -753,14 +753,23 @@ squares with their hex codes, placed left of the page, to prepare your paints.
   `original.<ext>` (the source image, never reduced, stored once) and `snapshots/v0`, `v1`… (settings,
   masks, the reduced image when the snapshot works on one, a thumbnail and the computed result).
   The folder is created by the first snapshot or the first export.
-- **Re-open a project**: *Open a project…* lists the saved projects (opened at their last snapshot),
-  and *Open a file (zip or infos.json)…* (or drop the file on the image box) reads an export:
+- **Re-open a project**: *Open a project…* lists the **5 most recent projects** (opened at their last
+  snapshot); *Open a folder…* opens any project folder (the one holding `projet.json`, wherever it
+  is: it is copied into the projects folder if it is not there yet, or only its missing snapshots);
+  *Open an export…* (or drop the file on the image box) reads an export:
   - the **.zip** restores everything: image, masks, settings, crop, colours – then recomputes; a zip
     that holds its project folder is added to the projects folder (the snapshots it lacks are added
     to a project already there) and opens at the snapshot it was exported from, without computing;
-  - the **infos.json** alone (or the `…_infos.json` of an earlier export) applies the settings to the loaded image (or to the next one you load);
   - the **colour palette** applied to the layers comes back too; if it is not in *My palettes* on
     this computer (or differs from the one of the same name), it is added there.
+- **New project** (above *Open a project…*) starts again with the default settings and no image
+  (the remembered last settings are dropped; an unsaved current version of a project can be saved
+  first); the image box then invites you to load an image.
+- **Apply the settings of a project…** (under *Default settings*) applies every setting of a project
+  – support, material, layers, colours, crop… – to the loaded image, which keeps its masks (or to the
+  next image loaded): choose its export **.zip** or an **infos.json** (of an export, of a snapshot
+  folder, or the `…_infos.json` of an earlier export). Dropping an infos.json on the image box does
+  the same.
 - **Presets**: the support format (*Surface to paint*), the material and the material sheet format
   (*Material & cutting*), the machine and the cutting mat (*Cutting machine*) each have one list, with
   your saved entries first (★), and **Save / Save as… / Rename… / Delete** icons next to its title

@@ -124,8 +124,15 @@ def snapshots(d: Path) -> list[dict]:
     return out
 
 
-def list_projects() -> list[dict]:
-    """Projects of the folder, most recently changed first."""
+def touch(d: Path) -> None:
+    """Notes that the project was just used (opened, or a snapshot taken): recent projects."""
+    info = project_info(d)
+    info["ouvert_le"] = now()
+    _write_json(d / PROJECT_FILE, info)
+
+
+def list_projects(limit: int | None = None) -> list[dict]:
+    """Projects of the folder, most recently used first (opened or saved); `limit`: only the first ones."""
     out = []
     if not ROOT.is_dir():
         return out
@@ -137,8 +144,10 @@ def list_projects() -> list[dict]:
         out.append({"dir": d.name, "name": str(info.get("nom") or d.name), "count": len(snaps),
                     "last": last["id"] if last else None,
                     "date": (last or {}).get("date") or info.get("date"),
+                    "used": info.get("ouvert_le") or (last or {}).get("date") or info.get("date"),
                     "thumb": bool(last and last["thumb"])})
-    return sorted(out, key=lambda p: p["date"] or "", reverse=True)
+    out.sort(key=lambda p: p["used"] or "", reverse=True)
+    return out[:limit] if limit else out
 
 
 def _free_dir(name: str) -> Path:
@@ -201,6 +210,7 @@ def write_snapshot(d: Path, files: dict[str, bytes], meta: dict, thumb: bytes | 
             try:
                 tmp.rename(base / sid)
                 _note_number(d, sid)
+                touch(d)
                 return sid
             except FileExistsError:      # taken meanwhile: next number
                 continue

@@ -89,6 +89,9 @@
   #drop { border: 2px dashed var(--line); border-radius: 10px; padding: 10px; text-align: center;
           cursor: pointer; color: var(--muted); flex: 1 1 auto; min-width: 0; max-width: 220px; font-size: 12px; }
   #drop.over { border-color: var(--accent); color: var(--ink); }
+  /* new project: the image box invites to load an image */
+  #drop.invite { border-color: var(--accent); color: var(--ink); animation: invite 1.4s ease-in-out 3; }
+  @keyframes invite { 50% { box-shadow: 0 0 0 4px color-mix(in srgb, var(--accent) 35%, transparent); } }
   #drop img { max-width: 100%; max-height: 120px; display: block; margin: 0 auto 6px; border-radius: 4px; }
   button { font: inherit; border-radius: 7px; border: 1px solid var(--line); background: var(--soft);
            color: var(--ink); padding: 7px 12px; cursor: pointer; }
@@ -234,6 +237,7 @@
   .projitem .pname { font-weight: 600; align-self: end; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .projitem .pmeta { color: var(--muted); font-size: 12px; }
   .projpop .folder { word-break: break-all; }
+  .projbtns { display: flex; flex-wrap: wrap; gap: 6px; }
   .modalback { position: fixed; inset: 0; z-index: 80; background: rgba(0,0,0,.45); display: flex; align-items: center; justify-content: center; }
   .modalback[hidden] { display: none; }
   .modal { width: 380px; max-width: calc(100vw - 32px); background: var(--panel); color: var(--ink); border: 1px solid var(--line);
@@ -565,10 +569,14 @@
   <p class="hint">Décoché : seuls restent les états (tient sur le tapis, sujet peint…).</p>
   <div class="check"><input type="checkbox" id="show_tips" checked><label for="show_tips">Afficher les infobulles au survol</label></div>
 </div>
-<div class="projpop" id="projPop" role="dialog" aria-label="Projets enregistrés" hidden>
-  <h4>Projets enregistrés</h4>
+<div class="projpop" id="projPop" role="dialog" aria-label="Projets récents" hidden>
+  <h4>Projets récents</h4>
   <div class="projlist" id="projList"></div>
-  <button type="button" id="projFileBtn" title="Zip exporté par OversprayLab (image, masques, réglages et snapshots), ou seulement son fichier infos.json (réglages appliqués à l'image chargée)">Ouvrir un fichier (zip ou infos.json)…</button>
+  <div class="projbtns">
+    <button type="button" id="projDirBtn" title="Dossier d'un projet OversprayLab (celui qui contient projet.json), où qu'il soit : il est ouvert à sa dernière snapshot, et copié dans le dossier des projets s'il n'y est pas déjà">Ouvrir un dossier…</button>
+    <button type="button" id="projFileBtn" title="Zip exporté par OversprayLab (image, masques, réglages et snapshots)">Ouvrir un export…</button>
+  </div>
+  <input type="file" id="projectDir" webkitdirectory multiple hidden>
   <p class="hint"><span>Dossier des projets :</span> <span class="folder" id="projFolder" data-noi18n></span></p>
 </div>
 <div class="modalback" id="leaveAsk" hidden>
@@ -595,10 +603,13 @@
     <input type="file" id="file" accept="image/*" hidden>
   </div>
   <div class="projbar">
-    <button type="button" id="openProject" aria-haspopup="dialog" aria-expanded="false" aria-controls="projPop" title="Rouvrir un projet enregistré (dossier des projets) à une de ses snapshots, ou un zip exporté par OversprayLab, ou seulement son fichier infos.json">Ouvrir un projet…</button>
+    <button type="button" id="newProject" title="Commence un nouveau projet : tous les réglages par défaut, sans image ; il ne reste qu'à charger une image. Une version courante non enregistrée d'un projet peut d'abord être enregistrée">Nouveau projet</button>
+    <button type="button" id="openProject" aria-haspopup="dialog" aria-expanded="false" aria-controls="projPop" title="Rouvrir un projet récent à sa dernière snapshot, un dossier de projet ou un zip exporté par OversprayLab">Ouvrir un projet…</button>
     <button type="button" class="primary" id="export" disabled title="Pochoirs SVG + projet rechargeable (image d'origine, masques, réglages et snapshots). Une version courante non enregistrée devient d'abord une snapshot.">Exporter le projet</button>
     <button type="button" id="resetAll" title="Rétablit tous les réglages par défaut ; l'image chargée et ses masques sont conservés, ainsi que les réglages enregistrés">Réglages par défaut</button>
-    <input type="file" id="projectFile" accept=".zip,.json,application/zip,application/json" hidden>
+    <button type="button" id="applySettings" title="Applique tous les réglages d'un projet (support, matériau, couches, couleurs, cadrage…) à l'image chargée, qui garde ses masques : zip exporté par OversprayLab, ou fichier infos.json (celui d'un export ou d'une snapshot)">Appliquer les réglages d'un projet…</button>
+    <input type="file" id="projectFile" accept=".zip,application/zip" hidden>
+    <input type="file" id="settingsFile" accept=".zip,.json,application/zip,application/json" hidden>
   </div>
   </div>
 
@@ -2367,6 +2378,15 @@ function rememberSettings() {
   } catch (e) { /* storage unavailable: ignored */ }
 }
 // "Default settings": everything back to the defaults, the loaded image (and its masks) is kept
+// "New project": the current version can be saved first, then the page starts again with the
+// default settings and no image (the last settings remembered are dropped), inviting to load one
+const NEW_PROJECT_KEY = "overspraylab.newProject";
+async function newProject() {
+  if (!(await leaveOk())) return;
+  try { localStorage.removeItem(LS_KEY); sessionStorage.setItem(NEW_PROJECT_KEY, "1"); } catch (e) { /* storage unavailable */ }
+  NO_REMEMBER = true;                // nothing saved again before the reload
+  location.reload();
+}
 async function resetSettings() {
   try { localStorage.removeItem(LS_KEY); } catch (e) {}
   if (!SID || !DEFAULTS) { NO_REMEMBER = true; location.reload(); return; }   // no image: a reload is enough
@@ -2553,7 +2573,8 @@ function setupColumns() {
 // Added to the field and its label, without overwriting a tooltip already defined in the HTML.
 const TIPS = {
   file: "Image à transformer en pochoirs (photo, dessin, logo… en couleur ou noir et blanc). Vous pouvez aussi la glisser sur la zone.",
-  projectFile: "Projet OversprayLab exporté (.zip) ou son fichier infos.json.",
+  projectFile: "Projet OversprayLab exporté (.zip).",
+  settingsFile: "Projet OversprayLab exporté (.zip) ou fichier infos.json : ses réglages sont appliqués à l'image chargée.",
   orientation: "Portrait ou paysage : intervertit la largeur et la hauteur du support.",
   support_w_mm: "Largeur réelle de la surface à peindre, en millimètres.",
   support_h_mm: "Hauteur réelle de la surface à peindre, en millimètres.",
@@ -3172,7 +3193,12 @@ async function init() {
   try { UP = await (await fetch("/api/presets")).json(); } catch (e) { /* no saved presets */ }
   refreshUserPresets();
   DEFAULTS = collectSettings(true);
-  if (restoreSettings()) {
+  let fresh = false;
+  try { fresh = sessionStorage.getItem(NEW_PROJECT_KEY) === "1"; sessionStorage.removeItem(NEW_PROJECT_KEY); } catch (e) { /* storage unavailable */ }
+  if (fresh) {                       // "New project": default settings, the image box invites to load an image
+    status("Nouveau projet : chargez une image (glissez-la sur la zone ou cliquez dessus)");
+    $("drop").classList.add("invite");
+  } else if (restoreSettings()) {
     syncPresetFromSize(); status("Derniers réglages restaurés — chargez une image");
   }
   showValues();
@@ -3540,10 +3566,14 @@ async function init() {
   drop.ondrop = e => {
     e.preventDefault(); drop.classList.remove("over");
     const f = e.dataTransfer.files[0];
-    if (f) (/\.(zip|json)$/i.test(f.name) ? openProject(f) : upload(f));
+    // a zip opens the project; an infos.json applies its settings to the loaded image
+    if (f) (/\.zip$/i.test(f.name) ? openProject(f) : /\.json$/i.test(f.name) ? applySettingsFile(f) : upload(f));
   };
   setupProjects();
   $("projectFile").onchange = e => { const f = e.target.files[0]; e.target.value = ""; f && openProject(f); };
+  $("applySettings").onclick = () => $("settingsFile").click();
+  $("newProject").onclick = newProject;
+  $("settingsFile").onchange = e => { const f = e.target.files[0]; e.target.value = ""; f && applySettingsFile(f); };
 
   $("tabs").querySelectorAll("button[data-v]").forEach(b => b.onclick = () => { VIEW = b.dataset.v; SEL = null; render(); });
   $("export").onclick = async () => {
@@ -3607,6 +3637,7 @@ function setupPrefs() {
 }
 async function upload(file) {
   if (!(await leaveOk())) return;
+  $("drop").classList.remove("invite");
   status("Chargement…");
   const fd = new FormData(); fd.append("image", file);
   const r = await fetch("/api/upload", { method: "POST", body: fd });
@@ -3780,21 +3811,33 @@ function loadMaskImage(src, coverage, kind = "outline:z1") {
     im.src = src;
   });
 }
-async function openProject(file) {
-  if (/\.json$/i.test(file.name)) {
-    let info;
+// "Apply the settings of a project": every setting of an export (zip) or of an infos.json (of an
+// export or a snapshot) applied to the loaded image, which keeps its masks; with no image loaded,
+// kept until the next image
+async function applySettingsFile(file) {
+  let info;
+  if (/\.zip$/i.test(file.name)) {
+    const fd = new FormData(); fd.append("project", file);
+    try {
+      const r = await fetch("/api/project/settings", { method: "POST", body: fd });
+      const j = await r.json();
+      if (!r.ok) return status(j.error || "Projet illisible", true);
+      info = j.info;
+    } catch (e) { return status("Serveur injoignable : " + e.message, true); }
+  } else {
     try { info = JSON.parse(await file.text()); } catch (e) { return status("Fichier JSON illisible", true); }
-    if (!info.projet && !info.parametres) return status("Ce JSON n'est pas un fichier infos.json de OversprayLab", true);
-    if (SID) {
-      applyProjectSettings(info);
-      status("Réglages du projet appliqués à l'image chargée");
-      render(); recommend(false); process();
-    } else {
-      PENDING_PROJECT = info;
-      status("Réglages du projet chargés — chargez maintenant l'image d'origine");
-    }
-    return;
   }
+  if (!info || (!info.projet && !info.parametres)) return status("Ce JSON n'est pas un fichier infos.json de OversprayLab", true);
+  if (SID) {
+    applyProjectSettings(info);
+    status("Réglages du projet appliqués à l'image chargée");
+    render(); recommend(false); process();
+  } else {
+    PENDING_PROJECT = info;
+    status("Réglages du projet chargés — chargez maintenant une image");
+  }
+}
+async function openProject(file) {
   if (!(await leaveOk())) return;
   status("Ouverture du projet…");
   const fd = new FormData(); fd.append("project", file);
@@ -4016,22 +4059,49 @@ async function showProjects() {
   pop.hidden = false; btn.setAttribute("aria-expanded", "true");
   list.innerHTML = `<p class="hint">Chargement…</p>`;
   let j;
-  try { j = await (await fetch("/api/projects")).json(); } catch (e) { list.innerHTML = `<p class="hint">Serveur injoignable</p>`; return; }
+  try { j = await (await fetch("/api/projects?limit=5")).json(); } catch (e) { list.innerHTML = `<p class="hint">Serveur injoignable</p>`; return; }
   $("projFolder").textContent = j.folder || "";
   const ps = (j.projects || []).filter(p => p.last);
   list.innerHTML = ps.length ? ps.map(p => `<button type="button" class="projitem" data-dir="${escH(p.dir)}" data-snap="${p.last}">
       ${p.thumb ? `<img src="${thumbUrl(p.dir, p.last)}" alt="">` : `<span class="nothumb"></span>`}
       <span class="pname" data-noi18n>${escH(p.name)}</span>
-      <span class="pmeta">${p.count} snapshot${p.count > 1 ? "s" : ""} · ${snapDate(p.date)}</span></button>`).join("")
-    : `<p class="hint">Aucun projet enregistré : la première snapshot (ou le premier export) d'un projet le crée ici.</p>`;
+      <span class="pmeta">${p.dir !== p.name ? `<span data-noi18n>${escH(p.dir)}</span> · ` : ""}${p.count} snapshot${p.count > 1 ? "s" : ""} · ${snapDate(p.used)}</span></button>`).join("")
+    : `<p class="hint">Aucun projet récent : la première snapshot (ou le premier export) d'un projet le crée dans le dossier des projets.</p>`;
   list.querySelectorAll(".projitem").forEach(b => b.onclick = () => { hideProjects(); openSnapshot(b.dataset.dir, b.dataset.snap); });
   const first = list.querySelector(".projitem"); if (first) first.focus();
+}
+// Project folder chosen on the disk: its files are sent with their paths relative to it (the
+// browser gives them relative to the chosen folder: the project is the shallowest folder holding a
+// projet.json, so choosing its parent folder works too when it holds only this project)
+async function openFolder(files) {
+  const depth = f => f.webkitRelativePath.split("/").length;
+  const pj = files.filter(f => f.name === "projet.json").sort((a, b) => depth(a) - depth(b));
+  if (!pj.length) return status("Ce dossier n'est pas un dossier de projet OversprayLab (pas de projet.json)", true);
+  if (pj.length > 1 && depth(pj[1]) === depth(pj[0])) return status("Ce dossier contient plusieurs projets : choisissez le dossier d'un seul projet", true);
+  const base = pj[0].webkitRelativePath.slice(0, -"projet.json".length);
+  if (!(await leaveOk())) return;
+  status("Ouverture du projet…");
+  const fd = new FormData();
+  for (const f of files) {
+    const rel = f.webkitRelativePath;
+    if (rel.startsWith(base) && !rel.split("/").some(x => x.startsWith(".tmp"))) fd.append("files", f, rel.slice(base.length));
+  }
+  let j;
+  try {
+    const r = await fetch("/api/projects/open_folder", { method: "POST", body: fd });
+    j = await r.json();
+    if (!r.ok) return status(j.error || "Projet illisible", true);
+  } catch (e) { return status("Serveur injoignable : " + e.message, true); }
+  await applyOpened(j, j.filename);
+  status(`Projet ouvert : ${(j.project && j.project.name) || j.filename}`);
 }
 function hideProjects() { $("projPop").hidden = true; $("openProject").setAttribute("aria-expanded", "false"); }
 function setupProjects() {
   const btn = $("openProject"), pop = $("projPop");
   btn.onclick = e => { e.stopPropagation(); pop.hidden ? showProjects() : hideProjects(); };
   $("projFileBtn").onclick = () => { hideProjects(); $("projectFile").click(); };
+  $("projDirBtn").onclick = () => { hideProjects(); $("projectDir").click(); };
+  $("projectDir").onchange = e => { const fs = [...e.target.files]; e.target.value = ""; if (fs.length) openFolder(fs); };
   document.addEventListener("pointerdown", e => { if (!pop.hidden && !pop.contains(e.target) && e.target !== btn) hideProjects(); });
   document.addEventListener("keydown", e => { if (e.key === "Escape" && !pop.hidden) { hideProjects(); btn.focus(); } });
   $("snapBtn").onclick = () => createSnapshot();

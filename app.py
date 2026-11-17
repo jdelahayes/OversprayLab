@@ -27,7 +27,8 @@ ROOT = Path(__file__).parent
 MATERIALS_FILE = ROOT / "overspraylab" / "materials.json"
 
 app = Flask(__name__, static_folder=str(ROOT / "static"))
-app.config["MAX_CONTENT_LENGTH"] = 60 * 1024 * 1024
+# a project folder opened from the disk is sent whole (snapshots with their session dumps)
+app.config["MAX_CONTENT_LENGTH"] = 2 * 1024 * 1024 * 1024
 
 # In-memory sessions (local single-user application)
 SESSIONS: dict[str, dict] = {}
@@ -927,6 +928,25 @@ def api_project():
     return answer(out)
 
 
+@app.post("/api/project/settings")
+def api_project_settings():
+    """infos.json of an export zip ("Apply the settings of a project"): the browser applies its
+    settings to the loaded image."""
+    f = request.files.get("project")
+    if not f:
+        return jsonify(error="Aucun fichier reçu"), 400
+    try:
+        z = zipfile.ZipFile(io.BytesIO(f.read()))
+        top = [n for n in z.namelist() if not n.startswith("projet/")]
+        name = next((n for n in top if n.rsplit("/", 1)[-1] == "infos.json"), None) \
+            or next((n for n in top if n.endswith("_infos.json")), None)
+        if not name:
+            return jsonify(error="Fichier infos.json introuvable dans le zip"), 400
+        return jsonify(info=json.loads(z.read(name).decode("utf-8")))
+    except (zipfile.BadZipFile, ValueError):
+        return jsonify(error="Ce fichier n'est pas un zip de projet OversprayLab"), 400
+
+
 # ---------------- Project folders and snapshots ----------------
 def project_state(d, snap) -> dict:
     """Project folder of the session for the browser: snapshots, current one, next number."""
@@ -976,6 +996,7 @@ def open_snapshot(d, snap):
         return out
     sess = SESSIONS[out["id"]]
     sess["proj_dir"], sess["snap"] = d, snap
+    projects.touch(d)
     out["computed"] = sess.get("last_out") if dump is not None and sess.get("result") is not None else None
     out["project"] = project_state(d, snap)
     return out
@@ -983,7 +1004,35 @@ def open_snapshot(d, snap):
 
 @app.get("/api/projects")
 def api_projects():
-    return jsonify(projects=projects.list_projects(), folder=str(projects.ROOT))
+    try:
+        limit = max(0, int(request.args.get("limit", 0)))
+    except ValueError:
+        limit = 0
+    return jsonify(projects=projects.list_projects(limit or None), folder=str(projects.ROOT))
+
+
+@app.post("/api/projects/open_folder")
+def api_project_folder():
+    """Opens a project folder chosen on the disk ("Open a folder…"): its files, sent by the browser
+    with their paths relative to the folder, are put into the projects folder like the project
+    folder of an export zip (only the snapshots it lacks if the project is already there); opened
+    at its last snapshot."""
+    files = {}
+    for f in request.files.getlist("files"):
+        rel = (f.filename or "").replace("\\", "/").strip("/")
+        if rel and ".." not in rel.split("/"):
+            files[rel] = f.read()
+    if projects.PROJECT_FILE not in files:
+        return jsonify(error="Ce dossier n'est pas un dossier de projet OversprayLab (pas de projet.json)"), 400
+    try:
+        with LOCK:
+            d, _ = projects.import_folder(files)
+    except (projects.ProjectError, ValueError, KeyError, OSError) as e:
+        return jsonify(error=f"Dossier de projet illisible : {e}"), 400
+    ids = projects.snap_ids(d)
+    if not ids:
+        return jsonify(error="Ce dossier de projet ne contient aucune snapshot"), 400
+    return answer(open_snapshot(d, ids[-1]))
 
 
 @app.get("/api/projects/<name>")
