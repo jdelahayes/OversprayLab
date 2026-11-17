@@ -74,6 +74,7 @@
   section.view { padding: 14px 18px; overflow-y: auto; max-height: calc(100vh - 49px); display: flex; flex-direction: column; }
   section.view > * { flex-shrink: 0; }
   section.view > .viewspacer { flex: 1 0 10px; }
+  section.view:fullscreen { max-height: none; height: 100vh; box-sizing: border-box; background: var(--bg); }
   fieldset { border: 1px solid var(--line); border-radius: 8px; margin: 0 0 12px; padding: 8px 10px 10px; min-width: 0; }
   .fxlh { flex-wrap: wrap; }
   legend { font-weight: 600; padding: 0 4px; font-size: 13px; }
@@ -1313,6 +1314,7 @@
     <span class="undobar" role="group" aria-label="Historique des réglages">
       <button type="button" class="ibtn" id="undoBtn" disabled aria-label="Annuler le changement" title="Annuler le dernier changement de réglage (Ctrl + Z)"><svg class="ico" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 14 4 9l5-5"/><path d="M4 9h10.5a5.5 5.5 0 0 1 0 11H11"/></svg></button>
       <button type="button" class="ibtn" id="redoBtn" disabled aria-label="Rétablir" title="Rétablir le changement annulé (Ctrl + Y ou Ctrl + Maj + Z)"><svg class="ico" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m15 14 5-5-5-5"/><path d="M20 9H9.5a5.5 5.5 0 0 0 0 11H13"/></svg></button>
+      <button type="button" class="ibtn" id="fullBtn" aria-pressed="false" aria-label="Plein écran" title="Vue en plein écran ; Échap pour sortir"><svg class="ico" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 9V4h5"/><path d="M20 9V4h-5"/><path d="M4 15v5h5"/><path d="M20 15v5h-5"/></svg></button>
     </span>
   </div>
   <div class="viewtools" id="viewtools" hidden>
@@ -3370,6 +3372,18 @@ async function init() {
   // (in a text or number field, the field's own undo is left alone)
   $("undoBtn").onclick = () => historyGo(-1);
   $("redoBtn").onclick = () => historyGo(1);
+  // full screen: the whole view column (tabs, toolbars, image, info dock); Escape leaves it (browser)
+  const fullView = document.querySelector("section.view"), fullBtn = $("fullBtn");
+  if (!fullView.requestFullscreen) fullBtn.hidden = true;
+  fullBtn.onclick = () => document.fullscreenElement
+    ? document.exitFullscreen() : fullView.requestFullscreen().catch(() => {});
+  document.addEventListener("fullscreenchange", () => {
+    const on = document.fullscreenElement === fullView;
+    fullBtn.setAttribute("aria-pressed", String(on));
+    fullBtn.title = on ? "Quitter le plein écran (Échap)" : "Vue en plein écran ; Échap pour sortir";
+    fullBtn.setAttribute("aria-label", on ? "Quitter le plein écran" : "Plein écran");
+    stageH(); window.dispatchEvent(new Event("resize"));
+  });
   document.addEventListener("keydown", e => {
     if (!(e.ctrlKey || e.metaKey) || e.altKey || !SID) return;
     const a = document.activeElement;
@@ -5628,7 +5642,8 @@ function stageH() {
   // the boxes under the view (warnings, dimensions) are kept on screen: taken off the minimum height too
   const warnH = ["infoDock"].reduce((a, id) => { const e = $(id); return a + (e && !e.hidden ? e.offsetHeight + 10 : 0); }, 0);
   let h = window.innerHeight * 0.72 - warnH;
-  if (view && st && view.clientHeight < window.innerHeight) {          // column with its own scrolling
+  // column with its own scrolling, or the view in full screen (as tall as the window)
+  if (view && st && (view.clientHeight < window.innerHeight || document.fullscreenElement === view)) {
     const top = st.getBoundingClientRect().top - view.getBoundingClientRect().top + view.scrollTop;
     const cs = getComputedStyle(st), num = v => parseFloat(v) || 0;
     const pad = num(cs.paddingTop) + num(cs.paddingBottom) + num(cs.borderTopWidth) + num(cs.borderBottomWidth);
