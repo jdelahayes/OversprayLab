@@ -104,7 +104,7 @@
   .stage img { max-width: 100%; max-height: var(--stage-h, 72vh); display: block; image-rendering: auto; }
   .stage canvas.pv { max-width: 100%; max-height: var(--stage-h, 72vh); display: block; }
   .compare { position: relative; display: inline-block; line-height: 0; }
-  .compare img.top { position: absolute; inset: 0; width: 100%; height: 100%; clip-path: inset(0 50% 0 0); }
+  .compare .top { position: absolute; inset: 0; width: 100%; height: 100%; clip-path: inset(0 50% 0 0); }
   /* thin black line, kept 1 screen pixel wide whatever the zoom */
   .compare .split { position: absolute; top: 0; bottom: 0; width: calc(1px / var(--zoom, 1)); transform: translateX(-50%); background: #000; pointer-events: none; }
   .compare .tag { position: absolute; top: 6px; font: 600 11px/1.4 system-ui, sans-serif; background: rgba(0,0,0,.55); color: #fff; padding: 1px 6px; border-radius: 4px; }
@@ -169,7 +169,17 @@
   .ibtn:disabled { opacity: .35; cursor: default; }
   .ibtn[aria-pressed="true"] { background: var(--accent); color: var(--accent-ink); border-color: var(--accent); }
   .card.hidden-layer img { opacity: .35; }
-  #compareRange { display: block; width: 100%; margin: 6px 0 0; accent-color: var(--accent); }
+  .comparebar { display: flex; align-items: center; gap: 6px 10px; flex-wrap: wrap; margin: 6px 0 0; font-size: 12px; }
+  .comparebar label { display: inline-flex; align-items: center; gap: 4px; color: var(--muted); }
+  .comparebar select { max-width: 180px; }
+  .comparebar .cmpside { display: inline-flex; align-items: center; gap: 4px 6px; flex-wrap: wrap; }
+  #compareRange { flex: 1 1 160px; min-width: 120px; margin: 0; accent-color: var(--accent); }
+  /* side by side: one pane per version, each in its own support frame */
+  .sbs { display: flex; gap: 6px; align-items: center; justify-content: center; width: 100%; line-height: 0; }
+  .sbs .sbspane { position: relative; flex: 1 1 0; min-width: 0; display: flex; justify-content: flex-end; align-items: center; }
+  .sbs .sbspane + .sbspane { justify-content: flex-start; }
+  .sbs .sbsbox { position: relative; flex: none; }
+  .sbs .tag { position: absolute; top: 6px; left: 6px; z-index: 6; font: 600 11px/1.4 system-ui, sans-serif; background: rgba(0,0,0,.55); color: #fff; padding: 1px 6px; border-radius: 4px; }
   /* Zoom of the computed views (preview, comparison, original, layer) */
   .stage { position: relative; }
   .stage.zoomed { overflow: hidden; touch-action: none; }
@@ -1276,7 +1286,7 @@
     <button data-v="layout">Mise en page</button>
     <button data-v="mask" title="Masques peints au pinceau : zones des détails clés (pochoir de contours) ou sujet à garder (fond supprimé)">Masques</button>
     <button data-v="preview" class="on">Prévisualisation</button>
-    <button data-v="compare">Comparer à l'original</button>
+    <button data-v="compare" title="Deux versions de part et d'autre d'un curseur : l'original, la version courante ou une snapshot du projet, au choix de chaque côté">Comparer</button>
     <button data-v="reference">Original</button>
     <span class="tabtools" id="tabTools" hidden>
       <span class="vt-opts" role="group" aria-label="Afficher">
@@ -1308,9 +1318,9 @@
   <div class="viewtools" id="viewtools" hidden>
     <button type="button" class="vt-opt vt-pre" id="optPre" aria-pressed="true" hidden
       title="Onglet Original : image prétraitée (activé) ou image d'origine brute">Prétraitée</button>
-    <span class="vt-layers vt-label">Couches</span>
-    <span id="layerToggles" class="vt-toggles vt-layers"></span>
-    <button type="button" id="showAll" class="vt-small vt-layers">Tout afficher</button>
+    <span class="vt-layers vt-main vt-label">Couches</span>
+    <span id="layerToggles" class="vt-toggles vt-layers vt-main"></span>
+    <button type="button" id="showAll" class="vt-small vt-layers vt-main">Tout afficher</button>
     <span class="vt-icons vt-layers">
       <button type="button" class="vt-opt vt-ico" id="optSim" aria-pressed="false" aria-label="Rendu simulé (flou de l'aérographe)"
         title="Rendu simulé : bords adoucis comme par le flou de l'aérographe (réglage « Flou de pulvérisation »)"><svg class="ico" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="4" y="10" width="9" height="11" rx="1.5"/><path d="M6.5 10V7h4v3"/><path d="M8.5 7V4.5h3"/><circle cx="16" cy="5" r=".9" fill="currentColor" stroke="none"/><circle cx="19.5" cy="3" r=".9" fill="currentColor" stroke="none"/><circle cx="19.5" cy="7" r=".9" fill="currentColor" stroke="none"/><circle cx="22" cy="5" r=".9" fill="currentColor" stroke="none"/><circle cx="17" cy="9" r=".9" fill="currentColor" stroke="none"/></svg></button>
@@ -1400,7 +1410,15 @@
     </div>
   </div>
   <div class="stage" id="stage"><div class="empty">Aucune image chargée.</div></div>
-  <input type="range" id="compareRange" min="0" max="100" value="50" aria-label="Position de la comparaison" hidden>
+  <div class="comparebar" id="compareBar" hidden>
+    <span class="cmpside"><label title="Version affichée à gauche du curseur">Gauche <select id="cmpLeft"></select></label>
+      <span class="vt-toggles" id="cmpLayL" role="group" aria-label="Couches affichées à gauche"></span></span>
+    <button type="button" class="vt-opt cmpslide" id="cmpSwap" aria-pressed="false" title="Affiche toute la version de gauche, puis toute celle de droite, à chaque clic ; le curseur reprend la main dès qu'on le déplace">⇄ Gauche / droite</button>
+    <input type="range" class="cmpslide" id="compareRange" min="0" max="100" value="50" aria-label="Position de la comparaison">
+    <span class="cmpside"><label title="Version affichée à droite du curseur">Droite <select id="cmpRight"></select></label>
+      <span class="vt-toggles" id="cmpLayR" role="group" aria-label="Couches affichées à droite"></span></span>
+    <button type="button" class="vt-opt" id="cmpSbs" aria-pressed="false" title="Affiche les deux versions l'une à côté de l'autre, au lieu de les superposer avec le curseur">Côte à côte</button>
+  </div>
   <details class="foldbox snapbox" id="snapBar" open hidden>
     <summary>Snapshots <span class="hint" id="snapSum"></span></summary>
     <div class="snaphead">
@@ -1739,15 +1757,17 @@ function fullImageRect(L) {
   const w = L.w / CROP.w, h = L.h / CROP.h;
   return { x: L.x - CROP.x * w, y: L.y - CROP.y * h, w, h };
 }
-function supportWorld(st, withMat = false) {
-  const L = layoutCalc(), m = val("margin_mm"), room = 0.18, sr = sheetRectMM(L);
+// tight: little room around the support and the source image left out (Compare side by side, where
+// the two frames sit next to each other)
+function supportWorld(st, withMat = false, tight = false) {
+  const L = layoutCalc(), m = val("margin_mm"), room = tight ? 0.02 : 0.18, sr = sheetRectMM(L);
   let x0 = Math.min(-L.SW * room, sr.x0 - 2), y0 = Math.min(-L.SH * room, sr.y0 - 2),
       x1 = Math.max(L.SW * (1 + room), sr.x1 + 2), y1 = Math.max(L.SH * (1 + room), sr.y1 + 2);
   const mat = (withMat || showMatAll()) && cutMat();
   if (mat) { x0 = Math.min(x0, sr.x0 - 4); y0 = Math.min(y0, sr.y0 - 4); x1 = Math.max(x1, sr.x0 + mat.w + 4); y1 = Math.max(y1, sr.y0 + mat.h + 4); }
   const stock = showStockAll() && stockSheet();
   if (stock) { x0 = Math.min(x0, sr.x0 - 4); y0 = Math.min(y0, sr.y0 - 16); x1 = Math.max(x1, sr.x0 + stock.w + 4); y1 = Math.max(y1, sr.y0 + stock.h + 4); }
-  if (IMG) {
+  if (IMG && !tight) {
     const F = fullImageRect(L);
     x0 = Math.min(x0, F.x); y0 = Math.min(y0, F.y); x1 = Math.max(x1, F.x + F.w); y1 = Math.max(y1, F.y + F.h);
   }
@@ -1757,8 +1777,8 @@ function supportWorld(st, withMat = false) {
   const k = Math.min(aw / (x1 - x0), ah / (y1 - y0));
   return { L, m, sr, k, W: (x1 - x0) * k, H: (y1 - y0) * k, px: x => (x - x0) * k, py: y => (y - y0) * k };
 }
-function supportFrame(st) {
-  const w = supportWorld(st), { L, sr, k } = w;
+function supportFrame(st, tight = false) {
+  const w = supportWorld(st, false, tight), { L, sr, k } = w;
   const fr = document.createElement("div");
   fr.className = "sframe";
   Object.assign(fr.style, { width: w.W + "px", height: w.H + "px" });
@@ -3937,6 +3957,8 @@ function renderSnaps() {
   $("snapSum").innerHTML = (PROJ.snapshots.length ? `${PROJ.snapshots.length} · ` : "")
     + (curSnap ? `<span data-noi18n>${escH(snapName(curSnap))}</span>` : `<span>non enregistrée</span>`);
   $("snapBtn").disabled = saved || SNAP_BUSY;
+  // snapshot created, renamed or deleted: choices (and labels) of the Compare tab follow
+  if (LAST && SEL === null && VIEW === "compare" && renderCompareBar()) renderPreview($("stage"));
   // label being typed: the list is not rebuilt under the cursor
   if (SNAP_EDIT && document.activeElement && document.activeElement.classList.contains("edit")) return;
   const act = (a, title, label, extra = "") => `<button type="button" class="ibtn${extra}" data-act="${a}" aria-label="${label}" title="${title}">${SNAP_ICONS[a]}</button>`;
@@ -5185,21 +5207,26 @@ function loadImg(src) {
   }));
   return IMG_CACHE.get(src);
 }
-async function composeCanvas() {
+// Preview of a computed result: LAST by default, or a snapshot's render (Compare tab), drawn in the
+// frame of LAST at the same mm scale (supports aligned on their top-left corner), without the layers
+// whose numbers are in `hid` (Preview: HIDDEN; Compare: the set of the side).
+async function composeCanvas(R = LAST, hid = HIDDEN) {
   const [w, h] = LAST.preview_size;
   const cv = document.createElement("canvas");
   cv.width = w; cv.height = h; cv.className = "pv";
   cv.dataset.mm = LAST.support_mm.join(",");
   const ctx = cv.getContext("2d");
+  const k = w / LAST.support_mm[0];                    // px per mm of the frame
+  const [rw, rh] = R === LAST ? [w, h] : [R.support_mm[0] * k, R.support_mm[1] * k];
   // background = support colour, only when the "Support" option is on;
   // otherwise the layers alone appear on the checkerboard
-  if ($("show_support").checked) { ctx.fillStyle = LAST.base; ctx.fillRect(0, 0, w, h); }
+  if ($("show_support").checked) { ctx.fillStyle = R.base; ctx.fillRect(0, 0, rw, rh); }
   const sim = $("preview_sim").checked;
   const nb = $("preview_nobridges").checked;   // bridges painted over (as after retouching)
-  const imgs = await Promise.all(LAST.layers.map(L => HIDDEN.has(L.index) ? null
+  const imgs = await Promise.all(R.layers.map(L => hid.has(L.index) ? null
     : loadImg(sim ? (nb && L.mask_sim_nb) || L.mask_sim : (nb && L.mask_flat_nb) || L.mask_flat)));
-  imgs.forEach(im => im && ctx.drawImage(im, 0, 0, w, h));
-  const hidden = LAST.layers.filter(L => HIDDEN.has(L.index)).length;
+  imgs.forEach(im => im && ctx.drawImage(im, 0, 0, rw, rh));
+  const hidden = R.layers.filter(L => hid.has(L.index)).length;
   cv.setAttribute("role", "img");
   cv.setAttribute("aria-label", `Prévisualisation ${sim ? "avec rendu simulé" : "nette"}${nb ? ", sans les ponts" : ""}${hidden ? `, ${hidden} couche(s) masquée(s)` : ""}`);
   return cv;
@@ -5207,30 +5234,169 @@ async function composeCanvas() {
 async function renderPreview(st) {
   const tok = ++RENDER_TOKEN;
   const view = VIEW;
-  let cv;
-  try { cv = await composeCanvas(); } catch (e) { return; }
+  let cv, top;
+  if (view === "compare") renderCompareBar();
+  try {
+    [cv, top] = view === "compare" ? await Promise.all([compareSide("right"), compareSide("left")]) : [await composeCanvas()];
+  } catch (e) {
+    if (tok === RENDER_TOKEN && view === "compare") {      // snapshot without a render: back to the defaults
+      status(e.message || "Rendu de la snapshot indisponible", true);
+      compareReset("left"); compareReset("right");
+      renderPreview(st);
+    }
+    return;
+  }
   if (tok !== RENDER_TOKEN || VIEW !== view || SEL !== null) return;   // a more recent render took over
-  if (view === "compare") {
+  if (view === "compare" && CMP.sbs) {
+    // side by side: left version in the left pane, right version in the right pane
+    const wrap = document.createElement("div");
+    wrap.className = "sbs";
+    for (const [el, v] of [[top, CMP.left], [cv, CMP.right]]) {
+      el.dataset.mm = LAST.support_mm.join(",");
+      const pane = document.createElement("div");
+      pane.className = "sbspane";
+      pane._el = el; pane._tag = cmpTag(v);
+      wrap.append(pane);
+    }
+    st.replaceChildren(wrap);
+    fitStage();
+  } else if (view === "compare") {
     const wrap = document.createElement("div");
     wrap.className = "compare";
-    wrap.append(cv);
-    wrap.insertAdjacentHTML("beforeend", `<img class="top" src="${LAST.reference}" alt="Original"><div class="split"></div>`);
-    const top = wrap.querySelector("img.top"), split = wrap.querySelector(".split");
+    cv.dataset.mm = LAST.support_mm.join(",");      // the right side sets the size (an image for the original)
+    top.classList.add("top");
+    wrap.append(cv, top);
+    wrap.insertAdjacentHTML("beforeend", `<div class="split"></div>`);
+    const split = wrap.querySelector(".split");
     const apply = v => { top.style.clipPath = `inset(0 ${100 - v}% 0 0)`; split.style.left = `${v}%`; };
     // slider and labels outside the image, so that they stay usable once zoomed in
     const rg = $("compareRange");
+    const set = v => { COMPARE_POS = v; rg.value = v; apply(v); compareButtons(); };
     rg.value = COMPARE_POS;
-    rg.oninput = () => { COMPARE_POS = +rg.value; apply(COMPARE_POS); };
+    rg.oninput = () => set(+rg.value);
+    // whole left version, then whole right version, at each click
+    $("cmpSwap").onclick = () => set(COMPARE_POS === 100 ? 0 : 100);
     apply(COMPARE_POS);
     st.replaceChildren(wrap);
     fitStage();
-    st.insertAdjacentHTML("beforeend", `<span class="tag" style="left:16px">Original</span>
-      <span class="tag" style="right:16px">${$("preview_sim").checked ? "Rendu simulé" : "Prévisualisation"}</span>`);
+    st.insertAdjacentHTML("beforeend", `<span class="tag" style="left:16px">${cmpTag(CMP.left)}</span>
+      <span class="tag" style="right:16px">${cmpTag(CMP.right)}</span>`);
   } else {
     st.replaceChildren(cv);
     fitStage();
   }
   applyZoom();
+}
+
+// ---------------- Compare tab: a version on each side of the slider ----------------
+// "orig" = original on the support, "cur" = current preview, "snap:v<n>" = computed result saved
+// in a snapshot of the project (fetched once: a snapshot never changes)
+// sbs = side by side instead of the slider; hid = numbers of the layers hidden on each side
+const CMP = { left: "orig", right: "cur", sbs: false, hid: { left: new Set(), right: new Set() } };
+const SNAP_RENDERS = new Map();
+function snapRender(id) {
+  const url = snapUrl(id) + "/render";
+  if (!SNAP_RENDERS.has(url)) SNAP_RENDERS.set(url, fetch(url).then(async r => {
+    const j = await r.json().catch(() => ({}));
+    if (!r.ok) throw new Error(j.error || "Rendu de la snapshot indisponible");
+    return j;
+  }).catch(e => { SNAP_RENDERS.delete(url); throw e; }));
+  return SNAP_RENDERS.get(url);
+}
+// version of a side (rendered with that side's hidden layers) and its layer buttons
+async function compareSide(side) {
+  const v = CMP[side];
+  if (v === "orig") {
+    compareLayers(side, []);
+    const im = new Image();
+    im.alt = "Original"; im.draggable = false; im.src = LAST.reference;
+    await im.decode().catch(() => {});
+    return im;
+  }
+  const R = v === "cur" ? LAST : await snapRender(v.slice(5));
+  compareLayers(side, R.layers);
+  return composeCanvas(R, CMP.hid[side]);
+}
+function compareLayers(side, layers) {
+  const hid = CMP.hid[side], box = $(side === "left" ? "cmpLayL" : "cmpLayR");
+  [...hid].forEach(i => { if (!layers.some(L => L.index === i)) hid.delete(i); });
+  box.innerHTML = layers.map(L => {
+    const vis = !hid.has(L.index), lbl = L.kind === "outline" ? "✎ contours" : String(L.index);
+    return `<button type="button" class="ltog" data-i="${L.index}" aria-pressed="${vis}"
+      title="${vis ? "Masquer" : "Afficher"} la couche ${L.index}${L.kind === "outline" ? " (contours)" : ""}">
+      <span class="sw" style="background:${L.color}"></span>${lbl}</button>`;
+  }).join("");
+  box.querySelectorAll(".ltog").forEach(b => b.onclick = () => {
+    const i = +b.dataset.i;
+    if (hid.has(i)) hid.delete(i); else hid.add(i);
+    renderPreview($("stage"));
+  });
+}
+const cmpSnap = v => v.startsWith("snap:") && PROJ.dir ? PROJ.snapshots.find(s => s.id === v.slice(5)) : null;
+function cmpTag(v) {
+  if (v === "orig") return "Original";
+  const s = cmpSnap(v);
+  if (s) return `<span data-noi18n>${escH(snapName(s))}</span>`;
+  return $("preview_sim").checked ? "Rendu simulé" : "Prévisualisation";
+}
+// Options of both selectors: the project's snapshots that hold a computed result; a side whose
+// snapshot is gone (deleted, another project) goes back to its default
+// a side back to its default version, every layer shown
+function compareReset(side) { CMP[side] = side === "left" ? "orig" : "cur"; CMP.hid[side].clear(); }
+function renderCompareBar() {
+  const snaps = PROJ.dir ? PROJ.snapshots.filter(s => s.computed !== false) : [];
+  const before = CMP.left + CMP.right + $("cmpLeft").dataset.opts;
+  if (CMP.dir !== PROJ.dir) { CMP.dir = PROJ.dir; compareReset("left"); compareReset("right"); }   // other project: same ids, other versions
+  const opts = [`<option value="orig">Original</option>`, `<option value="cur">Version courante</option>`]
+    .concat(snaps.map(s => `<option value="snap:${s.id}" data-noi18n>${escH(snapName(s))}${s.label ? ` (${s.id})` : ""}</option>`)).join("");
+  for (const side of ["left", "right"]) {
+    if (CMP[side].startsWith("snap:") && !snaps.some(s => "snap:" + s.id === CMP[side])) compareReset(side);
+    const el = $(side === "left" ? "cmpLeft" : "cmpRight");
+    if (el.dataset.opts !== opts) { el.innerHTML = opts; el.dataset.opts = opts; }
+    el.value = CMP[side];
+    el.onchange = () => { CMP[side] = el.value; CMP.hid[side].clear(); renderPreview($("stage")); };
+  }
+  $("cmpSbs").onclick = () => { CMP.sbs = !CMP.sbs; ZOOM.z = 1; ZOOM.tx = ZOOM.ty = 0; renderPreview($("stage")); };
+  compareButtons();
+  return CMP.left + CMP.right + $("cmpLeft").dataset.opts !== before;
+}
+
+// Side by side: each pane holds its version (pane._el) in its own support frame (or fitted alone
+// without the frame), both at the same scale; the zoom moves both together
+function fitSideBySide(wrap) {
+  const st = $("stage");
+  st.style.minHeight = ""; st.style.alignItems = "";
+  const panes = [...wrap.children];
+  panes.forEach(p => p.replaceChildren());          // empty panes: their width only depends on the layout
+  for (const p of panes) {
+    const el = p._el, [wm, hm] = el.dataset.mm.split(",").map(Number);
+    el.classList.remove("sf-item");
+    Object.assign(el.style, { position: "", left: "", top: "", maxWidth: "none", maxHeight: "none" });
+    if (showSup()) {
+      const w = supportFrame(p, true);
+      Object.assign(el.style, { width: wm * w.k + "px", height: hm * w.k + "px" });
+      w.place(el, 0, 0, wm, hm);
+      w.edge();
+      p.replaceChildren(w.frame);
+    } else {
+      const r = LAST.sheet_rect_mm, [SWs, SHs] = LAST.support_mm;
+      const UW = Math.max(r[2], SWs) - Math.min(r[0], 0), UH = Math.max(r[3], SHs) - Math.min(r[1], 0);
+      const k = Math.min(p.clientWidth / UW, stageH() / UH);
+      Object.assign(el.style, { width: `${wm * k}px`, height: `${hm * k}px` });
+      const box = document.createElement("div");
+      box.className = "sbsbox";
+      box.append(el);
+      p.replaceChildren(box);
+    }
+    // label on the frame (or the image) itself, not at the far side of the pane
+    p.firstElementChild.insertAdjacentHTML("beforeend", `<span class="tag">${p._tag}</span>`);
+  }
+}
+// pressed states of the Compare bar; the slider and its buttons are useless side by side
+function compareButtons() {
+  $("cmpSwap").setAttribute("aria-pressed", String(COMPARE_POS === 100 || COMPARE_POS === 0));
+  $("cmpSbs").setAttribute("aria-pressed", String(CMP.sbs));
+  document.querySelectorAll("#compareBar .cmpslide").forEach(e => e.hidden = CMP.sbs);
 }
 
 // ---------------- Zoom of every view ----------------
@@ -5255,7 +5421,7 @@ function clampPan() {
 function applyZoom() {
   const st = $("stage"), el = zoomTarget();
   $("zoomTools").hidden = !zoomable();
-  $("compareRange").hidden = !(LAST && SEL === null && VIEW === "compare");
+  $("compareBar").hidden = !(LAST && SEL === null && VIEW === "compare");
   if (!el) { st.classList.remove("zoomed"); return; }
   clampPan();
   el.style.transformOrigin = "50% 50%";
@@ -5330,6 +5496,7 @@ function setupZoom() {
 // (whole sheet) thus keep the same support size on screen, and the area keeps its height.
 function fitStage() {
   const st = $("stage");
+  if (st.firstElementChild && st.firstElementChild.classList.contains("sbs")) { fitSideBySide(st.firstElementChild); return; }
   if (showSup() && LAST) { frameView(st); return; }
   const el = st.querySelector("[data-mm]");
   if (!el || !LAST) { st.style.minHeight = ""; st.style.alignItems = ""; return; }
@@ -5352,6 +5519,8 @@ function renderToolbar() {
   // Support / Mat / Sheet / Marks and the zoom sit on the tab line, left of undo / redo
   $("tabTools").hidden = !(IMG || LAST);
   document.querySelectorAll("#viewtools .vt-layers").forEach(e => e.hidden = !layersShown);
+  // Compare: the layers are chosen for each side, next to its version (compare bar)
+  if (VIEW === "compare") document.querySelectorAll("#viewtools .vt-main").forEach(e => e.hidden = true);
   $("optSupport").setAttribute("aria-pressed", String($("show_support").checked));
   $("optPre").hidden = !(LAST && LAST.reference_pre && SEL === null && VIEW === "reference");
   $("optPre").setAttribute("aria-pressed", String(SHOW_PRE));
@@ -5406,7 +5575,7 @@ function stageH() {
     const cs = getComputedStyle(st), num = v => parseFloat(v) || 0;
     const pad = num(cs.paddingTop) + num(cs.paddingBottom) + num(cs.borderTopWidth) + num(cs.borderBottomWidth);
     let below = 0;
-    for (const id of ["compareRange", "snapBar", "warnBox", "metricsBox", "calage"]) {
+    for (const id of ["compareBar", "snapBar", "warnBox", "metricsBox", "calage"]) {
       const e = $(id);
       if (!e || e.hidden) continue;
       const m = getComputedStyle(e);

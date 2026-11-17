@@ -1055,6 +1055,38 @@ def api_snapshot_thumb(name, snap):
     return send_file(s / "thumb.jpg", mimetype="image/jpeg", max_age=3600)
 
 
+# rendered layers of snapshots (Compare tab), keyed by (folder, mtime of the dump): a few, as
+# reading a dump decompresses the whole session
+_SNAP_RENDERS: dict = {}
+RENDER_KEYS = ("preview_size", "support_mm", "base")
+RENDER_LAYER_KEYS = ("index", "color", "kind", "mask_flat", "mask_sim", "mask_flat_nb", "mask_sim_nb")
+
+
+@app.get("/api/projects/<name>/<snap>/render")
+def api_snapshot_render(name, snap):
+    """Computed preview of a snapshot (its layers as RGBA images, support size and colour),
+    composed by the browser like the current preview to compare versions."""
+    try:
+        s = projects.snap_dir(projects.project_dir(name), snap)
+        key = (str(s), (s / projects.SESSION_FILE).stat().st_mtime)
+    except projects.ProjectError as e:
+        return jsonify(error=str(e)), 404
+    except OSError:
+        return jsonify(error="Pas de résultat enregistré dans cette snapshot"), 404
+    out = _SNAP_RENDERS.get(key)
+    if out is None:
+        last = (projects.read_session(s) or {}).get("last_out")
+        if not isinstance(last, dict) or not last.get("layers"):
+            return jsonify(error="Pas de résultat enregistré dans cette snapshot"), 404
+        out = {k: last.get(k) for k in RENDER_KEYS}
+        out["layers"] = [{k: L.get(k) for k in RENDER_LAYER_KEYS} for L in last["layers"]]
+        with LOCK:
+            while len(_SNAP_RENDERS) >= 6:
+                _SNAP_RENDERS.pop(next(iter(_SNAP_RENDERS)))
+            _SNAP_RENDERS[key] = out
+    return jsonify(out)
+
+
 def snapshot_of(name, snap):
     """(project folder, snapshot id) of a URL, or raises ProjectError."""
     d = projects.project_dir(name)

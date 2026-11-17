@@ -119,7 +119,7 @@ Open the SVG files of the zip in Silhouette Studio, cut, and spray layer 1, 2, 3
 │ OversprayLab            status · Auto compute · Recompute · ⚙                           │  ← header
 ├────────────────────┬────────────────────────────────────────────┬────────────────────┤
 │ Image box          │ Crop | Layout | Masks | Preview |          │ Stencils           │
-│ Open a project…    │ Compare with original | Original    1 2 3  │ palette · Closest  │
+│ Open a project…    │ Compare | Original                  1 2 3  │ palette · Closest  │
 │ Default settings   │ Support  Mat  Sheet  Marks                 │ · Auto · legend    │
 │ Settings sections  │                                            │ one card per layer │
 │  (accordion)       │            main view                       │  (click = enlarge) │
@@ -600,8 +600,16 @@ the same settings line up from one layer to the next.
   colour in spraying order. Tick **Simulated render** to add the soft airbrush blur, and **Without
   bridges** to see the result once the bridge traces are retouched (bridges painted over). Use the layer
   buttons **1 2 3…** to hide layers.
-- **Compare with original** – a before/after slider between the original image and the result.
-  The summary line gives the **mean colour difference (ΔE)**: lower = more faithful.
+- **Compare** – a before/after slider between two versions, chosen under the view for each side
+  (**Left** / **Right**): the original image, the current version or any snapshot of the project
+  that holds its computed result (shown as it was saved, in the frame of the current version at the
+  same mm scale, with the *Support*, *Simulated render* and *Without bridges* options of the view;
+  the layer buttons next to each side's version choose the layers shown on that side, independently
+  of the other side and of the Preview tab).
+  By default the original is on the left and the current version on the right. **⇄ Left / right**
+  shows the whole left version, then the whole right one, at each click, to switch quickly between
+  both (moving the slider takes over again); **Side by side** shows them next to each other instead,
+  each in its own support frame at the same scale (the zoom moves both). The summary line gives the **mean colour difference (ΔE)**: lower = more faithful.
 
   ![Compare with the original: photo on the left, simulated airbrush render on the right](docs/screenshots/compare.jpg)
 

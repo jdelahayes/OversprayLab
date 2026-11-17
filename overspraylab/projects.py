@@ -120,7 +120,8 @@ def snapshots(d: Path) -> list[dict]:
         out.append({"id": sid, "uid": meta.get("uid"), "label": str(meta.get("libelle") or ""), "date": meta.get("date"),
                     "delta_e": meta.get("delta_e"), "layers": meta.get("pochoirs"),
                     "reduced": bool(meta.get("image_reduite")),
-                    "thumb": (d / "snapshots" / sid / "thumb.jpg").is_file()})
+                    "thumb": (d / "snapshots" / sid / "thumb.jpg").is_file(),
+                    "computed": (d / "snapshots" / sid / SESSION_FILE).is_file()})
     return out
 
 
