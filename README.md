@@ -123,8 +123,8 @@ Open the SVG files of the zip in Silhouette Studio, cut, and spray layer 1, 2, 3
 │ Default settings   │ Support  Mat  Sheet  Marks                 │ · Auto · legend    │
 │ Settings sections  │                                            │ one card per layer │
 │  (accordion)       │            main view                       │  (click = enlarge) │
-│ Export button      │ summary: sizes, ΔE, bridges, cut length    │                    │
-│                    │ ▸ Ruler positioning (folding panel)        │                    │
+│ Export button      │ Snapshots | Warnings | Dimensions | Ruler  │                    │
+│                    │ (foldable panel with tabs)                 │                    │
 └────────────────────┴────────────────────────────────────────────┴────────────────────┘
 ```
 
@@ -137,10 +137,14 @@ Open the SVG files of the zip in Silhouette Studio, cut, and spray layer 1, 2, 3
   computed views (Preview, Compare, Original, a single layer); in Crop, Layout and Masks, where the
   left button edits, drag with the **middle button** or hold **Space** while dragging. A
   **double-click** (except in Masks) or the *%* button fits it back; the zoom is kept when you
-  switch views. Under the view, two foldable boxes: **Warnings** gathers the current warnings
-  (image resolution, dark support, no key detail found…) and opens by itself when a new warning
-  appears; **Dimensions and measures** gives the support, stencil sheet and image sizes, the
-  difference from the original (ΔE), the number of bridges and the total cut length.
+  switch views. Under the view, one foldable panel with tabs (only those with something to show):
+  **Snapshots** (see [§7](#7-projects-and-saved-settings)); **Warnings** gathers the current
+  warnings (image resolution, dark support, no key detail found…), and the panel opens on it by
+  itself when a new warning appears; **Dimensions and measures** gives the support, stencil sheet
+  and image sizes, the difference from the original (ΔE), the number of bridges and the total cut
+  length; **Ruler positioning** (see §5.7). Click the active tab (or the chevron on the right) to
+  fold the panel to its line of tabs: the view gets the room. The active tab and the folding are
+  remembered.
 - **Right column – the stencils**: one card per layer with its colour swatch (click it to change the
   paint), statistics (paths, nodes, islands, bridges, merges, cut length) and warnings. Click a card
   to see that layer alone in the main view.
@@ -493,9 +497,8 @@ section. Choose how the stencil sheet relates to the support:
 - **Registration marks** on **3 corners** (the empty bottom-right corner prevents putting a sheet
   upside down) or **4 corners**; shape: brackets, crosses or round holes (for registration pins).
 - Small square **notches** at the top of each sheet give the layer number.
-- For "inside the support" modes, the ruler measurements are shown under the preview (*Ruler
-  positioning*) and in the Layout view, and are exported in the files. Click the panel's title
-  to fold it to a single line (the preview then gets the room) or unfold it.
+- For "inside the support" modes, the ruler measurements are shown under the view (*Ruler
+  positioning* tab of the panel) and in the Layout view, and are exported in the files.
 
 ### 5.8 Cutting machine
 
@@ -518,7 +521,7 @@ islands instead of bridging them is set in *Simplification* (5.5).
   Letter / Legal / Tabloid, 12 × 12″, 12 × 24″, 24 × 24″, custom, or *Not specified*), with its
   orientation. It is **only a check**: the stencil is never changed. The hint tells you whether the
   stencil fits on it (or only once the sheet is turned) and warns when the sheet is larger than the
-  mat; these two problems also appear in the *Warnings* box under the view. Your own sizes are kept with the icons next to *Material sheet* (★ *My formats*, first in the list).
+  mat; these two problems also appear in the *Warnings* tab under the view. Your own sizes are kept with the icons next to *Material sheet* (★ *My formats*, first in the list).
   The **Sheet** button above the views shows its outline (orange and dashed when the stencil
   overflows), laid in the same corner as the stencil sheet.
 - **Bridges**: **Automatic bridges (islands)**, **Bridge width** and **Minimum bridges per island**.
@@ -608,8 +611,9 @@ the same settings line up from one layer to the next.
   of the other side and of the Preview tab).
   By default the original is on the left and the current version on the right. **⇄ Left / right**
   shows the whole left version, then the whole right one, at each click, to switch quickly between
-  both (moving the slider takes over again); **Side by side** shows them next to each other instead,
-  each in its own support frame at the same scale (the zoom moves both). The summary line gives the **mean colour difference (ΔE)**: lower = more faithful.
+  both (moving the slider takes over again); **Side by side** shows them next to each other instead
+  (one above the other when that shows them larger, e.g. landscape images), each in its own support
+  frame at the same scale (the zoom moves both). The summary line gives the **mean colour difference (ΔE)**: lower = more faithful.
 
   ![Compare with the original: photo on the left, simulated airbrush render on the right](docs/screenshots/compare.jpg)
 
@@ -746,8 +750,8 @@ squares with their hex codes, placed left of the page, to prepare your paints.
   colours, palette – and the **painted masks** (each stroke, object selection, copy or clear is one
   step), then recompute. Up to 100 steps; the history starts again with each new image. Display
   options are not part of it, and in a text or number field Ctrl + Z stays the field's own undo.
-- **Snapshots**: the *Snapshots* box under the view (click its title to fold it; folded, it shows the
-  number of snapshots and the current one) keeps versions of the project. **Take a snapshot** (with an
+- **Snapshots**: the *Snapshots* tab of the panel under the view (its title shows the number of
+  snapshots and the current one) keeps versions of the project. **Take a snapshot** (with an
   optional name) saves the current version – image, masks, settings and the computed result – into
   the project folder; a snapshot never changes afterwards. Click a thumbnail to go back to that
   version: it opens instantly, without computing. As soon as you change anything, the current

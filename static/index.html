@@ -69,7 +69,11 @@
   .layercol .legend { margin: 6px 0 10px; gap: 6px 12px; }
   aside { background: var(--panel); border-right: 1px solid var(--line); padding: 12px 14px 40px;
           overflow-y: auto; overflow-x: hidden; max-height: calc(100vh - 49px); min-width: 0; }
-  section.view { padding: 14px 18px; overflow-y: auto; max-height: calc(100vh - 49px); }
+  /* column of the view: the info dock always at the bottom (pushed down by the spacer when the view is
+     short, kept at the bottom edge while the column scrolls) */
+  section.view { padding: 14px 18px; overflow-y: auto; max-height: calc(100vh - 49px); display: flex; flex-direction: column; }
+  section.view > * { flex-shrink: 0; }
+  section.view > .viewspacer { flex: 1 0 10px; }
   fieldset { border: 1px solid var(--line); border-radius: 8px; margin: 0 0 12px; padding: 8px 10px 10px; min-width: 0; }
   .fxlh { flex-wrap: wrap; }
   legend { font-weight: 600; padding: 0 4px; font-size: 13px; }
@@ -179,6 +183,10 @@
   .sbs .sbspane { position: relative; flex: 1 1 0; min-width: 0; display: flex; justify-content: flex-end; align-items: center; }
   .sbs .sbspane + .sbspane { justify-content: flex-start; }
   .sbs .sbsbox { position: relative; flex: none; }
+  /* one above the other (versions wider than tall): pushed towards the middle line */
+  .sbs.col { flex-direction: column; }
+  .sbs.col .sbspane { min-height: 0; justify-content: center; align-items: flex-end; }
+  .sbs.col .sbspane + .sbspane { align-items: flex-start; }
   .sbs .tag { position: absolute; top: 6px; left: 6px; z-index: 6; font: 600 11px/1.4 system-ui, sans-serif; background: rgba(0,0,0,.55); color: #fff; padding: 1px 6px; border-radius: 4px; }
   /* Zoom of the computed views (preview, comparison, original, layer) */
   .stage { position: relative; }
@@ -211,7 +219,20 @@
              box-shadow: 0 10px 28px rgba(0,0,0,.4); font-size: 13px; }
   .prefpop h4 { margin: 4px 0 6px; font-size: 13px; }
   /* Snapshots (bar under the view), saved projects (pop-up of "Open a project…"), leave dialog */
-  .snapbox > summary .hint { font-weight: 400; margin: 0; }
+  /* Info dock under the view: one line of tabs, the active pane under it when unfolded */
+  .infodock { position: sticky; bottom: 0; z-index: 15; background: var(--bg); border: 1px solid var(--line); border-radius: 10px; padding: 4px 8px; font-size: 13px; }
+  .docktabs { display: flex; flex-wrap: wrap; align-items: center; gap: 2px 4px; }
+  .docktab { all: unset; cursor: pointer; padding: 4px 8px; border-radius: 6px; font-weight: 600; display: inline-flex; gap: 6px; align-items: baseline; color: var(--muted); }
+  .docktab:hover, .docktab:focus-visible { color: var(--accent); }
+  .docktab:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
+  .docktab[aria-selected="true"] { color: var(--ink); background: var(--soft); }
+  .infodock.folded .docktab[aria-selected="true"] { background: none; }
+  .docktab .hint { font-weight: 400; margin: 0; }
+  .docktab.warntab { color: #b45309; }
+  @media (prefers-color-scheme: dark) { .docktab.warntab { color: #fbbf24; } }
+  .dockfold { margin-left: auto; }
+  .dockpane { padding: 8px 4px 4px; max-height: 32vh; overflow-y: auto; }
+  .dockpane:not(.active), .infodock.folded .dockpane { display: none; }
   .snaphead { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; font-size: 12px; }
   .snaphead b { font-size: 12px; margin-right: 4px; }
   .snaphead input { flex: 1 1 140px; min-width: 0; max-width: 260px; padding: 4px 6px; border: 1px solid var(--line);
@@ -349,19 +370,8 @@
   .warn { background: #fef3c7; color: #78350f; border: 1px solid #fcd34d; border-radius: 8px;
           padding: 7px 10px; margin-bottom: 8px; font-size: 13px; }
   @media (prefers-color-scheme: dark) { .warn { background: #3a2e12; color: #fde68a; border-color: #854d0e; } }
-  /* outlined foldable boxes under the view (warnings, dimensions), like the ruler placement box */
-  .foldbox { margin-top: 10px; border: 1px solid var(--line); border-radius: 10px; padding: 8px 12px; font-size: 13px; }
-  .foldbox > summary { list-style: none; cursor: pointer; font-weight: 600; display: flex; gap: 6px; align-items: baseline; }
-  .foldbox > summary::-webkit-details-marker { display: none; }
-  .foldbox > summary::before { content: "▸"; display: inline-block; width: 10px; color: var(--muted); font-weight: 400; }
-  .foldbox[open] > summary::before { content: "▾"; }
-  .foldbox > summary:hover, .foldbox > summary:focus-visible { color: var(--accent); outline: none; }
-  .foldbox[open] > summary { margin-bottom: 8px; }
-  .warnbox > summary { color: #b45309; }
-  @media (prefers-color-scheme: dark) { .warnbox > summary { color: #fbbf24; } }
   .warnbox .warn:last-child { margin-bottom: 0; }
-  .foldbox .metrics { margin: 0; }
-  #warnings { max-height: 30vh; overflow-y: auto; }
+  .dockpane .metrics { margin: 0; }
   .sw.pick { cursor: pointer; width: 20px; height: 20px; }
   /* Crop editor */
   .cropwrap { position: relative; display: inline-block; overflow: visible; user-select: none; touch-action: none; line-height: 0; }
@@ -435,19 +445,10 @@
   .stockedge span { position: absolute; left: 0; bottom: 100%; margin-bottom: 2px; font-size: 10px; color: rgba(195,155,235,.95); white-space: nowrap; }
   .stockedge.over { border: 2px dashed #e0703a; }
   .stockedge.over span { color: #e0703a; }
-  .calage { margin-top: 10px; border: 1px solid var(--line); border-radius: 10px; padding: 10px 12px; font-size: 13px; }
-  .calage h3 { margin: 0 0 6px; font-size: 13px; }
   .calage table { border-collapse: collapse; font-variant-numeric: tabular-nums; }
   .calage td, .calage th { padding: 2px 12px 2px 0; text-align: left; }
   .calage th { color: var(--muted); font-weight: 500; }
   .calage .off { color: #e0703a; }
-  .calage h3 { margin: 0; }
-  .calage .calage-toggle { all: unset; cursor: pointer; display: inline-flex; gap: 6px; align-items: baseline;
-                           font-weight: 600; font-size: 13px; }
-  .calage .calage-toggle:hover, .calage .calage-toggle:focus-visible { color: var(--accent); }
-  .calage .calage-toggle .chev { display: inline-block; width: 10px; color: var(--muted); }
-  .calage:not(.collapsed) h3 { margin-bottom: 6px; }
-  .calage.collapsed { padding-top: 6px; padding-bottom: 6px; }
   .lay .regmark { position: absolute; width: 0; height: 0; pointer-events: none; z-index: 2; }
   .lay .regmark::before, .lay .regmark::after { content: ""; position: absolute; background: #1e88e5; }
   .lay .regmark::before { left: -7px; top: -1px; width: 14px; height: 2px; }
@@ -1301,7 +1302,6 @@
           title="Repères de calage (croix, équerres ou trous) et encoches du numéro de couche, dans toutes les vues">Repères</button>
         <input type="checkbox" id="show_stock" hidden>
         <input type="checkbox" id="show_reg" checked hidden>
-        <input type="checkbox" id="show_calage" hidden>
         <input type="checkbox" id="show_mat" hidden>
       </span>
       <span class="vt-zoom" id="zoomTools" role="group" aria-label="Zoom" hidden>
@@ -1419,23 +1419,32 @@
       <span class="vt-toggles" id="cmpLayR" role="group" aria-label="Couches affichées à droite"></span></span>
     <button type="button" class="vt-opt" id="cmpSbs" aria-pressed="false" title="Affiche les deux versions l'une à côté de l'autre, au lieu de les superposer avec le curseur">Côte à côte</button>
   </div>
-  <details class="foldbox snapbox" id="snapBar" open hidden>
-    <summary>Snapshots <span class="hint" id="snapSum"></span></summary>
+  <!-- Info dock: snapshots, warnings, dimensions and ruler placement as tabs of one foldable box.
+       A pane's `hidden` = nothing to show (its tab is hidden too); the active pane is the shown one. -->
+  <div class="viewspacer"></div>
+  <div class="infodock" id="infoDock" hidden>
+    <div class="docktabs" role="tablist" aria-label="Informations sous la vue">
+      <button type="button" role="tab" class="docktab" data-pane="snapBar" aria-controls="snapBar">Snapshots <span class="hint" id="snapSum"></span></button>
+      <button type="button" role="tab" class="docktab warntab" data-pane="warnBox" aria-controls="warnBox"><span id="warnSum"></span></button>
+      <button type="button" role="tab" class="docktab" data-pane="metricsBox" aria-controls="metricsBox">Dimensions et mesures</button>
+      <button type="button" role="tab" class="docktab" data-pane="calage" aria-controls="calage">Calage à la règle</button>
+      <button type="button" class="ibtn dockfold" id="dockFold" aria-expanded="true" title="Replier le panneau (ou cliquer sur l'onglet actif)"></button>
+    </div>
+  <div class="dockpane snapbox" id="snapBar" role="tabpanel" hidden>
     <div class="snaphead">
       <input type="text" id="snapLabel" maxlength="80" placeholder="Nom (facultatif)" aria-label="Nom de la snapshot">
       <button type="button" id="snapBtn" title="Enregistre la version courante (image, masques, réglages et résultat calculé) comme nouvelle snapshot dans le dossier du projet ; une snapshot ne change plus ensuite">Créer une snapshot</button>
     </div>
     <div class="snaplist" id="snapList"></div>
-  </details>
-  <details class="foldbox warnbox" id="warnBox" hidden>
-    <summary id="warnSum"></summary>
+  </div>
+  <div class="dockpane warnbox" id="warnBox" role="tabpanel" hidden>
     <div id="warnings"></div>
-  </details>
-  <details class="foldbox" id="metricsBox" open hidden>
-    <summary>Dimensions et mesures</summary>
+  </div>
+  <div class="dockpane" id="metricsBox" role="tabpanel" hidden>
     <div class="metrics" id="metrics"></div>
-  </details>
-  <div class="calage" id="calage" hidden></div>
+  </div>
+  <div class="dockpane calage" id="calage" role="tabpanel" hidden></div>
+  </div>
 </section>
 <div class="layercol" aria-label="Pochoirs">
   <div class="layercol-head">
@@ -1759,7 +1768,8 @@ function fullImageRect(L) {
 }
 // tight: little room around the support and the source image left out (Compare side by side, where
 // the two frames sit next to each other)
-function supportWorld(st, withMat = false, tight = false) {
+// area: {w, h} available in px (side by side panes), instead of the size of `st`
+function supportWorld(st, withMat = false, tight = false, area = null) {
   const L = layoutCalc(), m = val("margin_mm"), room = tight ? 0.02 : 0.18, sr = sheetRectMM(L);
   let x0 = Math.min(-L.SW * room, sr.x0 - 2), y0 = Math.min(-L.SH * room, sr.y0 - 2),
       x1 = Math.max(L.SW * (1 + room), sr.x1 + 2), y1 = Math.max(L.SH * (1 + room), sr.y1 + 2);
@@ -1772,13 +1782,13 @@ function supportWorld(st, withMat = false, tight = false) {
     x0 = Math.min(x0, F.x); y0 = Math.min(y0, F.y); x1 = Math.max(x1, F.x + F.w); y1 = Math.max(y1, F.y + F.h);
   }
   const cs = getComputedStyle(st);
-  const aw = Math.max(200, st.clientWidth - parseFloat(cs.paddingLeft) - parseFloat(cs.paddingRight));
-  const ah = stageH();
+  const aw = area ? area.w : Math.max(200, st.clientWidth - parseFloat(cs.paddingLeft) - parseFloat(cs.paddingRight));
+  const ah = area ? area.h : stageH();
   const k = Math.min(aw / (x1 - x0), ah / (y1 - y0));
   return { L, m, sr, k, W: (x1 - x0) * k, H: (y1 - y0) * k, px: x => (x - x0) * k, py: y => (y - y0) * k };
 }
-function supportFrame(st, tight = false) {
-  const w = supportWorld(st, false, tight), { L, sr, k } = w;
+function supportFrame(st, tight = false, area = null) {
+  const w = supportWorld(st, false, tight, area), { L, sr, k } = w;
   const fr = document.createElement("div");
   fr.className = "sframe";
   Object.assign(fr.style, { width: w.W + "px", height: w.H + "px" });
@@ -1902,7 +1912,7 @@ function resolutionWarning() {
 // Warnings box under the view: the warnings of the last computation (RENDER_WARNS) plus the
 // resolution one, which follows the image size live. Opened whenever a warning that was not shown
 // just before appears (compared on its start, so a changed number does not reopen it).
-let RENDER_WARNS = [], WARN_SEEN = new Set(), WARN_H = 0;
+let RENDER_WARNS = [], WARN_SEEN = new Set();
 const warnKey = w => w.replace(/<[^>]*>/g, "").split(/ :|[.(]/)[0].trim();
 function showResolutionWarning() { updateWarnings(); }
 function stockWarnings() {
@@ -1923,7 +1933,7 @@ function updateWarnings() {
   const items = (res ? [res] : []).concat(IMG ? stockWarnings() : [], RENDER_WARNS);
   box.hidden = !items.length;
   const keys = new Set(items.map(warnKey));
-  if ([...keys].some(k => !WARN_SEEN.has(k))) box.open = true;
+  const fresh = [...keys].some(k => !WARN_SEEN.has(k));
   WARN_SEEN = keys;
   $("warnSum").textContent = `Avertissements (${items.length})`;
   $("warnings").replaceChildren(...items.map(w => {
@@ -1933,15 +1943,59 @@ function updateWarnings() {
     if (w === res) resolutionButton(d);
     return d;
   }));
-  warnRefit();
+  if (fresh) DOCK.show("warnBox");      // a new warning: the dock opens on it
+  else DOCK.update();
 }
-// the view takes the height left above the box: refit it when the box changes height
-function warnRefit() {
-  const h = $("warnBox").hidden ? 0 : $("warnBox").offsetHeight;
-  if (h === WARN_H) return;
-  WARN_H = h;
-  window.dispatchEvent(new Event("resize"));
-}
+// ---------------- Info dock under the view ----------------
+// Snapshots, warnings, dimensions and ruler placement: one tab each, in one foldable box. A pane
+// with nothing to show is `hidden` (its tab too); clicking the active tab (or the chevron) folds the
+// box to its line of tabs. Active tab and folding are remembered (preferences). The view takes the
+// height left above the box: refitted when the box changes height.
+const DOCK = {
+  tab: null, open: true, h: -1,
+  init() {
+    const p = prefs();
+    this.tab = p.dock_tab || "snapBar"; this.open = p.dock_open !== false;
+    document.querySelectorAll("#infoDock .docktab").forEach(b => b.onclick = () => {
+      if (b.dataset.pane === this.tab && this.open) this.fold(true);
+      else this.show(b.dataset.pane, true);
+    });
+    $("dockFold").onclick = () => this.fold(this.open);
+    new ResizeObserver(() => this.refit()).observe($("infoDock"));
+  },
+  show(pane, user = false) {
+    this.tab = pane; this.open = true;
+    if (user) { savePref("dock_tab", pane); savePref("dock_open", true); }
+    this.update();
+  },
+  fold(on) { this.open = !on; savePref("dock_open", this.open); this.update(); },
+  update() {
+    const dock = $("infoDock"), tabs = [...dock.querySelectorAll(".docktab")];
+    const avail = tabs.filter(b => !$(b.dataset.pane).hidden).map(b => b.dataset.pane);
+    dock.hidden = !avail.length;
+    const cur = avail.includes(this.tab) ? this.tab : avail[0];
+    tabs.forEach(b => {
+      const on = b.dataset.pane === cur;
+      b.hidden = !avail.includes(b.dataset.pane);
+      b.setAttribute("aria-selected", String(on));
+      b.tabIndex = on ? 0 : -1;
+      $(b.dataset.pane).classList.toggle("active", on);
+    });
+    dock.classList.toggle("folded", !this.open);
+    const fb = $("dockFold");
+    fb.textContent = this.open ? "▾" : "▸";
+    fb.setAttribute("aria-expanded", String(this.open));
+    fb.title = this.open ? "Replier le panneau (ou cliquer sur l'onglet actif)" : "Déplier le panneau";
+    fb.setAttribute("aria-label", fb.title);
+    this.refit();
+  },
+  refit() {
+    const d = $("infoDock"), h = d.hidden ? 0 : d.offsetHeight;
+    if (h === this.h) return;
+    this.h = h;
+    window.dispatchEvent(new Event("resize"));
+  },
+};
 function resolutionButton(e) {
   const t = downscaleSize();
   if (t) {
@@ -2386,7 +2440,7 @@ let DEFAULTS = null;   // interface state before the last settings are restored 
 function collectSettings(all) {
   const s = {};
   PARAMS.filter(k => all || !NOT_REMEMBERED.has(k)).forEach(k => s[k] = val(k));
-  ["material", "support_preset", "orientation", "align_margin_mm", "keep_ratio", "preview_sim", "preview_nobridges", "show_support", "show_mat", "mat_preset", "machine", "auto_calc", "show_stock", "show_reg", "show_calage", "stock_preset", "stock_orient", "stock_w_mm", "stock_h_mm"].forEach(k => s[k] = val(k));
+  ["material", "support_preset", "orientation", "align_margin_mm", "keep_ratio", "preview_sim", "preview_nobridges", "show_support", "show_mat", "mat_preset", "machine", "auto_calc", "show_stock", "show_reg", "stock_preset", "stock_orient", "stock_w_mm", "stock_h_mm"].forEach(k => s[k] = val(k));
   return s;
 }
 function rememberSettings() {
@@ -3429,11 +3483,6 @@ async function init() {
   $("lgFlat").onclick = () => { setOverlay("lgFlat", "no-flat", $("lgFlat").getAttribute("aria-pressed") !== "true"); saveOverlays(); };
   $("optPre").onclick = () => { SHOW_PRE = !SHOW_PRE; render(); };
   $("show_reg").addEventListener("change", () => { render(); rememberSettings(); });
-  $("calage").addEventListener("click", e => {
-    if (!e.target.closest(".calage-toggle")) return;
-    $("show_calage").checked = !$("show_calage").checked; $("show_calage").dispatchEvent(new Event("change"));
-  });
-  $("show_calage").addEventListener("change", () => { renderCalage(); render(); rememberSettings(); });
   [["optSupport", "show_support"], ["optMat", "show_mat"], ["optStock", "show_stock"], ["optReg", "show_reg"],
    ["optSim", "preview_sim"], ["optNoBridges", "preview_nobridges"]].forEach(([b, c]) => $(b).onclick = () => {
     $(c).checked = !$(c).checked;
@@ -3479,9 +3528,7 @@ async function init() {
   $("alignH").onclick = () => alignTo(0, null);
   $("alignV").onclick = () => alignTo(null, 0);
   window.addEventListener("resize", () => { if (VIEW === "layout" || VIEW === "crop" || showSup()) render(); else { fitStage(); applyZoom(); } });
-  $("warnBox").addEventListener("toggle", warnRefit);
-  $("metricsBox").addEventListener("toggle", () => { if (!$("metricsBox").hidden) savePref("metrics_open", $("metricsBox").open); window.dispatchEvent(new Event("resize")); });
-  $("snapBar").addEventListener("toggle", () => { if (!$("snapBar").hidden) savePref("snaps_open", $("snapBar").open); window.dispatchEvent(new Event("resize")); });
+  DOCK.init();
   setupZoom();
   $("reg_shape").addEventListener("change", () => { $("reg_size_mm").value = REG_DEFAULT[val("reg_shape")]; regHint(); schedule(); });
   $("reg_corners").addEventListener("change", regHint);
@@ -3945,11 +3992,7 @@ let SNAP_EDIT = null, SNAP_DEL = null, SNAP_DEL_TIMER = null;
 function renderSnaps() {
   const bar = $("snapBar");
   if (!bar) return;
-  if (bar.hidden === !!SID) {          // shown / hidden: folded as last time, the view height follows
-    bar.hidden = !SID;
-    if (SID) bar.open = prefs().snaps_open !== false;
-    window.dispatchEvent(new Event("resize"));
-  }
+  if (bar.hidden === !!SID) { bar.hidden = !SID; DOCK.update(); }
   if (!SID) return;
   const saved = isSaved();
   // folded box: number of snapshots and current version in its title
@@ -5364,24 +5407,36 @@ function renderCompareBar() {
 // Side by side: each pane holds its version (pane._el) in its own support frame (or fitted alone
 // without the frame), both at the same scale; the zoom moves both together
 function fitSideBySide(wrap) {
-  const st = $("stage");
-  st.style.minHeight = ""; st.style.alignItems = "";
-  const panes = [...wrap.children];
-  panes.forEach(p => p.replaceChildren());          // empty panes: their width only depends on the layout
-  for (const p of panes) {
+  const st = $("stage"), cs = getComputedStyle(st), num = v => parseFloat(v) || 0;
+  const aw = st.clientWidth - num(cs.paddingLeft) - num(cs.paddingRight), ah = stageH(), gap = 6;
+  // size of what one pane shows (mm): the tight support frame, or the support and sheet alone
+  const sup = showSup();
+  let FW, FH;
+  if (sup) { const w = supportWorld(st, false, true); FW = w.W / w.k; FH = w.H / w.k; }
+  else {
+    const r = LAST.sheet_rect_mm, [SWs, SHs] = LAST.support_mm;
+    FW = Math.max(r[2], SWs) - Math.min(r[0], 0); FH = Math.max(r[3], SHs) - Math.min(r[1], 0);
+  }
+  // next to each other or one above the other: whichever shows the versions larger
+  const kRow = Math.min((aw - gap) / 2 / FW, ah / FH), kCol = Math.min(aw / FW, (ah - gap) / 2 / FH);
+  const col = kCol > kRow;
+  const area = col ? { w: aw, h: (ah - gap) / 2 } : { w: (aw - gap) / 2, h: ah };
+  wrap.classList.toggle("col", col);
+  wrap.style.height = ah + "px";                     // the view keeps its whole height
+  st.style.minHeight = `${ah + num(cs.paddingTop) + num(cs.paddingBottom) + num(cs.borderTopWidth) + num(cs.borderBottomWidth)}px`;
+  st.style.alignItems = "";
+  for (const p of wrap.children) {
     const el = p._el, [wm, hm] = el.dataset.mm.split(",").map(Number);
     el.classList.remove("sf-item");
     Object.assign(el.style, { position: "", left: "", top: "", maxWidth: "none", maxHeight: "none" });
-    if (showSup()) {
-      const w = supportFrame(p, true);
+    if (sup) {
+      const w = supportFrame(p, true, area);
       Object.assign(el.style, { width: wm * w.k + "px", height: hm * w.k + "px" });
       w.place(el, 0, 0, wm, hm);
       w.edge();
       p.replaceChildren(w.frame);
     } else {
-      const r = LAST.sheet_rect_mm, [SWs, SHs] = LAST.support_mm;
-      const UW = Math.max(r[2], SWs) - Math.min(r[0], 0), UH = Math.max(r[3], SHs) - Math.min(r[1], 0);
-      const k = Math.min(p.clientWidth / UW, stageH() / UH);
+      const k = Math.min(area.w / FW, area.h / FH);
       Object.assign(el.style, { width: `${wm * k}px`, height: `${hm * k}px` });
       const box = document.createElement("div");
       box.className = "sbsbox";
@@ -5567,19 +5622,21 @@ function refreshPreviewOnly() {
 // ruler panel, so that folding the panel enlarges the view; at least 72 % of the window as before
 function stageH() {
   const view = document.querySelector("section.view"), st = $("stage");
+  // compare bar shown before measuring (applyZoom shows it too, but after the view is fitted)
+  $("compareBar").hidden = !(LAST && SEL === null && VIEW === "compare");
   // the boxes under the view (warnings, dimensions) are kept on screen: taken off the minimum height too
-  const warnH = ["snapBar", "warnBox", "metricsBox"].reduce((a, id) => { const e = $(id); return a + (e && !e.hidden ? e.offsetHeight + 10 : 0); }, 0);
+  const warnH = ["infoDock"].reduce((a, id) => { const e = $(id); return a + (e && !e.hidden ? e.offsetHeight + 10 : 0); }, 0);
   let h = window.innerHeight * 0.72 - warnH;
   if (view && st && view.clientHeight < window.innerHeight) {          // column with its own scrolling
     const top = st.getBoundingClientRect().top - view.getBoundingClientRect().top + view.scrollTop;
     const cs = getComputedStyle(st), num = v => parseFloat(v) || 0;
     const pad = num(cs.paddingTop) + num(cs.paddingBottom) + num(cs.borderTopWidth) + num(cs.borderBottomWidth);
     let below = 0;
-    for (const id of ["compareBar", "snapBar", "warnBox", "metricsBox", "calage"]) {
+    for (const id of ["compareBar", "infoDock"]) {
       const e = $(id);
       if (!e || e.hidden) continue;
       const m = getComputedStyle(e);
-      below += e.offsetHeight + num(m.marginTop) + num(m.marginBottom);
+      below += e.offsetHeight + num(m.marginTop) + num(m.marginBottom) + (id === "infoDock" ? 10 : 0);   // + spacer
     }
     h = Math.max(h, view.clientHeight - num(getComputedStyle(view).paddingBottom) - top - pad - below - 2);
   }
@@ -5629,7 +5686,7 @@ function render() {
   renderOutlineSwatches();
 
   const tot = LAST.layers.reduce((a, L) => ({ b: a.b + L.bridges, c: a.c + L.cut_length_m }), { b: 0, c: 0 });
-  if ($("metricsBox").hidden) { $("metricsBox").hidden = false; $("metricsBox").open = prefs().metrics_open !== false; }
+  if ($("metricsBox").hidden) { $("metricsBox").hidden = false; DOCK.update(); }
   $("metrics").innerHTML = `
     <span>Support : <b>${LAST.support_mm[0]} × ${LAST.support_mm[1]} mm</b></span>
     <span>Feuille du pochoir : <b>${LAST.sheet_mm[0]} × ${LAST.sheet_mm[1]} mm</b></span>
@@ -5679,14 +5736,11 @@ const fmtMM = v => `${(Math.round(v * 10) / 10).toString().replace(".", ",")} mm
 // Ruler dimensions: where to draw the crosses on the support (sheet laid inside the support)
 function renderCalage() {
   const box = $("calage"), pos = LAST && LAST.positioning;
-  if (!pos || pos.mode === "around" || !val("reg_dims") || !pos.reperes.length) { box.hidden = true; return; }
-  const f = pos.feuille, open = $("show_calage").checked;   // folded: only the title line stays
-  box.hidden = false;
-  box.classList.toggle("collapsed", !open);
-  const head = `<h3><button type="button" class="calage-toggle" aria-expanded="${open}"
-    title="${open ? "Réduire" : "Afficher"} les cotes de calage"><span class="chev" aria-hidden="true">${open ? "▾" : "▸"}</span><span>Calage à la règle</span></button></h3>`;
-  if (!open) { box.innerHTML = head; return; }
-  box.innerHTML = `${head}
+  const none = !pos || pos.mode === "around" || !val("reg_dims") || !pos.reperes.length;
+  if (none !== box.hidden) { box.hidden = none; DOCK.update(); }
+  if (none) return;
+  const f = pos.feuille;
+  box.innerHTML = `
     <p class="hint" style="margin:0 0 6px">Cotes mesurées depuis le coin haut-gauche du support. Tracez au crayon une croix à chaque cote, puis posez chaque couche en alignant ses fenêtres en croix sur les traits.</p>
     <table><tr><th>Croix</th><th>depuis la gauche</th><th>depuis le haut</th><th>depuis la droite</th><th>depuis le bas</th></tr>
     ${pos.reperes.map(r => `<tr class="${r.sur_support ? "" : "off"}"><td>${r.coin}${r.sur_support ? "" : " (hors du support)"}</td>

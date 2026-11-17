@@ -73,6 +73,9 @@ try {
     "Ouvrir un projet…": "Open a project…",
     "Rouvrir un zip exporté par OversprayLab (image, masque et tous les réglages), ou seulement son fichier infos.json": "Reopen a zip exported by OversprayLab (image, masks and all settings), or just its infos.json file",
     "Rouvrir un projet enregistré (dossier des projets) à une de ses snapshots, ou un zip exporté par OversprayLab, ou seulement son fichier infos.json": "Reopen a saved project (projects folder) at one of its snapshots, or a zip exported by OversprayLab, or just its infos.json file",
+    // Info dock under the view
+    "Informations sous la vue": "Information under the view",
+    "Replier le panneau (ou cliquer sur l'onglet actif)": "Fold the panel (or click the active tab)", "Déplier le panneau": "Unfold the panel",
     // Snapshots and saved projects
     "Créer une snapshot": "Take a snapshot",
     "Enregistre la version courante (image, masques, réglages et résultat calculé) comme nouvelle snapshot dans le dossier du projet ; une snapshot ne change plus ensuite":
