@@ -457,6 +457,8 @@ or without the key details, to its own **destination** (an outline layer or a co
 useful when the subject does not stand out from the background, since the detection mostly reinforces details inside it. **Silhouette mask** chooses
 which one: the subject mask (selected object or cut-out area), the dedicated silhouette mask, or the
 key-detail mask (all the zones together); **Paint…** opens it in the Masks tab. The image's own edge is not drawn.
+**Position** puts the stroke across the outline, just outside or just inside it, and **Silhouette width**
+sets its width (0 = the width of the key-detail lines; never below the minimum opening).
 A closed silhouette would cut the whole subject out as one big island, held by a few bridges only.
 Two options open it:
 - **Only where the edge stands out poorly**: the line is drawn only where the simulated render of

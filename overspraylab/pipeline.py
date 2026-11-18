@@ -124,6 +124,8 @@ class Params:
     outline_subject_de: float = 20.0        # ... i.e. colour difference across the edge (ΔE) below this
     outline_subject_gap_every_mm: float = 0.0   # silhouette interrupted every … mm (0 = continuous)
     outline_subject_gap_mm: float = 1.5     # length of an interruption (material left: a built-in bridge)
+    outline_subject_pos: str = "center"     # stroke against the outline: center | outside | inside
+    outline_subject_width_mm: float = 0.0   # stroke width (0 = the width of the key-detail lines)
     outline_auto_color: bool = True     # auto colour = tone with the most contrast against the support
     # Stencil style: fill = flat colour layers (+ optional lines); line = line stencils only, from the
     # key details (`outline`), the silhouette (`outline_subject`) and/or the limits between the
@@ -230,6 +232,9 @@ class Params:
         if 0 < p.outline_subject_gap_every_mm < 5:
             p.outline_subject_gap_every_mm = 5.0
         p.outline_subject_gap_mm = float(np.clip(p.outline_subject_gap_mm, 0.3, 20))
+        if p.outline_subject_pos not in ("center", "outside", "inside"):
+            p.outline_subject_pos = "center"
+        p.outline_subject_width_mm = float(np.clip(p.outline_subject_width_mm, 0, 20))
         p.outline_follow_mm = float(np.clip(p.outline_follow_mm, 0, 50))
         p.px_per_mm = float(np.clip(p.px_per_mm, 2, 16))
         p.support_w_mm = float(np.clip(p.support_w_mm, 20, 3000))
@@ -2045,6 +2050,7 @@ def outline_entries(p: Params, prep: "Prepared", zone_regions: dict | None,
             entries.append((pz, r, z["dest"], False))
     if p.outline_subject:
         entries.append((replace(p, outline=False, outline_subject=True, outline_ref="layers",
+                                outline_width_mm=p.outline_subject_width_mm or p.outline_width_mm,
                                 outline_target="stencil" if _GROUP.match(sil_dest) else sil_dest),
                         None, sil_dest, True))
     return entries, groups
@@ -2270,11 +2276,12 @@ def lines_into_layers(prep: Prepared, sim: np.ndarray, p: Params, region: np.nda
     st = detect_key_details(prep, sim, p, region, dark=True, stages=True)
     width = max(p.outline_width_mm, p.min_opening_mm * 1.05)
     k = disk(width * p.px_per_mm / 2)
+    k_sil = disk(silhouette_width(p) * p.px_per_mm / 2)
     # The silhouette (one long closed line) is placed piece by piece below; the other lines whole
     sil = subject_silhouette(prep, p, sim)
     if _LAYER_DEST.match(p.outline_target or ""):
         return _lines_into_layer(st, sil, k, min(int(p.outline_target[1:]), len(color_ids)) - 1,
-                                 painted, stages)
+                                 painted, stages, k_sil)
     kept = st["kept"] & ~sil if sil is not None else st["kept"]
     n, comp = cv2.connectedComponents(kept.astype(np.uint8), connectivity=8)
     if n <= 1 and sil is None:
@@ -2309,7 +2316,7 @@ def lines_into_layers(prep: Prepared, sim: np.ndarray, p: Params, region: np.nda
         # Silhouette: each piece goes to a layer darker than the lightest one painted under its
         # stroke (both sides of the edge), so that it shows at least on the lighter side; only the
         # pieces running entirely over the last layer are left out (already cut there).
-        under = cv2.erode(painted.astype(np.int16), k)           # lightest layer under the stroke
+        under = cv2.erode(painted.astype(np.int16), k_sil)       # lightest layer under the stroke
         orig = _lab(original(prep)).astype(np.float64).reshape(*sil.shape, 3)
         for v in np.unique(under[sil]):
             piece = sil & (under == v)
@@ -2322,7 +2329,7 @@ def lines_into_layers(prep: Prepared, sim: np.ndarray, p: Params, region: np.nda
                 li = min(cands, key=lambda c: float(np.sum((pal[color_ids[c]] - mc) ** 2)))
             else:
                 li = cands[-1]
-            m = cv2.dilate(piece.astype(np.uint8) * 255, k)
+            m = cv2.dilate(piece.astype(np.uint8) * 255, k_sil)
             out[li] = m if li not in out else (out[li] | m)
             added += 1
     if stages:
@@ -2333,7 +2340,8 @@ def lines_into_layers(prep: Prepared, sim: np.ndarray, p: Params, region: np.nda
     return out, added
 
 
-def _lines_into_layer(st: dict, sil, k: np.ndarray, li: int, painted: np.ndarray, stages: bool):
+def _lines_into_layer(st: dict, sil, k: np.ndarray, li: int, painted: np.ndarray, stages: bool,
+                      k_sil: np.ndarray | None = None):
     """Lines (and silhouette) cut into the colour layer at position `li`: only where the lightest
     layer under the stroke is painted before it (elsewhere the line is already cut or would be
     covered by a later layer). Same return values as `lines_into_layers`."""
@@ -2350,6 +2358,9 @@ def _lines_into_layer(st: dict, sil, k: np.ndarray, li: int, painted: np.ndarray
         keep = ok[comp]
     present = line & ~keep
     stroke = cv2.dilate(keep.astype(np.uint8) * 255, k)
+    if sil is not None and k_sil is not None and k_sil.shape != k.shape:   # silhouette: its own width
+        stroke = cv2.dilate(np.where(keep & ~sil, 255, 0).astype(np.uint8), k) \
+            | cv2.dilate(np.where(keep & sil, 255, 0).astype(np.uint8), k_sil)
     if stages:
         return dict(st, stroke=stroke > 0, present=present)
     if not keep.any():
@@ -2475,7 +2486,7 @@ def line_stencils(prep: Prepared, p: Params, entries: list, groups: dict, suppor
     if p.outline_subject:
         ln, z = subject_silhouette(prep, p, None, gaps=True)
         if ln is not None:
-            parts.append((ln, colour(p.line_sil_color), "silhouette", width0))
+            parts.append((ln, colour(p.line_sil_color), "silhouette", silhouette_width(p)))
             if z is not None:
                 zones |= z
     if p.line_zones:
@@ -2521,10 +2532,17 @@ def line_stencils(prep: Prepared, p: Params, entries: list, groups: dict, suppor
     return layers
 
 
+def silhouette_width(p: Params) -> float:
+    """Width of the silhouette stroke: its own, or that of the lines; at least the minimum opening."""
+    return max(p.outline_subject_width_mm or p.outline_width_mm, p.min_opening_mm * 1.05)
+
+
 def subject_silhouette(prep: Prepared, p: Params, sim: np.ndarray | None = None,
                        gaps: bool = False):
     """One-pixel line along the outline of the selected subject (option `outline_subject`):
     smoothed, not drawn along the image edges, pieces shorter than the minimum line length removed.
+    `outline_subject_pos`: the stroke is centred on the outline, or the line is moved by half the
+    stroke width so that the stroke lies just outside or just inside it.
 
     `outline_subject_weak` + `sim` (simulated render of the colour layers): only the parts of the
     edge that the render shows poorly (colour difference across the edge below `outline_subject_de`).
@@ -2539,23 +2557,41 @@ def subject_silhouette(prep: Prepared, p: Params, sim: np.ndarray | None = None,
     if not p.outline_subject or subj is None or not subj.any() or subj.all():
         return none
     ppm = p.px_per_mm
-    m = cv2.GaussianBlur(subj.astype(np.float32), (0, 0), max(0.8, 0.4 * ppm)) > 0.5
-    line = m & ~cv2.erode(m.astype(np.uint8), np.ones((3, 3), np.uint8)).astype(bool)
+    edge = cv2.GaussianBlur(subj.astype(np.float32), (0, 0), max(0.8, 0.4 * ppm)) > 0.5
+    k3 = np.ones((3, 3), np.uint8)
     b = max(2, int(round(0.5 * ppm)))       # the image's own edge is not an outline
-    line[:b, :] = False; line[-b:, :] = False; line[:, :b] = False; line[:, -b:] = False
+
+    def border(a: np.ndarray) -> np.ndarray:
+        ln = a & ~cv2.erode(a.astype(np.uint8), k3).astype(bool)
+        ln[:b, :] = False; ln[-b:, :] = False; ln[:, :b] = False; ln[:, -b:] = False
+        return ln
+
+    width = silhouette_width(p)
+    half = disk(width * ppm / 2)            # the structuring element of the stroke
+    shift = 0
+    m = edge
+    if p.outline_subject_pos != "center":
+        shift = half.shape[0] // 2
+        if p.outline_subject_pos == "outside":   # one pixel more: the stroke starts just past the edge
+            m = cv2.dilate(cv2.dilate(edge.astype(np.uint8), half), k3) > 0
+        else:
+            m = cv2.erode(edge.astype(np.uint8), half) > 0
+        if not m.any():                     # subject thinner than the stroke
+            return none
+    line = border(m)
     min_px = max(2, int(p.outline_min_length_mm * ppm))
     if p.outline_subject_weak and sim is not None and line.any():
         # colour of the render on each side of the edge (normalised Gaussian means, ~1.5 mm)
         lab = cv2.cvtColor(np.asarray(sim, np.float32) / 255.0, cv2.COLOR_BGR2LAB)
         sig = max(1.0, 1.5 * ppm)
         sides = []
-        for w in (m.astype(np.float32), (~m).astype(np.float32)):
+        for w in (edge.astype(np.float32), (~edge).astype(np.float32)):
             den = cv2.GaussianBlur(w, (0, 0), sig) + 1e-6
             sides.append(np.dstack([cv2.GaussianBlur(lab[..., c] * w, (0, 0), sig) / den for c in range(3)]))
         de = np.sqrt(((sides[0] - sides[1]) ** 2).sum(axis=2))
-        weak = line & (de < p.outline_subject_de)
+        weak = border(edge) & (de < p.outline_subject_de)   # measured on the outline itself
         # bridge short strong parts (a few mm) so the line is not chopped into dashes
-        line &= cv2.dilate(weak.astype(np.uint8), disk(max(1.0, 1.5 * ppm))) > 0
+        line &= cv2.dilate(weak.astype(np.uint8), disk(max(1.0, 1.5 * ppm) + shift)) > 0
     n, lab_c, stats, _ = cv2.connectedComponentsWithStats(line.astype(np.uint8), connectivity=8)
     length = np.maximum(stats[:, cv2.CC_STAT_WIDTH], stats[:, cv2.CC_STAT_HEIGHT])
     keep = length >= min_px
@@ -2566,7 +2602,6 @@ def subject_silhouette(prep: Prepared, p: Params, sim: np.ndarray | None = None,
     zones = None
     every = p.outline_subject_gap_every_mm * ppm
     if every > 0:
-        width = max(p.outline_width_mm, p.min_opening_mm * 1.05)
         r = (p.outline_subject_gap_mm + width) * ppm / 2     # stroke half-width + half the gap
         centres = []
         contours, _ = cv2.findContours(m.astype(np.uint8), cv2.RETR_LIST, cv2.CHAIN_APPROX_NONE)
@@ -2858,7 +2893,7 @@ def detect_key_details(prep: Prepared, sim: np.ndarray, p: Params,
         z = np.zeros(ref.shape[:2], bool)
         if sil is None:
             return result(z, z, z, np.zeros(ref.shape[:2], np.uint8))
-        return result(z, sil, z, cv2.dilate(sil.astype(np.uint8) * 255, disk(width * ppm / 2)))
+        return result(z, sil, z, cv2.dilate(sil.astype(np.uint8) * 255, disk(silhouette_width(p) * ppm / 2)))
     score = strength * loss
     thr = float(np.percentile(score[cand], 100 * (1 - hyst_seed_share(method, keep_share))))
     sel = cand & (score >= thr)
@@ -2895,6 +2930,9 @@ def detect_key_details(prep: Prepared, sim: np.ndarray, p: Params,
     if sil is not None:
         e8[sil] = 255
     stroke = cv2.dilate(e8, disk(width * ppm / 2))
+    if sil is not None and silhouette_width(p) != width:     # the silhouette has its own width
+        stroke = cv2.dilate(np.where((e8 > 0) & ~sil, 255, 0).astype(np.uint8), disk(width * ppm / 2)) \
+            | cv2.dilate(sil.astype(np.uint8) * 255, disk(silhouette_width(p) * ppm / 2))
     if p.outline_close_lines:
         lines_1px = e8 > 0
         for _ in range(3):              # three lines close together need more than one pass

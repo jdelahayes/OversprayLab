@@ -1143,6 +1143,14 @@
         <label class="row sel" for="silDest">Destination
           <select id="silDest" title="Couche de contours de la silhouette, ou une couche de couleur"></select></label>
       </div>
+      <label class="row sel" for="outline_subject_pos">Position
+        <select id="outline_subject_pos">
+          <option value="center" selected>À cheval sur le contour</option>
+          <option value="outside">À l'extérieur du contour</option>
+          <option value="inside">À l'intérieur du contour</option>
+        </select></label>
+      <label class="row">Largeur de la silhouette (mm) <input type="number" id="outline_subject_width_mm" value="0" min="0" max="20" step="0.1"></label>
+      <p class="hint">Largeur 0 = celle des traits des détails clés.</p>
       <div class="pair">
         <div class="check" id="silWeakRow" title="Le contour n'est tracé que là où le rendu le montre mal (écart de couleur entre les deux côtés inférieur au ΔE maxi)"><input type="checkbox" id="outline_subject_weak"><label for="outline_subject_weak">Seulement où le bord ressort peu</label></div>
         <label class="row" id="silDeRow">ΔE maxi <input type="number" id="outline_subject_de" value="20" min="1" max="100" step="1"></label>
@@ -1153,10 +1161,8 @@
       </div>
     </div>
     <div class="ogroup" id="gapBox" hidden>
-      <div class="pair">
-        <label class="row" title="Le trait est interrompu à intervalles réguliers (0 = trait continu)">Interrompre tous les (mm) <input type="number" id="outline_subject_gap_every_mm" value="0" min="0" max="1000" step="5"></label>
-        <label class="row" title="Longueur de matière laissée à chaque interruption">sur (mm) <input type="number" id="outline_subject_gap_mm" value="1.5" min="0.3" max="20" step="0.5"></label>
-      </div>
+      <label class="row" title="Le trait est interrompu à intervalles réguliers (0 = trait continu)">Interrompre tous les (mm) <input type="number" id="outline_subject_gap_every_mm" value="0" min="0" max="1000" step="5"></label>
+      <label class="row" title="Longueur de matière laissée à chaque interruption">sur (mm) <input type="number" id="outline_subject_gap_mm" value="1.5" min="0.3" max="20" step="0.5"></label>
       <p class="hint" id="gapHint">0 = trait continu. Les interruptions tiennent la silhouette comme des ponts.</p>
     </div>
 
@@ -1609,7 +1615,7 @@ const PARAMS = ["support_w_mm", "support_h_mm", "support_color", "inner_margin_m
   "pre_auto_levels", "pre_clahe", "pre_gamma", "manual_thresholds", "thresholds", "pre_saturation", "pre_sharpen", "pre_remove_bg",
   "layer_colors", "layer_effects",
   "n_layers", "detail", "hue_weight", "color_vividness", "flat_auto", "flat_tolerance", "flat_tolerances", "color_mode", "layering", "skip_support", "fill_gaps", "protect_lines",
-  "outline", "outline_target", "outline_method", "outline_sensitivity", "outline_width_mm", "outline_min_length_mm", "outline_subject", "outline_subject_mask", "outline_subject_weak", "outline_subject_de", "outline_subject_gap_every_mm", "outline_subject_gap_mm", "stencil_style", "line_zones", "line_zones_color", "line_sil_color", "outline_auto_color", "outline_color", "outline_zones", "outline_ref", "outline_whole_lines", "outline_line_sens", "outline_close_lines", "outline_channel", "outline_follow_mm",
+  "outline", "outline_target", "outline_method", "outline_sensitivity", "outline_width_mm", "outline_min_length_mm", "outline_subject", "outline_subject_mask", "outline_subject_pos", "outline_subject_width_mm", "outline_subject_weak", "outline_subject_de", "outline_subject_gap_every_mm", "outline_subject_gap_mm", "stencil_style", "line_zones", "line_zones_color", "line_sil_color", "outline_auto_color", "outline_color", "outline_zones", "outline_ref", "outline_whole_lines", "outline_line_sens", "outline_close_lines", "outline_channel", "outline_follow_mm",
   ...MAT_FIELDS, "merge_amount", "merge_channel_mm", "merge_channels", "merge_islands", "merge_line_islands",
   "tolerance_mm", "smooth_curves", "spray_mm", "px_per_mm"];
 const SUPPORT_COLORS = [["Blanc", "#ffffff"], ["Ivoire", "#f3ecd9"], ["Kraft", "#c8a26e"], ["Gris", "#9a9a9a"], ["Noir", "#1e1e1e"]];
@@ -2835,6 +2841,8 @@ const TIPS = {
   silOwn: "Donne à la silhouette sa propre couleur de trait (un pochoir à part) ; sinon, celle des détails clés.",
   outline_subject_weak: "Ne trace la silhouette que là où le rendu simulé des couches la montre mal (couleurs proches de part et d'autre du bord). Ailleurs, les couches dessinent déjà le bord : le trait s'interrompt, ce qui ouvre souvent la boucle.",
   outline_subject_de: "Écart de couleur (ΔE) entre les deux côtés du bord dans le rendu simulé, en dessous duquel la silhouette est tracée. Plus haut = trait plus présent.",
+  outline_subject_pos: "Place du trait par rapport au contour du masque : centré dessus, juste à l'extérieur ou juste à l'intérieur.",
+  outline_subject_width_mm: "Largeur du trait de la silhouette, jamais moins que l'ouverture mini du matériau. 0 = même largeur que les traits des détails clés.",
   outline_subject_gap_every_mm: "Coupe le trait de la silhouette à intervalles réguliers (mesurés le long du trait) : chaque interruption laisse un peu de matière qui tient l'intérieur du sujet, comme un pont. 0 = trait continu.",
   outline_subject_gap_mm: "Longueur de matière laissée à chaque interruption. Au pistolet, la peinture passe un peu sous les petites interruptions : le trait paraît presque continu.",
   outline_auto_color: "Couleur du trait choisie automatiquement : la teinte de l'image la plus contrastée avec le support.",
@@ -3716,7 +3724,7 @@ async function init() {
   });
   $("outline_target").addEventListener("change", () => { syncOutlineTarget(); enableOutline(); detectPreview(); });
   ["outline_sensitivity", "outline_width_mm", "outline_min_length_mm", "outline_follow_mm"].forEach(k => $(k).addEventListener("change", enableOutline));
-  ["outline_method", "outline_auto_color", "outline_color", "outline_subject", "outline_subject_mask", "outline_subject_weak", "outline_subject_de", "outline_subject_gap_every_mm", "outline_subject_gap_mm"].forEach(k => $(k).addEventListener("change", detectPreview));
+  ["outline_method", "outline_auto_color", "outline_color", "outline_subject", "outline_subject_mask", "outline_subject_pos", "outline_subject_width_mm", "outline_subject_weak", "outline_subject_de", "outline_subject_gap_every_mm", "outline_subject_gap_mm"].forEach(k => $(k).addEventListener("change", detectPreview));
   $("outline_subject_weak").addEventListener("change", syncSilhouetteSource);
   $("stencil_style").addEventListener("change", () => { syncStyle(); detectPreview(); });
   $("line_zones").addEventListener("change", syncSilhouetteSource);
@@ -3768,7 +3776,7 @@ async function init() {
   // Outline stencil: automatic or chosen colour
   $("outline_auto_color").addEventListener("change", () => { $("outline_color").disabled = $("outline_auto_color").checked; });
   $("outline_color").addEventListener("input", schedule);
-  ["outline_width_mm", "outline_min_length_mm", "outline_follow_mm"].forEach(k => $(k).addEventListener("input", schedule));
+  ["outline_width_mm", "outline_subject_width_mm", "outline_min_length_mm", "outline_follow_mm"].forEach(k => $(k).addEventListener("input", schedule));
   $("outline_color").disabled = $("outline_auto_color").checked;
   renderOutlineSwatches();
   methodHint(); syncOutlineTarget();
