@@ -668,6 +668,16 @@ By default each layer gets the tone computed from the image. To paint with your 
   one changing at least half of the layers; *Closest* goes back to the best one. The toggle next to
   it (**Keep the light → dark order**, remembered) limits the combinations to those where the
   lightest layer gets the lightest chosen colour, the next one the next lighter, and so on.
+- or open the **✦ Palette assistant…** (first entry of the *Colour palette…* menu): it builds six proposals for
+  the current layers, shown as thumbnails of the real stencils and computed in the browser. Pick a **style** (Faithful,
+  Pop, Poster, Pastel, Vintage, Neon, Natural, Duotone, Monochrome) or set the **fidelity to the image** and what is taken
+  from it (hue, hue and vividness, exact colour), the **base hues** (main hues of the image, or up to 3 on the wheel or
+  with the eyedropper), the **harmony**, **vividness**, **lightness**, **contrast** and **diversity**. *Advanced* adds
+  temperature, an accent colour, the hue distribution over the painted area, the value order, neutral anchors, the minimum
+  legibility, a proposed support colour and **My paints** (only the colours of one of *My palettes*). Layer lightnesses
+  are kept apart from each other and from the support, so that the image stays readable. **Lock** a layer to keep its
+  colour, use **More like this** for close variations, then **Apply to the layers** (Ctrl + Z undoes it) or **Save to My
+  palettes**. With options where the colour affects the cut (key details, merges, lines only), thumbnails are approximate.
 
 The chosen colours are used in the preview, the simulated render, the export and the file names.
 The **Auto** button (circular arrow ↺, next to *Other colours*) puts every layer back on its computed
