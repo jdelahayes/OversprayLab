@@ -6463,10 +6463,10 @@ function setupPalettes() {
 // masks of the last computation: nothing is sent to the server before "Apply".
 const PA_STYLES = [["fidele", "Fidèle"], ["pop", "Pop"], ["affiche", "Affiche"], ["pastel", "Pastel"], ["vintage", "Vintage"],
   ["neon", "Néon"], ["naturel", "Naturel"], ["duotone", "Duotone"], ["mono", "Monochrome"]];
-const PA_BADGES = { readable: "Très lisible", weak: "Lisibilité faible", close: "Proche de l'image", vivid: "Vive" };
+const PA_BADGES = { pinned: "Couleurs à l'ouverture", readable: "Très lisible", weak: "Lisibilité faible", close: "Proche de l'image", vivid: "Vive" };
 const PA_COUNT = 6, PA_THUMB = 360;
 const PA = { S: null, seed: 1, res: [], sel: 0, near: null, locks: {}, targets: [], masks: [], areas: [], hues: [], huesFor: "",
-  sig: "", token: 0, raf: 0, back: null, tmp: null, size: [1, 1] };
+  sig: "", token: 0, raf: 0, back: null, tmp: null, size: [1, 1], opening: null, showOpening: false };
 
 const paRange = (k, label, min, max, title) => `<label class="pa-f" title="${title}"><span>${label}</span><output data-o="${k}"></output>` +
   `<input type="range" data-s="${k}" min="${min}" max="${max}" step="1" aria-label="${label}"></label>`;
@@ -6552,7 +6552,7 @@ function setupPaletteAssistant() {
     }
     if (b.dataset.pick !== undefined) return paSelectCard(+b.dataset.pick);
     if (b.dataset.more !== undefined) {
-      PA.near = PA.res[+b.dataset.more]; PA.seed++;
+      PA.near = PA.res[+b.dataset.more]; PA.showOpening = false; PA.seed++;
       return paGenerate();
     }
     if (b.dataset.lock !== undefined) {
@@ -6567,7 +6567,7 @@ function setupPaletteAssistant() {
     }
     const a = b.dataset.pa;
     if (a === "close") paClose();
-    else if (a === "again") { PA.seed++; paGenerate(); }
+    else if (a === "again") { PA.showOpening = false; PA.seed++; paGenerate(); }
     else if (a === "back") { PA.near = null; paGenerate(); }
     else if (a === "apply") paApply();
     else if (a === "save") paSave();
@@ -6680,12 +6680,20 @@ function paReadTargets() {
   });
   return PA.targets.map(T => `${T.index}:${T.tone}`).join();
 }
+// Colours when the window opens: first proposal, until the settings change; applying it restores
+// that exact state (automatic colours and palette shown included)
+function paCaptureOpening() {
+  PA.opening = { colors: PA.targets.map(T => T.color.toLowerCase()), support: LAST.base.toLowerCase(),
+    raw: $("layer_colors").value, pal: PAL_CUR, palLast: PAL_LAST };
+  PA.showOpening = true;
+}
 async function paOpen() {
   if (!LAST) return status("Calculez d'abord les couches", true);
   if (!paletteTargets().length) return noTargets();
   if (!PA.S) PA.S = paLoadSettings();
   const sig = paReadTargets();
-  if (sig !== PA.sig) { PA.sig = sig; PA.locks = {}; PA.near = null; }
+  if (sig !== PA.sig) { PA.sig = sig; PA.locks = {}; }
+  PA.near = null; paCaptureOpening();
   PA.back.hidden = false; paMsg("");
   $("paName").value = "";
   paFillPaints(); paSync();
@@ -6702,7 +6710,7 @@ async function paRefresh() {                 // new computation while the window
   const sig = paReadTargets();
   if (!PA.targets.length) return paClose();
   const same = sig === PA.sig;
-  if (!same) { PA.sig = sig; PA.locks = {}; PA.near = null; }
+  if (!same) { PA.sig = sig; PA.locks = {}; PA.near = null; paCaptureOpening(); }
   if (await paPrepare()) { if (same) paDrawAll(); else paGenerate(); }
 }
 function paFillPaints() {
@@ -6734,7 +6742,7 @@ function paSync() {                          // settings -> controls
 }
 function paChanged(keepStyle = false) {
   if (!keepStyle) PA.S.style = "";
-  PA.near = null;
+  PA.near = null; PA.showOpening = false;
   paSync();
   cancelAnimationFrame(PA.raf);
   PA.raf = requestAnimationFrame(paGenerate);
@@ -6746,7 +6754,7 @@ function paGenerate() {
   PA.res = PalGen.generate({
     layers: PA.targets.map((T, i) => ({ tone: T.tone, area: PA.areas[i], lock: PA.locks[T.index] })),
     support: LAST.base, S: PA.S, imageHues: PA.hues, seed: PA.seed, count: PA_COUNT, paints,
-    near: PA.near, supportGuard: skip ? { tones: LAST.palette, keep: LAST.support_label } : null,
+    near: PA.near, pinned: PA.showOpening ? PA.opening : null, supportGuard: skip ? { tones: LAST.palette, keep: LAST.support_label } : null,
   });
   PA.sel = 0;
   $("paBack").hidden = !PA.near;
@@ -6762,7 +6770,7 @@ function paGenerate() {
     return `<div class="pa-card${i === PA.sel ? " sel" : ""}" data-card="${i}">
       <button type="button" class="pa-pick" data-pick="${i}" aria-pressed="${i === PA.sel}" aria-label="Proposition ${i + 1}" title="Lisibilité ${pct(s.legibility)} % · Proximité avec l'image ${pct(s.fidelity)} % · Respect des réglages ${pct(s.respect)} %">
       <canvas width="${PA.size[0]}" height="${PA.size[1]}"></canvas><span class="pa-sw" aria-hidden="true">${swatches(p.colors)}</span></button>
-      <div class="pa-foot"><span class="pa-badges">${p.badges.map(b => `<span class="${b === "weak" ? "weak" : ""}">${PA_BADGES[b]}</span>`).join("")}</span>
+      <div class="pa-foot"><span class="pa-badges">${[...(p.pinned ? ["pinned"] : []), ...p.badges].map(b => `<span class="${b === "weak" ? "weak" : ""}">${PA_BADGES[b]}</span>`).join("")}</span>
       <button type="button" class="pa-more" data-more="${i}" title="Propose des variantes proches de celle-ci">Plus comme celle-ci</button></div></div>`;
   }).join("") || `<p class="hint">Aucune proposition avec ces réglages.</p>`;
   paDrawAll(); paRenderLayers();
@@ -6803,10 +6811,16 @@ function paRenderLayers() {
 function paApply() {
   const p = PA.res[PA.sel];
   if (!p) return;
-  const m = layerColors();
-  PA.targets.forEach((T, i) => { m[T.index] = p.colors[i]; });
-  $("layer_colors").value = Object.entries(m).map(([k, v]) => `${k}=${v}`).join(";");
-  VARY = null; PAL_LAST = ""; showPaletteChoice("");
+  const o = PA.opening;
+  VARY = null;
+  if (p.pinned && p.colors.every((c, i) => c === o.colors[i])) {
+    $("layer_colors").value = o.raw; PAL_LAST = o.palLast; showPaletteChoice(o.pal);
+  } else {
+    const m = layerColors();
+    PA.targets.forEach((T, i) => { m[T.index] = p.colors[i]; });
+    $("layer_colors").value = Object.entries(m).map(([k, v]) => `${k}=${v}`).join(";");
+    PAL_LAST = ""; showPaletteChoice("");
+  }
   const sup = $("support_color");
   if (p.support && p.support !== sup.value.toLowerCase()) {
     sup.value = p.support;

@@ -1074,6 +1074,7 @@ try {
     "Ajoute les couleurs de la proposition choisie à « Mes palettes »": "Adds the colours of the chosen proposal to “My palettes”",
     "Appliquer aux couches": "Apply to the layers",
     "Donne ces couleurs aux couches (annulable avec Ctrl + Z)": "Gives these colours to the layers (Ctrl + Z to undo)",
+    "Couleurs à l'ouverture": "Colours at opening",
     "Très lisible": "Very readable",
     "Lisibilité faible": "Low legibility",
     "Proche de l'image": "Close to the image",
