@@ -338,18 +338,31 @@
   .pa-styles { display: flex; flex-wrap: wrap; gap: 4px; }
   .pa-styles button { width: auto; padding: 3px 8px; font-size: 12px; }
   .pa-styles button[aria-pressed="true"] { background: var(--accent); color: var(--accent-ink); border-color: var(--accent); }
-  label.pa-f { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 1px 8px; align-items: center; margin: 6px 0; font-size: 12px; }
-  label.pa-f output { color: var(--muted); font-variant-numeric: tabular-nums; }
-  label.pa-f input[type=range] { margin: 0; }
-  label.pa-f select { grid-column: 1 / -1; width: 100%; font-size: 12px; padding: 3px 4px; }
+  .pa-f { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 1px 8px; align-items: center; margin: 6px 0; font-size: 12px; }
+  .pa-f output { color: var(--muted); font-variant-numeric: tabular-nums; }
+  .pa-f.off { opacity: .4; pointer-events: none; }
+  .pa-range { grid-column: 1 / -1; position: relative; height: 18px; cursor: pointer; touch-action: none; }
+  .pa-range::before, .pa-range .fill { content: ""; position: absolute; top: 7px; height: 4px; border-radius: 2px; }
+  .pa-range::before { left: 7px; right: 7px; background: var(--line); }
+  .pa-range .fill { background: var(--accent); }
+  .pa-range.band .fill { cursor: grab; }
+  .pa-range .th { position: absolute; top: 2px; box-sizing: border-box; width: 14px; height: 14px; margin-left: -7px; border-radius: 50%; background: var(--accent); border: 2px solid var(--panel); box-shadow: 0 0 0 1px var(--accent); cursor: ew-resize; }
+  .pa-range .th:focus-visible { outline: 2px solid var(--ink); outline-offset: 1px; }
+  .pa-f select { grid-column: 1 / -1; width: 100%; font-size: 12px; padding: 3px 4px; }
   .pa-check { display: flex; align-items: center; gap: 6px; font-size: 12px; margin: 4px 0; }
   .pa-check input { margin: 0; }
-  .pa-hues { display: flex; gap: 12px; align-items: center; margin: 6px 0; }
-  .pa-wheel { position: relative; flex: none; width: 104px; height: 104px; border-radius: 50%; cursor: crosshair; touch-action: none; }
-  .pa-wheel::after { content: ""; position: absolute; inset: 21px; border-radius: 50%; background: var(--soft); }
-  .pa-wheel i { position: absolute; z-index: 1; width: 14px; height: 14px; margin: -7px 0 0 -7px; border-radius: 50%; border: 2px solid #fff; box-shadow: 0 0 0 1px rgba(0,0,0,.65); box-sizing: border-box; pointer-events: none; }
-  .pa-wheel i.ghost { width: 8px; height: 8px; margin: -4px 0 0 -4px; border-width: 1px; background: transparent; }
-  .pa-wheel.auto i:not(.ghost) { opacity: .75; width: 10px; height: 10px; margin: -5px 0 0 -5px; border-width: 1px; }
+  .pa-hues { display: flex; gap: 10px; align-items: flex-start; margin: 6px 0; }
+  .pa-wheel { position: relative; flex: none; width: 128px; height: 128px; border-radius: 50%; cursor: crosshair; touch-action: none; }
+  .pa-wheel canvas { display: block; width: 100%; height: 100%; border-radius: 50%; }
+  .pa-dots { position: absolute; inset: 0; pointer-events: none; }
+  .pa-dots i { position: absolute; width: 13px; height: 13px; margin: -6.5px 0 0 -6.5px; border-radius: 50%; border: 2px solid #fff; box-shadow: 0 0 0 1px rgba(0,0,0,.65); box-sizing: border-box; }
+  .pa-dots i.sel { width: 16px; height: 16px; margin: -8px 0 0 -8px; }
+  .pa-dots i.ghost { width: 8px; height: 8px; margin: -4px 0 0 -4px; border-width: 1px; background: transparent; }
+  .pa-wheel.auto .pa-dots i:not(.ghost) { opacity: .75; width: 10px; height: 10px; margin: -5px 0 0 -5px; border-width: 1px; }
+  .pa-hsv { display: grid; grid-template-columns: auto 1fr auto 1fr auto 1fr; gap: 3px; align-items: center; font-size: 11px; color: var(--muted); margin-top: 2px; }
+  .pa-hsv input { width: 100%; min-width: 0; box-sizing: border-box; padding: 2px 3px; font-size: 11px; }
+  .pa-vrow { display: flex; align-items: center; gap: 6px; font-size: 11px; color: var(--muted); }
+  .pa-vrow input { flex: 1; min-width: 0; margin: 0; }
   .pa-huelist { flex: 1; display: flex; flex-direction: column; gap: 4px; min-width: 0; }
   .pa-huelist .hint { display: block; margin: 0; }
   .pa-huelist span { display: inline-flex; align-items: center; gap: 2px; }
@@ -6481,16 +6494,21 @@ const PA_STYLES = [["fidele", "Fidèle"], ["pop", "Pop"], ["affiche", "Affiche"]
 const PA_BADGES = { pinned: "Couleurs à l'ouverture", readable: "Très lisible", weak: "Lisibilité faible", close: "Proche de l'image", vivid: "Vive" };
 const PA_COUNT = 6, PA_THUMB = 640;
 const PA = { S: null, seed: 1, res: [], sel: 0, near: null, locks: {}, targets: [], masks: [], areas: [], hues: [], huesFor: "",
-  sig: "", token: 0, raf: 0, back: null, tmp: null, size: [1, 1], opening: null, fresh: false };
+  sig: "", token: 0, raf: 0, back: null, tmp: null, size: [1, 1], opening: null, fresh: false, seen: [], round: 0, nearSlot: 0, hueSel: 0 };
 
-const paRange = (k, label, min, max, title) => `<label class="pa-f" title="${title}"><span>${label}</span><output data-o="${k}"></output>` +
-  `<input type="range" data-s="${k}" min="${min}" max="${max}" step="1" aria-label="${label}"></label>`;
+const paRange = (k, label, min, max, title, unit = "") => `<div class="pa-f" title="${title}"><span>${label}</span><output data-o="${k}"></output>
+  <div class="pa-range" data-r="${k}" data-min="${min}" data-max="${max}" data-unit="${unit}" title="Glissez la poignée pour fixer une valeur ; cliquez ailleurs sur la piste pour définir une plage ; réunissez les deux poignées pour revenir à une valeur ; double-cliquez pour revenir à la valeur par défaut">
+  <span class="fill"></span><span class="th" data-t="0" role="slider" tabindex="0" aria-label="${label}"></span><span class="th" data-t="1" role="slider" tabindex="0" aria-label="${label}"></span></div></div>`;
 const paSelect = (k, label, opts, title) => `<label class="pa-f" title="${title}"><span>${label}</span><select data-s="${k}">` +
   opts.map(([v, t]) => `<option value="${v}">${t}</option>`).join("") + `</select></label>`;
 const paLoadSettings = () => {
   const out = { ...PalGen.DEFAULTS, ...PalGen.STYLES.fidele }, saved = prefs().palette_assistant;
   if (saved && typeof saved === "object") for (const k of Object.keys(PalGen.DEFAULTS))
     if (typeof saved[k] === typeof PalGen.DEFAULTS[k] && (k !== "hues" || Array.isArray(saved[k]))) out[k] = saved[k];
+  if (saved && typeof saved === "object") PalGen.RANGE_KEYS.forEach(k => {
+    const v = saved[k];
+    if (Array.isArray(v) && v.length === 2 && v.every(Number.isFinite)) out[k] = v;
+  });
   out.hues = (Array.isArray(saved && saved.hues) ? saved.hues : []).filter(h => Number.isFinite(h)).slice(0, 3);
   out.hueTones = out.hues.map((_, i) => {
     const t = Array.isArray(saved && saved.hueTones) ? saved.hueTones[i] : null;
@@ -6510,8 +6528,14 @@ function setupPaletteAssistant() {
       ${paSelect("source", "Reprendre de l'image", [["hue", "La teinte seule"], ["both", "La teinte et la vivacité"], ["exact", "La couleur exacte"]], "Ce que la fidélité rapproche de la teinte calculée de chaque couche. La teinte seule laisse la luminosité libre, donc garde les couches bien séparées")}
       <h4>Teintes de base</h4>
       <label class="pa-check" title="Part des teintes dominantes de l'image ; décochez pour choisir jusqu'à 3 teintes"><input type="checkbox" data-s="autoHues"> Teintes de l'image (auto)</label>
-      <div class="pa-hues"><div class="pa-wheel" id="paWheel" role="img" aria-label="Roue des teintes" title="Cliquez ou glissez pour choisir la teinte ; les petits cercles montrent l'harmonie"></div><div class="pa-huelist" id="paHues"></div></div>
-      ${paSelect("harmony", "Harmonie", [["free", "Libre"], ["mono", "Monochrome"], ["analogous", "Analogue (teintes voisines)"], ["complementary", "Complémentaire"], ["split", "Complémentaires voisines"], ["triad", "Triade"]], "Comment les teintes de la palette se répartissent autour de la teinte de base")}
+      <div class="pa-hues"><div class="pa-wheel" id="paWheel" role="img" aria-label="Roue des teintes" title="Roue TVS : l'angle donne la teinte, la distance au centre la saturation ; les petits cercles montrent l'harmonie"><canvas id="paDisc" width="200" height="200"></canvas><div class="pa-dots" id="paDots"></div></div><div class="pa-huelist" id="paHues"></div></div>
+      <label class="pa-vrow" title="Valeur : éclaircit ou assombrit les couches de cette teinte ; double-cliquez pour revenir à la valeur par défaut"><span>V</span><input type="range" id="paVr" min="0" max="100" step="1" aria-label="Valeur, luminosité (0-100 %)"></label>
+      <div class="pa-hsv"><span>T</span><input type="number" id="paT" min="0" max="360" step="1" aria-label="Teinte (0-360°)" title="Teinte (0-360°)"><span>S</span><input type="number" id="paS" min="0" max="100" step="1" aria-label="Saturation (0-100 %)" title="Saturation (0-100 %)"><span>V</span><input type="number" id="paV" min="0" max="100" step="1" aria-label="Valeur, luminosité (0-100 %)" title="Valeur, luminosité (0-100 %)"></div>
+      ${paSelect("harmony", "Harmonie", [["free", "Libre"], ["mono", "Monochrome"], ["analogous", "Analogue (teintes voisines)"], ["accent", "Analogue + accent"], ["complementary", "Complémentaire"], ["split", "Complémentaires voisines"], ["triad", "Triade"], ["rectangle", "Tétrade rectangle"], ["square", "Tétrade carrée"], ["double", "Double analogue"], ["warmcool", "Chaud / froid"]], "Comment les teintes de la palette se répartissent autour de la teinte de base")}
+      ${paRange("hueSpread", "Écart des teintes", 0, 200, "Resserre ou élargit les angles de l'harmonie (100 % : angles classiques)", " %")}
+      ${paRange("hueCount", "Nombre de teintes", 0, 4, "Limite ou complète les teintes de la palette (Auto : celles de l'harmonie)")}
+      ${paRange("hueDrift", "Glissement selon la valeur", -180, 180, "Fait tourner la teinte de la couche la plus claire à la plus foncée", "°")}
+      ${paRange("lightShadow", "Clairs et ombres", -100, 100, "Positif : clairs chauds et ombres froides ; négatif : l'inverse ; 0 : aucun effet")}
       <h4>Ambiance</h4>
       ${paRange("vividness", "Vivacité", 0, 100, "Du gris à la couleur la plus saturée possible à cette luminosité")}
       ${paRange("lightness", "Luminosité", 0, 100, "Décale toute la palette vers le foncé ou le clair")}
@@ -6554,11 +6578,13 @@ function setupPaletteAssistant() {
     else if (t.dataset.hue !== undefined) {   // the whole colour is kept; a grey has no hue of its own
       const i = +t.dataset.hue, [L, C, h] = PalGen.hexLch(t.value);
       if (C >= .005) PA.S.hues[i] = h;
-      PA.S.hueTones[i] = { L, C, hex: t.value.toLowerCase() }; PA.S.autoHues = false; paChanged();
+      const [, hs, hv] = PalGen.hexHsv(t.value, PA.S.hues[i]);
+      PA.S.hueTones[i] = { L, C, s: hs, v: hv, hex: t.value.toLowerCase() }; PA.S.autoHues = false; PA.hueSel = i; paChanged();
     }
     else if (t.dataset.lay !== undefined) { PA.locks[t.dataset.lay] = t.value.toLowerCase(); paGenerate(); }
   });
   box.addEventListener("click", e => {
+    if (e.target.dataset && e.target.dataset.hue !== undefined) { PA.hueSel = +e.target.dataset.hue; paWheelDraw(); return; }   // the swatch stays: its colour window is opening
     const b = e.target.closest("button");
     if (!b) return;
     if (b.dataset.style) {
@@ -6567,7 +6593,9 @@ function setupPaletteAssistant() {
     }
     if (b.dataset.pick !== undefined) return paSelectCard(+b.dataset.pick);
     if (b.dataset.more !== undefined) {
-      PA.near = PA.res[+b.dataset.more]; PA.fresh = false; PA.seed++;
+      const i = +b.dataset.more;             // this card stays where it is, the others are replaced
+      PA.seen = PA.seen.concat(PA.res.filter((p, k) => k !== i && !p.pinned).map(p => p.colors)).slice(-60);
+      PA.near = PA.res[i]; PA.nearSlot = i; PA.fresh = false; PA.seed++;
       return paGenerate();
     }
     if (b.dataset.lock !== undefined) {
@@ -6576,19 +6604,23 @@ function setupPaletteAssistant() {
       return paGenerate();
     }
     if (b.dataset.hueDel !== undefined) {
-      PA.S.hues.splice(+b.dataset.hueDel, 1); PA.S.hueTones.splice(+b.dataset.hueDel, 1);
+      PA.S.hues.splice(+b.dataset.hueDel, 1); PA.S.hueTones.splice(+b.dataset.hueDel, 1); PA.hueSel = 0;
       if (!PA.S.hues.length) PA.S.autoHues = true;
       return paChanged();
     }
     const a = b.dataset.pa;
     if (a === "close") paClose();
-    else if (a === "again") { PA.fresh = false; PA.seed++; paGenerate(); }
+    else if (a === "again") {                // away from everything shown since the last change of settings
+      PA.fresh = false; PA.round++; PA.seed++;
+      PA.seen = PA.seen.concat(PA.res.filter(p => !p.pinned).map(p => p.colors)).slice(-60);
+      paGenerate();
+    }
     else if (a === "back") { PA.near = null; paGenerate(); }
     else if (a === "apply") paApply();
     else if (a === "save") paSave();
     else if (a === "hueAdd") {
       const h = PA.S.hues.length ? PA.S.hues[PA.S.hues.length - 1] + 120 : 30;
-      PA.S.hues.push((h + 360) % 360); PA.S.hueTones.push(null); PA.S.autoHues = false; paChanged();
+      PA.S.hues.push((h + 360) % 360); PA.S.hueTones.push(null); PA.S.autoHues = false; PA.hueSel = PA.S.hues.length - 1; paChanged();
     } else if (a === "reset") { PA.S = { ...PalGen.DEFAULTS, ...PalGen.STYLES.fidele, hues: [], hueTones: [] }; PA.locks = {}; paChanged(true); }
   });
   box.addEventListener("dblclick", e => { if (e.target.closest("[data-pick]")) paApply(); });
@@ -6597,42 +6629,166 @@ function setupPaletteAssistant() {
     if (e.key === "Escape") { e.stopPropagation(); paClose(); }
     else if (e.key === "Enter" && e.target.id === "paName") { e.preventDefault(); paSave(); }
     else if (e.key === "Tab") {              // the focus stays in the window
-      const f = [...box.querySelectorAll("button, input, select, summary")].filter(x => !x.disabled && x.offsetParent);
+      const f = [...box.querySelectorAll("button, input, select, summary, [role=slider]:not([hidden])")].filter(x => !x.disabled && x.offsetParent);
       const first = f[0], last = f[f.length - 1];
       if (e.shiftKey && document.activeElement === first) { e.preventDefault(); last.focus(); }
       else if (!e.shiftKey && document.activeElement === last) { e.preventDefault(); first.focus(); }
     }
   });
-  // hue wheel: the pointer moves the closest chosen hue (first choice when the hues were automatic)
-  new ResizeObserver(() => paLayout()).observe($("paGrid"));
+  setupPaRanges(box);
+  // HSV wheel: the pointer moves the closest chosen colour (a first one when the hues were automatic)
   const wheel = $("paWheel");
-  wheel.style.background = `conic-gradient(${Array.from({ length: 13 }, (_, i) => PalGen.lchHex(.72, .14, i * 30)).join(", ")})`;
   let drag = -1;
-  const wheelHue = e => {
-    const r = wheel.getBoundingClientRect();
-    return (Math.atan2(e.clientX - r.left - r.width / 2, r.top + r.height / 2 - e.clientY) * 180 / Math.PI + 360) % 360;
+  const wheelAt = e => {
+    const r = wheel.getBoundingClientRect(), R = r.width / 2, x = e.clientX - r.left - R, y = e.clientY - r.top - R;
+    return { h: (Math.atan2(x, -y) * 180 / Math.PI + 360) % 360, s: Math.min(1, Math.hypot(x, y) / R) };
+  };
+  const wheelSet = p => {
+    const [h0, , v] = paHsvOf(drag);
+    paSetBase(drag, p.s < .02 ? h0 : p.h, p.s, v);
+    paChanged();
   };
   wheel.onpointerdown = e => {
     e.preventDefault();
-    const h = wheelHue(e), S = PA.S;
-    if (S.autoHues || !S.hues.length) { S.autoHues = false; S.hues = [h]; S.hueTones = [null]; drag = 0; }
+    const p = wheelAt(e), S = PA.S;
+    if (S.autoHues || !S.hues.length) { S.hues = [p.h]; S.hueTones = [null]; S.autoHues = false; paSetBase(0, p.h, p.s, .85); drag = 0; }
     else {
-      const d = x => Math.abs(((x - h + 540) % 360) - 180);
-      drag = S.hues.reduce((b, x, i) => d(x) < d(S.hues[b]) ? i : b, 0);
-      paSetHue(drag, h);
+      const xy = (h, s) => [s * Math.sin(h * Math.PI / 180), -s * Math.cos(h * Math.PI / 180)], [px, py] = xy(p.h, p.s);
+      const d = i => { const [h, c] = paHsvOf(i), [x, y] = xy(h, c); return Math.hypot(x - px, y - py); };
+      drag = S.hues.reduce((b, _, i) => d(i) < d(b) ? i : b, 0);
     }
+    PA.hueSel = drag;
     try { wheel.setPointerCapture(e.pointerId); } catch (err) { /* pointer already released */ }
-    paChanged();
+    wheelSet(p);
   };
-  wheel.onpointermove = e => { if (drag >= 0) { paSetHue(drag, wheelHue(e)); paChanged(); } };
+  wheel.onpointermove = e => { if (drag >= 0) wheelSet(wheelAt(e)); };
   wheel.onpointerup = wheel.onpointercancel = () => { drag = -1; };
+  const typed = () => {                      // T, S and V fields + value slider
+    const i = PA.hueSel, [h, c, v] = paHsvOf(i), num = (id, old, k) => { const x = parseFloat($(id).value); return Number.isFinite(x) ? clamp(x, 0, k) : old; };
+    return { i, h: num("paT", h, 360) % 360, s: num("paS", c * 100, 100) / 100, v: num("paV", v * 100, 100) / 100 };
+  };
+  ["paT", "paS", "paV"].forEach(id => $(id).addEventListener("input", () => { const t = typed(); paSetBase(t.i, t.h, t.s, t.v); paChanged(); }));
+  $("paVr").addEventListener("dblclick", () => { const [h, c] = paHsvOf(PA.hueSel); paSetBase(PA.hueSel, h, c, .85); paChanged(); });
+  $("paVr").addEventListener("input", () => { const [h, c] = paHsvOf(PA.hueSel); paSetBase(PA.hueSel, h, c, +$("paVr").value / 100); paChanged(); });
 }
-// New hue of a base colour: its saturation and lightness stay
-const paSetHue = (i, h) => { PA.S.hues[i] = h; const t = PA.S.hueTones[i]; if (t) delete t.hex; };
+// Base colour from the HSV wheel or fields
+function paSetBase(i, h, c, v) {
+  const hex = PalGen.hsvHex(h, c, v), [L, C] = PalGen.hexLch(hex);
+  PA.S.hues[i] = h; PA.S.hueTones[i] = { L, C, s: c, v, hex }; PA.S.autoHues = false;
+}
+const paHsvOf = i => {
+  const t = PA.S.hueTones[i], h = PA.S.hues[i];
+  return t && Number.isFinite(t.s) && Number.isFinite(t.v) ? [h, t.s, t.v] : [h, ...PalGen.hexHsv(paHueColor(i), h).slice(1)];
+};
+let PA_DISC = "";
+function paDiscDraw(v) {                     // colours of the wheel at this value
+  const key = v.toFixed(2);
+  if (key === PA_DISC) return;
+  PA_DISC = key;
+  const c = $("paDisc"), N = c.width, R = N / 2, g = c.getContext("2d"), im = g.createImageData(N, N), d = im.data;
+  for (let y = 0, k = 0; y < N; y++) for (let x = 0; x < N; x++, k += 4) {
+    const dx = x + .5 - R, dy = y + .5 - R, r = Math.hypot(dx, dy) / R;
+    if (r > 1.01) continue;
+    const [a, b, e] = PalGen.hsvRgb((Math.atan2(dx, -dy) * 180 / Math.PI + 360) % 360, Math.min(1, r), v);
+    d[k] = a; d[k + 1] = b; d[k + 2] = e; d[k + 3] = 255;
+  }
+  g.putImageData(im, 0, 0);
+}
+function paWheelDraw() {
+  const S = PA.S, own = !S.autoHues && S.hues.length, [sLo, sHi] = paRangeOf("hueSpread");
+  if (PA.hueSel >= S.hues.length) PA.hueSel = 0;
+  const pts = own ? S.hues.map((_, i) => paHsvOf(i)) : PA.hues.slice(0, 3).map(x => [x.h, .7, .9]);
+  const cur = own ? pts[PA.hueSel] : null, at = (h, c) => `left:${50 + 50 * c * Math.sin(h * Math.PI / 180)}%;top:${50 - 50 * c * Math.cos(h * Math.PI / 180)}%`;
+  const ghosts = S.harmony !== "free" && pts.length ? PalGen.harmonyHues(pts[0][0], S.harmony, (sLo + sHi) / 2).slice(1) : [];
+  paDiscDraw(cur ? Math.max(.08, cur[2]) : .9);
+  $("paWheel").classList.toggle("auto", !own);
+  $("paDots").innerHTML = ghosts.map(h => `<i class="ghost" style="${at(h, pts[0][1])}"></i>`).join("") +
+    pts.map(([h, c, v], i) => `<i class="${own && i === PA.hueSel ? "sel" : ""}" style="${at(h, c)};background:${PalGen.hsvHex(h, c, v)}"></i>`).join("");
+  [["paT", cur && cur[0]], ["paS", cur && cur[1] * 100], ["paV", cur && cur[2] * 100], ["paVr", cur && cur[2] * 100]].forEach(([id, x]) => {
+    const e = $(id);
+    e.disabled = !cur;
+    if (document.activeElement !== e || e.type === "range") e.value = cur ? Math.round(x) : "";
+  });
+}
 const paHueColor = i => {
   const t = PA.S.hueTones[i], h = PA.S.hues[i];
   return t ? t.hex || PalGen.lchHex(t.L, t.C, h) : PalGen.lchHex(.65, .14, h);
 };
+// One track per setting: one handle = a value, two handles = a range ([low, high] in the settings).
+// Without a range, the handle moves the value and a click on the track opens a range; with one, the
+// handles and the band move, and bringing the handles together gives a value again.
+const paRangeOf = k => { const v = PA.S[k]; return Array.isArray(v) ? [Math.min(...v), Math.max(...v)] : [v, v]; };
+function paRangeSet(el, lo, hi) {
+  const min = +el.dataset.min, max = +el.dataset.max, fit = v => clamp(Math.round(v), min, max);
+  lo = fit(lo); hi = fit(hi);
+  const k = el.dataset.r, [a, b] = paRangeOf(k);
+  if (a === Math.min(lo, hi) && b === Math.max(lo, hi)) return;
+  PA.S[k] = lo === hi ? lo : [Math.min(lo, hi), Math.max(lo, hi)];
+  paChanged();
+}
+function paRangeDraw(el) {
+  const k = el.dataset.r, [lo, hi] = paRangeOf(k), min = +el.dataset.min, max = +el.dataset.max;
+  const at = v => `calc(7px + (100% - 14px) * ${(v - min) / (max - min)})`, band = hi > lo;
+  const show = v => k === "hueCount" && v === 0 ? "Auto" : v + el.dataset.unit;
+  const [a, b] = el.querySelectorAll(".th"), fill = el.querySelector(".fill"), text = band ? `${show(lo)} – ${show(hi)}` : show(lo);
+  el.classList.toggle("band", band);
+  fill.style.left = at(band ? lo : min); fill.style.width = `calc((100% - 14px) * ${((band ? hi - lo : lo - min)) / (max - min)})`;
+  a.style.left = at(lo); b.style.left = at(hi); b.hidden = !band;
+  [[a, lo], [b, hi]].forEach(([t, v]) => {
+    t.setAttribute("aria-valuemin", min); t.setAttribute("aria-valuemax", max);
+    t.setAttribute("aria-valuenow", v); t.setAttribute("aria-valuetext", text);
+  });
+  PA.back.querySelector(`[data-o="${k}"]`).textContent = text;
+}
+function setupPaRanges(box) {
+  let d = null;
+  const valueAt = (el, e) => {
+    const r = el.getBoundingClientRect(), min = +el.dataset.min, max = +el.dataset.max;
+    return min + clamp((e.clientX - r.left - 7) / Math.max(1, r.width - 14), 0, 1) * (max - min);
+  };
+  const apply = e => {
+    const el = d.el, v = valueAt(el, e), min = +el.dataset.min, max = +el.dataset.max;
+    if (d.mode === "value") paRangeSet(el, v, v);
+    else if (d.mode === "band") { const lo = clamp(v - d.off, min, max - d.width); paRangeSet(el, lo, lo + d.width); }
+    else paRangeSet(el, Math.abs(v - d.other) <= (max - min) * .025 ? d.other : v, d.other);   // close enough: one value
+  };
+  box.addEventListener("pointerdown", e => {
+    const el = e.target.closest(".pa-range");
+    if (!el || e.button !== 0) return;
+    e.preventDefault();
+    const [lo, hi] = paRangeOf(el.dataset.r), v = valueAt(el, e), r = el.getBoundingClientRect();
+    const px = x => r.left + 7 + (x - +el.dataset.min) / (+el.dataset.max - +el.dataset.min) * (r.width - 14);
+    const on = x => Math.abs(px(x) - e.clientX) <= 10;
+    if (lo === hi) d = on(lo) ? { mode: "value" } : { mode: "end", other: lo };
+    else if (on(lo) || on(hi)) d = { mode: "end", other: Math.abs(px(lo) - e.clientX) <= Math.abs(px(hi) - e.clientX) ? hi : lo };
+    else if (v > lo && v < hi) d = { mode: "band", off: v - lo, width: hi - lo };
+    else d = { mode: "end", other: v < lo ? hi : lo };
+    d.el = el; d.id = e.pointerId;
+    try { el.setPointerCapture(e.pointerId); } catch (err) { /* pointer already released */ }
+    (e.target.closest(".th") || el.querySelector(".th")).focus({ preventScroll: true });
+    apply(e);
+  });
+  box.addEventListener("pointermove", e => { if (d && e.pointerId === d.id) apply(e); });
+  const end = e => { if (d && e.pointerId === d.id) d = null; };
+  box.addEventListener("pointerup", end); box.addEventListener("pointercancel", end);
+  box.addEventListener("dblclick", e => {        // back to the starting value of the assistant
+    const el = e.target.closest(".pa-range");
+    if (!el) return;
+    PA.S[el.dataset.r] = { ...PalGen.DEFAULTS, ...PalGen.STYLES.fidele }[el.dataset.r];
+    paChanged();
+  });
+  box.addEventListener("keydown", e => {         // arrows: the value or this end; Shift + arrow opens a range
+    const t = e.target.closest && e.target.closest(".pa-range .th");
+    if (!t) return;
+    const el = t.parentNode, min = +el.dataset.min, max = +el.dataset.max, [lo, hi] = paRangeOf(el.dataset.r), second = t.dataset.t === "1";
+    const step = { ArrowRight: 1, ArrowUp: 1, ArrowLeft: -1, ArrowDown: -1, PageUp: 10, PageDown: -10 }[e.key];
+    const cur = second ? hi : lo, to = e.key === "Home" ? min : e.key === "End" ? max : step ? cur + step : null;
+    if (to === null) return;
+    e.preventDefault();
+    if (lo === hi && !e.shiftKey) paRangeSet(el, to, to);
+    else paRangeSet(el, to, lo === hi ? lo : second ? lo : hi);
+  });
+}
 const paMsg = (t, err = false) => { const m = $("paMsg"); m.textContent = t; m.classList.toggle("err", !!err); };
 const paPaints = () => {
   const p = PA.S.paints && (UP.palette || {})[PA.S.paints];
@@ -6701,7 +6857,7 @@ function paReadTargets() {
 function paCaptureOpening() {
   PA.opening = { colors: PA.targets.map(T => T.color.toLowerCase()), support: LAST.base.toLowerCase(),
     raw: $("layer_colors").value, pal: PAL_CUR, palLast: PAL_LAST };
-  PA.fresh = true;
+  PA.fresh = true; PA.seen = []; PA.round = 0;
 }
 async function paOpen() {
   if (!LAST) return status("Calculez d'abord les couches", true);
@@ -6742,14 +6898,13 @@ function paSync() {                          // settings -> controls
     const k = e.dataset.s;
     if (e.type === "checkbox") e.checked = !!S[k]; else e.value = S[k];
   });
-  box.querySelectorAll("[data-o]").forEach(o => { o.textContent = S[o.dataset.o]; });
+  box.querySelectorAll("[data-r]").forEach(paRangeDraw);
   box.querySelectorAll("[data-style]").forEach(b => b.setAttribute("aria-pressed", String(b.dataset.style === S.style)));
   const own = !S.autoHues && S.hues.length, shown = own ? S.hues : PA.hues.slice(0, 3).map(x => x.h);
-  const at = (h, r = 44) => `left:${52 + r * Math.sin(h * Math.PI / 180)}px;top:${52 - r * Math.cos(h * Math.PI / 180)}px`;
-  const ghosts = S.harmony !== "free" && shown.length ? PalGen.harmonyHues(shown[0], S.harmony).slice(1) : [];
-  $("paWheel").classList.toggle("auto", !own);
-  $("paWheel").innerHTML = ghosts.map(h => `<i class="ghost" style="${at(h)}"></i>`).join("") +
-    shown.map(h => `<i style="${at(h)};background:${PalGen.lchHex(.72, .14, h)}"></i>`).join("");
+  const spread = box.querySelector('[data-r="hueSpread"]'), noSpread = ["free", "mono", "complementary"].includes(S.harmony);
+  spread.parentNode.classList.toggle("off", noSpread);          // these harmonies have no angle to change
+  spread.querySelectorAll(".th").forEach(t => { t.tabIndex = noSpread ? -1 : 0; });
+  paWheelDraw();
   $("paHues").innerHTML = own
     ? S.hues.map((h, i) => `<span><input type="color" data-hue="${i}" value="${paHueColor(i)}" aria-label="Teinte de base ${i + 1}" title="Teinte de base ${i + 1} : choisir ou prendre à la pipette">` +
         `<button type="button" data-hue-del="${i}" title="Retirer cette teinte" aria-label="Retirer la teinte ${i + 1}">×</button></span>`).join("") +
@@ -6758,7 +6913,7 @@ function paSync() {                          // settings -> controls
 }
 function paChanged(keepStyle = false) {
   if (!keepStyle) PA.S.style = "";
-  PA.near = null; PA.fresh = false;
+  PA.near = null; PA.fresh = false; PA.seen = []; PA.round = 0;
   paSync();
   cancelAnimationFrame(PA.raf);
   PA.raf = requestAnimationFrame(paGenerate);
@@ -6770,9 +6925,13 @@ function paGenerate() {
   PA.res = PalGen.generate({
     layers: PA.targets.map((T, i) => ({ tone: T.tone, area: PA.areas[i], lock: PA.locks[T.index] })),
     support: LAST.base, S: PA.S, imageHues: PA.hues, seed: PA.seed, count: PA_COUNT, paints,
-    near: PA.near, pinned: PA.opening, supportGuard: skip ? { tones: LAST.palette, keep: LAST.support_label } : null,
+    near: PA.near, pinned: PA.opening, avoid: PA.seen, explore: PA.round ? Math.min(.85, .35 + .15 * PA.round) : 0, supportGuard: skip ? { tones: LAST.palette, keep: LAST.support_label } : null,
   });
-  PA.sel = PA.fresh || PA.res.length < 2 ? 0 : 1;      // new proposals: the first new one is selected
+  const refAt = PA.res.findIndex(p => p.reference), slot = Math.min(PA.nearSlot, PA.res.length - 1);
+  const keepSlot = !!PA.near && refAt >= 0 && slot > 0;
+  if (keepSlot) PA.res.splice(slot, 0, PA.res.splice(refAt, 1)[0]);
+  // new proposals: the first new one is selected; variations: the card they come from
+  PA.sel = PA.fresh || PA.res.length < 2 ? 0 : keepSlot ? slot : 1;
   $("paBack").hidden = !PA.near;
   const free = PA.targets.filter(T => !PA.locks[T.index]).length;
   $("paInfo").textContent = `${PA.targets.length} couche${PA.targets.length > 1 ? "s" : ""} à colorer`;

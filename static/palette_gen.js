@@ -103,6 +103,41 @@
     const c = Math.min(Math.max(0, C), maxChroma(L, h));
     return rgbHex(lchLinear(L, c, h).map(v => fromLin(clamp(v, 0, 1))));
   }
+  // Displayable chroma by hue (5 degree steps) and lightness (0.30 to 0.98), computed once
+  const GAMUT = new Map(), GAMUT_L = Array.from({ length: 35 }, (_, i) => .3 + i * .02);
+  function gamutRow(h) {
+    const bin = Math.round(wrap(h) / 5) % 72;
+    let row = GAMUT.get(bin);
+    if (!row) {
+      const c = GAMUT_L.map(L => maxChroma(L, bin * 5));
+      const top = Math.max(...c);
+      GAMUT.set(bin, row = { c, top, topL: GAMUT_L[c.indexOf(top)] });
+    }
+    return row;
+  }
+  // Highest lightness at which this hue still shows `share` of its strongest chroma
+  function lightnessCeiling(h, share) {
+    const row = gamutRow(h), want = row.top * share;
+    for (let i = GAMUT_L.length - 1; i >= 0; i--) if (row.c[i] >= want) return GAMUT_L[i];
+    return GAMUT_L[0];
+  }
+  // Perceptual HSV: hue = OKLCH hue, so the wheel angles are those of the harmonies. For a hue, the
+  // colours fill the triangle black / white / strongest colour (its "cusp").
+  function hueCusp(h) {
+    const x = wrap(h) / 5, i = Math.floor(x), f = x - i, a = gamutRow(i * 5), b = gamutRow((i + 1) * 5);
+    return [mix(a.topL, b.topL, f), mix(a.top, b.top, f)];
+  }
+  function hsvLC(h, s, v) {
+    const [Lc, Cc] = hueCusp(h);
+    return [v * (1 - s * (1 - Lc)), v * s * Cc];
+  }
+  const hsvHex = (h, s, v) => { const [L, C] = hsvLC(h, s, v); return lchHex(L, C, h); };
+  const hsvRgb = (h, s, v) => { const [L, C] = hsvLC(h, s, v); return lchLinear(L, C, h).map(c => fromLin(clamp(c, 0, 1))); };
+  function hexHsv(hex, keepHue = 0) {        // [h, s, v]; a grey keeps the given hue
+    const [L, C, hue] = hexLch(hex), h = C < .005 ? keepHue : hue, [Lc, Cc] = hueCusp(h);
+    const v = clamp(L + C / Cc * (1 - Lc), 0, 1);
+    return [h, v > 0 ? clamp(C / Cc / v, 0, 1) : 0, v];
+  }
   const labHex = ([L, a, b]) => { const [l, c, h] = labLch([L, a, b]); return lchHex(l, c, h); };
 
   function rngFrom(seed) {                   // mulberry32
@@ -118,28 +153,51 @@
   // ---------------- Settings ----------------
   const DEFAULTS = {
     style: "fidele", fidelity: 30, source: "hue", autoHues: true, hues: [], hueTones: [], harmony: "analogous",
+    hueSpread: 100, hueCount: 0, hueDrift: 0, lightShadow: 50,
     vividness: 55, lightness: 50, contrast: 60, diversity: 50,
     temperature: 0, accent: "none", distribution: "balanced", valueOrder: "image", anchors: "none",
     minContrast: 50, supportMode: "keep", paints: "",
   };
+  // Settings that accept a value or a [low, high] range (each candidate draws its own value)
+  const RANGE_KEYS = ["fidelity", "vividness", "lightness", "contrast", "diversity", "temperature", "minContrast",
+    "hueSpread", "hueCount", "hueDrift", "lightShadow"];
+  const RANGE_STEPS = [.6180339887, .7548776662, .5698402910, .8191725134, .6710436067, .8566748839, .5345111359, .8880231, .5883, .7279, .9276];
   const look = (fidelity, source, harmony, vividness, lightness, contrast, temperature, accent, distribution, anchors) =>
-    ({ fidelity, source, harmony, vividness, lightness, contrast, temperature, accent, distribution, anchors, valueOrder: "image" });
+    ({ fidelity, source, harmony, vividness, lightness, contrast, temperature, accent, distribution, anchors, valueOrder: "image",
+      hueSpread: 100, hueCount: 0, hueDrift: 0, lightShadow: 50 });
   const STYLES = {
     fidele:  look(60, "exact", "free", 60, 50, 58, 0, "none", "balanced", "none"),
     pop:     look(10, "hue", "triad", 95, 55, 70, 0, "small", "equal", "dark"),
-    affiche: look(15, "hue", "complementary", 68, 52, 85, 5, "small", "balanced", "both"),
+    affiche: look(15, "hue", "complementary", 68, 52, 85, 5, "small", "balanced", "dark"),
     pastel:  look(15, "hue", "analogous", 28, 78, 28, 5, "none", "equal", "none"),
-    vintage: look(20, "hue", "split", 36, 54, 50, 30, "none", "balanced", "light"),
+    vintage: look(20, "hue", "split", 36, 54, 50, 30, "none", "balanced", "none"),
     neon:    look(5, "hue", "complementary", 100, 60, 50, -10, "small", "equal", "dark"),
     naturel: look(40, "hue", "analogous", 34, 50, 55, 22, "none", "balanced", "none"),
     duotone: look(10, "hue", "complementary", 62, 52, 72, 0, "none", "equal", "none"),
     mono:    look(15, "hue", "mono", 50, 52, 75, 0, "none", "balanced", "none"),
   };
   const VIVID_NEUTRAL = .6 ** 1.1;
+  // Hue offsets of each harmony; s = 1 gives the classic angles, other values open or close them
   const HARMONY = {
-    mono: [0], analogous: [0, -32, 32], complementary: [0, 180], split: [0, 150, 210], triad: [0, 120, 240],
+    mono: () => [0],
+    analogous: s => [0, -32 * s, 32 * s],
+    accent: s => [0, -28 * s, 28 * s, 180],
+    complementary: () => [0, 180],
+    split: s => [0, 180 - 30 * s, 180 + 30 * s],
+    triad: s => [0, 180 - 60 * s, 180 + 60 * s],
+    rectangle: s => [0, 60 * s, 180, 180 + 60 * s],
+    square: s => [0, 90 * s, 180, 180 + 90 * s],
+    double: s => [0, 30 * s, 180, 180 + 30 * s],
   };
-  const harmonyHues = (h, harmony) => (HARMONY[harmony] || [0]).map(o => wrap(h + o));
+  function harmonyOffsets(h, harmony, spread) {
+    const s = spread / 100;
+    if (harmony === "warmcool") {            // warm and cool groups, the side closest to h first
+      const a = 24 * s, warm = 55, cool = 245, first = Math.abs(hueDelta(h, cool)) < Math.abs(hueDelta(h, warm)) ? [cool, warm] : [warm, cool];
+      return [first[0], first[1], first[0] + a, first[1] - a].map(x => hueDelta(h, x));
+    }
+    return (HARMONY[harmony] || HARMONY.analogous)(s);
+  }
+  const harmonyHues = (h, harmony, spread = 100) => (harmony === "free" ? [0] : harmonyOffsets(h, harmony, spread)).map(o => wrap(h + o));
   const SHARES = {                           // part of the painted surface given to each hue
     balanced: { 1: [1], 2: [.7, .3], 3: [.6, .3, .1], more: [.5, .25, .15, .1] },
     dominant: { 1: [1], 2: [.85, .15], 3: [.8, .15, .05], more: [.75, .13, .08, .04] },
@@ -201,13 +259,13 @@
     for (const x of list) if ((r -= x.weight) <= 0) return x;
     return list[list.length - 1];
   }
-  function pickHues(cx, rng) {
+  function pickHues(cx, rng, index) {
     const { S, div } = cx, img = cx.imageHues, own = S.autoHues ? [] : S.hues;
     const jitter = a => (rng() - .5) * 2 * a;
     let h0;
-    if (own.length) h0 = own[0] + jitter(div * 18);
-    else if (img.length && rng() > div * .6) h0 = pickWeighted(img, rng).h + jitter(4 + div * 25);
-    else h0 = rng() * 360;
+    if (own.length) h0 = own[0] + jitter(div * 18 + cx.explore * 22);
+    else if (img.length && rng() > Math.max(div * .6, cx.explore)) h0 = pickWeighted(img, rng).h + jitter(4 + div * 25);
+    else h0 = cx.hueStart + index * 137.508 + jitter(8);   // golden angle: the whole wheel gets covered
     let set;
     if (S.harmony === "free") {
       const seeds = own.length ? own.slice(1) : shuffled(img.map(x => x.h), rng).slice(0, 2);
@@ -215,7 +273,7 @@
       const extra = own.length ? (rng() < div * .7 ? 1 : 0) : Math.floor(rng() * 2 * (.3 + div));
       for (let i = 0; i < extra; i++) set.push(rng() * 360);
     } else {
-      set = (HARMONY[S.harmony] || HARMONY.analogous).map(o => h0 + o * (1 + jitter(.12 * div)));
+      set = harmonyOffsets(h0, S.harmony, S.hueSpread).map(o => h0 + o * (1 + jitter(.12 * div)));
       own.slice(1).forEach(h => {            // the other chosen hues replace the closest computed ones
         const free = set.map((x, i) => i).slice(1);
         if (!free.length || set.length < own.length) { set.push(h); return; }
@@ -223,16 +281,37 @@
         set[i] = h;
       });
     }
-    return set.map(wrap);
+    const count = Math.round(S.hueCount);
+    if (count > 0) {                         // chosen hues kept first, neighbours added when too few
+      const first = (h, i) => !i || own.includes(h);
+      set = [...set.filter(first), ...set.filter((h, i) => !first(h, i))].slice(0, count);
+      for (let k = 1; set.length < count; k++) set.push(set[0] + (k % 2 ? 1 : -1) * Math.ceil(k / 2) * 26);
+    }
+    const out = set.map(wrap);
+    return rng() < cx.explore ? shuffled(out, rng) : out;   // another hue may become the dominant one
   }
   // Saturation (0..1 of what is displayable) of the chosen base colour closest to this hue;
   // null when the base hue has no chosen colour (image hues, wheel only)
-  function baseSaturation(cx, h) {
+  function baseTone(cx, h) {
     const { S } = cx;
     if (S.autoHues || !S.hues.length) return null;
     const dist = x => Math.abs(hueDelta(x, h));
     const i = S.hues.reduce((b, x, k) => dist(x) < dist(S.hues[b]) ? k : b, 0), t = S.hueTones[i];
-    return t ? clamp(t.C / Math.max(.01, maxChroma(t.L, S.hues[i])), 0, 1) : null;
+    return t ? { t, h: S.hues[i] } : null;
+  }
+  function baseSaturation(cx, h) {
+    const b = baseTone(cx, h);
+    return b ? clamp(b.t.C / Math.max(.01, maxChroma(b.t.L, b.h)), 0, 1) : null;
+  }
+  // The value of a chosen base colour makes the layers of that hue lighter or darker
+  function baseLightShift(cx, h) {
+    const b = baseTone(cx, h);
+    return b ? clamp((b.t.L - .65) * .6, -.2, .2) : 0;
+  }
+  function valueDrift(cx, l) {                // hue turn of a layer, from the lightest to the darkest
+    if (!cx.S.hueDrift || cx.n < 2) return 0;
+    const t = l.rank / (cx.n - 1);
+    return cx.S.hueDrift * ((cx.S.valueOrder === "inverse" ? 1 - t : t) - .5);
   }
   function pickSupport(cx, hues, rng) {
     if (cx.S.supportMode !== "propose") return cx.support;
@@ -249,11 +328,11 @@
     }
     return rng() < .25 ? cx.support : valid[Math.floor(rng() * valid.length)];
   }
-  function planValues(cx, supportL, rng) {
+  function planValues(cx, supportL, rng, ceiling, shift) {
     const { S, div, layers, n } = cx;
-    let span = (.22 + .6 * S.contrast / 100) * (1 + (rng() - .5) * .16 * div);
+    let span = (.22 + .6 * S.contrast / 100) * (1 + (rng() - .5) * (.16 * div + .34 * cx.explore));
     span = Math.min(span, .83);
-    const mid = clamp(.62 + (S.lightness - 50) / 100 * .5 + (rng() - .5) * .07 * div, .14 + span / 2, .97 - span / 2);
+    const mid = clamp(.62 + (S.lightness - 50) / 100 * .5 + (rng() - .5) * (.07 * div + .16 * cx.explore), .14 + span / 2, .97 - span / 2);
     const hi = mid + span / 2, lo = mid - span / 2;
     // position 0 = lightest; half even steps, half the real distances between the image tones
     let u = layers.map(l => n > 1 ? mix(l.rank / (n - 1), l.relL, .5) : .5);
@@ -266,6 +345,13 @@
     const by = free.slice().sort((a, b) => wanted[a] - wanted[b]), anchored = {};
     if (by.length > 1 && (S.anchors === "dark" || S.anchors === "both")) { wanted[by[0]] = .2; anchored[by[0]] = 1; }
     if (by.length > 1 && (S.anchors === "light" || S.anchors === "both")) { wanted[by[by.length - 1]] = .96; anchored[by[by.length - 1]] = 1; }
+    free.filter(i => !anchored[i]).forEach(i => { wanted[i] += shift(i); });
+    // light layers stay low enough to carry colour instead of fading to white; the order is kept
+    let above = Infinity;
+    by.slice().reverse().filter(i => !anchored[i]).forEach(i => {
+      wanted[i] = Math.min(wanted[i], ceiling(i), above - .01);
+      above = wanted[i];
+    });
     const gap = .015 + S.minContrast / 100 * .1;
     const fixed = [supportL, ...layers.filter(l => l.lock).map(l => hexLch(l.lock)[0])];
     const placed = placeLightness(free.map(i => wanted[i]), fixed, gap, .12, .98);
@@ -309,7 +395,7 @@
     return out;
   }
   function imageMix(cx, l, c) {              // brings a colour towards the tone of the layer in the image
-    const f = cx.S.fidelity / 100, T = l.lch;
+    const f = cx.S.fidelity / 100 * (1 - .5 * cx.explore), T = l.lch;   // exploring loosens the image
     if (f <= 0) return c;
     if (cx.S.source === "exact") {
       const a = c.hex ? hexOklab(c.hex) : [c.L, c.C * Math.cos(c.h * RAD), c.C * Math.sin(c.h * RAD)];
@@ -319,28 +405,54 @@
     const h = wrap(c.h + hueDelta(c.h, T[2]) * f);
     return { L: c.L, C: cx.S.source === "both" ? mix(c.C, T[1], f) : c.C, h };
   }
-  function candidate(cx, seed) {
+  // Values of this candidate inside the ranges, spread evenly over the candidates
+  function sampleSettings(cx, index) {
+    const keys = Object.keys(cx.ranges);
+    if (!keys.length) return cx;
+    const S = { ...cx.S };
+    keys.forEach(k => {
+      const i = RANGE_KEYS.indexOf(k), [a, b] = cx.ranges[k];
+      S[k] = mix(a, b, (cx.hueStart / 360 * (i + 2) + index * RANGE_STEPS[i]) % 1);
+    });
+    return { ...cx, S, div: clamp(S.diversity, 0, 100) / 100 };
+  }
+  function candidate(cx, seed, index) {
+    cx = sampleSettings(cx, index);
     const rng = rngFrom(seed), { S, layers, n } = cx;
-    const hues = pickHues(cx, rng), support = pickSupport(cx, hues, rng);
-    const { Ls, anchored } = planValues(cx, hexLch(support)[0], rng);
+    const hues = pickHues(cx, rng, index), support = pickSupport(cx, hues, rng);
     const roles = assignHues(cx, hues, rng);
     const k = (S.vividness / 100) ** 1.1, baseSat = hues.map(h => baseSaturation(cx, h));
+    const strength = i => { const sat = baseSat[roles[i]]; return sat === null ? k : sat * k / VIVID_NEUTRAL; };
+    const f = S.fidelity / 100 * (1 - .5 * cx.explore);
+    const ceiling = i => {
+      const l = layers[i], grey = l.lch[1] < .02;
+      let h = hues[roles[i]] + valueDrift(cx, l);
+      if (S.temperature) h += hueDelta(h, S.temperature > 0 ? 55 : 255) * Math.abs(S.temperature) / 100 * .4;
+      if (S.source !== "exact" && !grey) h += hueDelta(h, l.lch[2]) * f;
+      const c = Math.max(.62, lightnessCeiling(h, clamp(.2 + .55 * strength(i), 0, .8) * (strength(i) > .02 ? 1 : 0)));
+      return S.source === "exact" ? mix(c, 1, f) : c;      // the exact image colours may be light
+    };
+    const baseShift = hues.map(h => baseLightShift(cx, h));
+    const { Ls, anchored } = planValues(cx, hexLch(support)[0], rng, ceiling, i => baseShift[roles[i]]);
     let accent = -1;
     if (S.accent !== "none" && n > 1) {
       const pool = layers.map((l, i) => i).filter(i => !layers[i].lock && !anchored[i] && Ls[i] > .3 && Ls[i] < .86);
-      if (pool.length) accent = pool.reduce((b, i) => (S.accent === "small" ? layers[i].area < layers[b].area : layers[i].area > layers[b].area) ? i : b, pool[0]);
+      if (pool.length) accent = rng() < cx.explore ? pool[Math.floor(rng() * pool.length)] : pool.reduce((b, i) => (S.accent === "small" ? layers[i].area < layers[b].area : layers[i].area > layers[b].area) ? i : b, pool[0]);
     }
     const accentHue = hues.length > 1 ? hues[hues.length - 1] : wrap(hues[0] + 180 + (rng() - .5) * 40);
     const lch = layers.map((l, i) => {
       const L = Ls[i];
-      let h = i === accent ? accentHue : hues[roles[i]];
-      h += hueDelta(h, 260) * (.55 - L) * .22;            // shadows slightly cooler, lights warmer
+      let h = i === accent ? accentHue : hues[roles[i]] + valueDrift(cx, l);
+      h += hueDelta(h, 260) * (.55 - L) * .22 * S.lightShadow / 50;   // positive: cool shadows, warm lights
       if (S.temperature) h += hueDelta(h, S.temperature > 0 ? 55 : 255) * Math.abs(S.temperature) / 100 * .4;
       h = wrap(h);
       // a chosen base colour gives its saturation at vividness 60; the slider scales it from there
-      const sat = i === accent ? null : baseSat[roles[i]], wanted = sat === null ? k : sat * k / VIVID_NEUTRAL;
-      const ratio = i === accent ? Math.max(k, .95) : anchored[i] ? 0 : clamp(wanted * (1 + (rng() - .5) * .22), 0, 1);
-      let C = ratio * maxChroma(L, h);
+      const wanted = i === accent ? k : strength(i);
+      const ratio = i === accent ? Math.max(k, .95) : anchored[i] ? 0 : clamp(wanted * (1 + (rng() - .5) * (.22 + .5 * cx.explore)), 0, 1);
+      const room = maxChroma(L, h);
+      let C = ratio * room;
+      // light layers keep a visible tint, even at low vividness (none when grey is asked for)
+      if (i !== accent && !anchored[i]) C = Math.max(C, Math.min(room, gamutRow(h).top * .3 * clamp(wanted * 3, 0, 1) * clamp((L - .7) / .15, 0, 1)));
       if (anchored[i]) C = .022;
       return imageMix(cx, l, { L, C, h });
     });
@@ -379,9 +491,9 @@
       legibility *= mix(1, .6, bad / tot);
     }
     const fidelity = 1 - clamp(layers.reduce((s, l, i) => s + l.area * deltaE00(labs[i], cx.lab(l.tone)), 0) / 45, 0, 1);
-    const lch = cols.map(hexLch), want = (S.vividness / 100) ** 1.1;
+    const lch = cols.map(hexLch), [vLo, vHi] = (cx.ranges.vividness || [S.vividness, S.vividness]).map(v => (v / 100) ** 1.1);
     const vivid = layers.reduce((s, l, i) => s + l.area * (lch[i][1] / Math.max(.01, maxChroma(lch[i][0], lch[i][2]))), 0);
-    const respect = clamp(1 - Math.abs(vivid - want) * 1.4, 0, 1);
+    const respect = clamp(1 - Math.max(0, vLo - vivid, vivid - vHi) * 1.4, 0, 1);
     const f = S.fidelity / 100, wF = .1 + .45 * f, sum = .45 + wF + .25;
     return { legibility, fidelity, respect, vivid, total: (.45 * legibility + wF * fidelity + .25 * respect) / sum };
   }
@@ -393,10 +505,17 @@
   // ---------------- Generation ----------------
   /* opts: layers [{tone, area, lock}], support, S (settings), imageHues [{h, weight}], seed, count,
    * supportGuard {tones, keep} (tone that must stay the closest to the support), paints [hex],
+   * avoid [[colors]] (proposals already shown), explore 0..1 (how far to leave the image hues),
    * near {colors, support} (variations of this proposal), pinned {colors, support} (always shown first, unchanged).
-   * Returns [{colors, support, scores, badges}], best first (`pinned`, then the `near` reference, come first). */
+   * Returns [{colors, support, scores, badges}], best first (`pinned`, then the `near` reference, come first; the others are good and far apart). */
   function generate(opts) {
-    const S = { ...DEFAULTS, ...opts.S }, count = opts.count || 6, seed = (opts.seed || 1) >>> 0;
+    const S = { ...DEFAULTS, ...opts.S }, count = opts.count || 6, seed = (opts.seed || 1) >>> 0, ranges = {};
+    RANGE_KEYS.forEach(k => {                // S keeps the middle of a range (scores, variations)
+      if (!Array.isArray(S[k])) return;
+      const a = Math.min(...S[k]), b = Math.max(...S[k]);
+      if (b > a) ranges[k] = [a, b];
+      S[k] = (a + b) / 2;
+    });
     const cache = new Map(), lab = h => { let v = cache.get(h); if (!v) cache.set(h, v = srgbLab(h)); return v; };
     const raw = opts.layers.map(l => ({ tone: l.tone.toLowerCase(), lock: l.lock ? l.lock.toLowerCase() : null, area: Math.max(0, +l.area || 0) }));
     const n = raw.length;
@@ -411,8 +530,9 @@
       l.area = totalArea > 0 ? l.area / totalArea : 1 / n;
     });
     const paints = opts.paints && opts.paints.length ? [...new Set(opts.paints.map(p => p.toLowerCase()))] : null;
-    const cx = { S, div: clamp(S.diversity, 0, 100) / 100, layers: raw, n, lab, paints, support: opts.support.toLowerCase(),
-      imageHues: opts.imageHues || [], supportGuard: opts.supportGuard || null, near: opts.near || null };
+    const cx = { S, ranges, div: clamp(S.diversity, 0, 100) / 100, layers: raw, n, lab, paints, support: opts.support.toLowerCase(),
+      imageHues: opts.imageHues || [], supportGuard: opts.supportGuard || null, near: opts.near || null,
+      explore: clamp(+opts.explore || 0, 0, 1), hueStart: rngFrom(seed ^ 0x51ed27)() * 360 };
     const seen = new Set(), pool = [];
     const add = c => {
       const key = c.colors.join() + c.support;
@@ -424,20 +544,36 @@
     const ref = cx.near ? { colors: cx.near.colors.map((c, i) => raw[i].lock || c.toLowerCase()), support: (cx.near.support || cx.support).toLowerCase() } : null;
     if (pinned) add(pinned);
     if (ref) add(ref);
-    for (let i = 0; i < 140; i++) add((cx.near ? variation : candidate)(cx, (seed * 2654435761 + i * 40503) >>> 0));
+    for (let i = 0; i < 140; i++) add((cx.near ? variation : candidate)(cx, (Math.imul(seed, 2654435761) + i * 40503) >>> 0, i));
     pool.sort((a, b) => b.scores.total - a.scores.total);
-    // the best ones, each far enough from those already kept
+    // good candidates, each chosen as far as possible from those kept and from those already shown
     const dist = (a, b) => a.lab.reduce((s, x, i) => s + Math.hypot(x[0] - b.lab[i][0], x[1] - b.lab[i][1], x[2] - b.lab[i][2]), 0) / n * 100;
     const kept = [pinned, ref].filter(c => c && pool.includes(c));
-    const minDist = (cx.near ? 1.5 + 5 * cx.div : 3 + 16 * cx.div);
-    for (const relax of [1, .6, .3, 0]) {
-      for (const c of pool) {
-        if (kept.length >= count) break;
-        if (!kept.includes(c) && kept.every(k => dist(c, k) >= minDist * relax)) kept.push(c);
+    const shown = (opts.avoid || []).filter(c => c.length === n).map(c => ({ lab: c.map(hexOklab) }));
+    const best = pool.length ? pool[0].scores.total : 0, good = pool.filter(c => c.scores.total >= best - .22);
+    const reach = cx.near ? 4 + 8 * cx.div : 14 + 26 * cx.div, weight = .2 + 1.6 * cx.div;
+    const minDist = cx.near ? 1.5 + 5 * cx.div : 3 + 16 * cx.div;
+    const others = () => kept.filter(c => c !== pinned).concat(shown);
+    const value = c => {
+      const near = others().reduce((m, k) => Math.min(m, dist(c, k)), Infinity);
+      return { c, near, v: c.scores.total + weight * Math.min(1, near / reach) };
+    };
+    for (const list of [good, pool]) {
+      for (const relax of [1, .5, 0]) {
+        while (kept.length < count) {
+          let top = null;
+          for (const c of list) {
+            if (kept.includes(c)) continue;
+            const x = value(c);
+            if (x.near >= minDist * relax && (!top || x.v > top.v)) top = x;
+          }
+          if (!top) break;
+          kept.push(top.c);
+        }
       }
     }
-    return kept.map(c => ({ colors: c.colors, support: c.support, scores: c.scores, badges: BADGE(c), pinned: c === pinned }));
+    return kept.map(c => ({ colors: c.colors, support: c.support, scores: c.scores, badges: BADGE(c), pinned: c === pinned, reference: c === ref }));
   }
 
-  root.PalGen = { srgbLab, deltaE00, assignMin, hexLch, lchHex, maxChroma, imageHues, harmonyHues, placeLightness, generate, DEFAULTS, STYLES };
+  root.PalGen = { hsvHex, hsvRgb, hexHsv, srgbLab, deltaE00, assignMin, hexLch, lchHex, maxChroma, imageHues, harmonyHues, placeLightness, generate, DEFAULTS, STYLES, RANGE_KEYS };
 })(typeof window !== "undefined" ? window : globalThis);

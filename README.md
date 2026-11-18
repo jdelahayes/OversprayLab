@@ -672,8 +672,8 @@ By default each layer gets the tone computed from the image. To paint with your 
   the current layers, shown as thumbnails of the real stencils and computed in the browser. The first card always
   shows the colours the layers had when the window opened, and applying it brings them back. Pick a **style** (Faithful,
   Pop, Poster, Pastel, Vintage, Neon, Natural, Duotone, Monochrome) or set the **fidelity to the image** and what is taken
-  from it (hue, hue and vividness, exact colour), the **base hues** (main hues of the image, or up to 3 on the wheel or
-  with the eyedropper; the saturation of a chosen colour is used, as it is at vividness 60), the **harmony**, **vividness**, **lightness**, **contrast** and **diversity**. *Advanced* adds
+  from it (hue, hue and vividness, exact colour), the **base hues** (main hues of the image, or up to 3 on the perceptual HSV wheel, in the H S V fields or
+  with the eyedropper; the value makes the layers of that hue lighter or darker; the saturation of a chosen colour is used, as it is at vividness 60), the **harmony** (free, monochrome, analogous, analogous + accent, complementary, split complementary, triad, rectangle or square tetrad, double analogous, warm / cool) with its **hue spread**, **number of hues**, **hue shift along values** and **lights and shadows**, then **vividness**, **lightness**, **contrast** and **diversity**; each slider takes a value or, after a click elsewhere on its track, a range that the proposals explore (double-click: back to the default). *Advanced* adds
   temperature, an accent colour, the hue distribution over the painted area, the value order, neutral anchors, the minimum
   legibility, a proposed support colour and **My paints** (only the colours of one of *My palettes*). Layer lightnesses
   are kept apart from each other and from the support, so that the image stays readable. **Lock** a layer to keep its
