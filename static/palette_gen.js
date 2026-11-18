@@ -117,7 +117,7 @@
 
   // ---------------- Settings ----------------
   const DEFAULTS = {
-    style: "fidele", fidelity: 30, source: "hue", autoHues: true, hues: [], harmony: "analogous",
+    style: "fidele", fidelity: 30, source: "hue", autoHues: true, hues: [], hueTones: [], harmony: "analogous",
     vividness: 55, lightness: 50, contrast: 60, diversity: 50,
     temperature: 0, accent: "none", distribution: "balanced", valueOrder: "image", anchors: "none",
     minContrast: 50, supportMode: "keep", paints: "",
@@ -135,6 +135,7 @@
     duotone: look(10, "hue", "complementary", 62, 52, 72, 0, "none", "equal", "none"),
     mono:    look(15, "hue", "mono", 50, 52, 75, 0, "none", "balanced", "none"),
   };
+  const VIVID_NEUTRAL = .6 ** 1.1;
   const HARMONY = {
     mono: [0], analogous: [0, -32, 32], complementary: [0, 180], split: [0, 150, 210], triad: [0, 120, 240],
   };
@@ -223,6 +224,15 @@
       });
     }
     return set.map(wrap);
+  }
+  // Saturation (0..1 of what is displayable) of the chosen base colour closest to this hue;
+  // null when the base hue has no chosen colour (image hues, wheel only)
+  function baseSaturation(cx, h) {
+    const { S } = cx;
+    if (S.autoHues || !S.hues.length) return null;
+    const dist = x => Math.abs(hueDelta(x, h));
+    const i = S.hues.reduce((b, x, k) => dist(x) < dist(S.hues[b]) ? k : b, 0), t = S.hueTones[i];
+    return t ? clamp(t.C / Math.max(.01, maxChroma(t.L, S.hues[i])), 0, 1) : null;
   }
   function pickSupport(cx, hues, rng) {
     if (cx.S.supportMode !== "propose") return cx.support;
@@ -314,7 +324,7 @@
     const hues = pickHues(cx, rng), support = pickSupport(cx, hues, rng);
     const { Ls, anchored } = planValues(cx, hexLch(support)[0], rng);
     const roles = assignHues(cx, hues, rng);
-    const k = (S.vividness / 100) ** 1.1;
+    const k = (S.vividness / 100) ** 1.1, baseSat = hues.map(h => baseSaturation(cx, h));
     let accent = -1;
     if (S.accent !== "none" && n > 1) {
       const pool = layers.map((l, i) => i).filter(i => !layers[i].lock && !anchored[i] && Ls[i] > .3 && Ls[i] < .86);
@@ -327,7 +337,9 @@
       h += hueDelta(h, 260) * (.55 - L) * .22;            // shadows slightly cooler, lights warmer
       if (S.temperature) h += hueDelta(h, S.temperature > 0 ? 55 : 255) * Math.abs(S.temperature) / 100 * .4;
       h = wrap(h);
-      const ratio = i === accent ? Math.max(k, .95) : anchored[i] ? 0 : clamp(k * (1 + (rng() - .5) * .22), 0, 1);
+      // a chosen base colour gives its saturation at vividness 60; the slider scales it from there
+      const sat = i === accent ? null : baseSat[roles[i]], wanted = sat === null ? k : sat * k / VIVID_NEUTRAL;
+      const ratio = i === accent ? Math.max(k, .95) : anchored[i] ? 0 : clamp(wanted * (1 + (rng() - .5) * .22), 0, 1);
       let C = ratio * maxChroma(L, h);
       if (anchored[i]) C = .022;
       return imageMix(cx, l, { L, C, h });

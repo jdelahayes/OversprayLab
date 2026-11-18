@@ -6477,6 +6477,10 @@ const paLoadSettings = () => {
   if (saved && typeof saved === "object") for (const k of Object.keys(PalGen.DEFAULTS))
     if (typeof saved[k] === typeof PalGen.DEFAULTS[k] && (k !== "hues" || Array.isArray(saved[k]))) out[k] = saved[k];
   out.hues = (Array.isArray(saved && saved.hues) ? saved.hues : []).filter(h => Number.isFinite(h)).slice(0, 3);
+  out.hueTones = out.hues.map((_, i) => {
+    const t = Array.isArray(saved && saved.hueTones) ? saved.hueTones[i] : null;
+    return t && Number.isFinite(t.L) && Number.isFinite(t.C) ? t : null;
+  });
   if (!out.hues.length) out.autoHues = true;
   return out;
 };
@@ -6529,10 +6533,14 @@ function setupPaletteAssistant() {
     const t = e.target, k = t.dataset.s;
     if (k === "autoHues") {
       PA.S.autoHues = t.checked;
-      if (!t.checked && !PA.S.hues.length) PA.S.hues = [PA.hues.length ? PA.hues[0].h : 30];
+      if (!t.checked && !PA.S.hues.length) { PA.S.hues = [PA.hues.length ? PA.hues[0].h : 30]; PA.S.hueTones = [null]; }
       paChanged();
     } else if (k && t.tagName === "SELECT") { PA.S[k] = t.value; paChanged(); }
-    else if (t.dataset.hue !== undefined) { PA.S.hues[+t.dataset.hue] = PalGen.hexLch(t.value)[2]; PA.S.autoHues = false; paChanged(); }
+    else if (t.dataset.hue !== undefined) {   // the whole colour is kept; a grey has no hue of its own
+      const i = +t.dataset.hue, [L, C, h] = PalGen.hexLch(t.value);
+      if (C >= .005) PA.S.hues[i] = h;
+      PA.S.hueTones[i] = { L, C, hex: t.value.toLowerCase() }; PA.S.autoHues = false; paChanged();
+    }
     else if (t.dataset.lay !== undefined) { PA.locks[t.dataset.lay] = t.value.toLowerCase(); paGenerate(); }
   });
   box.addEventListener("click", e => {
@@ -6553,7 +6561,7 @@ function setupPaletteAssistant() {
       return paGenerate();
     }
     if (b.dataset.hueDel !== undefined) {
-      PA.S.hues.splice(+b.dataset.hueDel, 1);
+      PA.S.hues.splice(+b.dataset.hueDel, 1); PA.S.hueTones.splice(+b.dataset.hueDel, 1);
       if (!PA.S.hues.length) PA.S.autoHues = true;
       return paChanged();
     }
@@ -6565,8 +6573,8 @@ function setupPaletteAssistant() {
     else if (a === "save") paSave();
     else if (a === "hueAdd") {
       const h = PA.S.hues.length ? PA.S.hues[PA.S.hues.length - 1] + 120 : 30;
-      PA.S.hues.push((h + 360) % 360); PA.S.autoHues = false; paChanged();
-    } else if (a === "reset") { PA.S = { ...PalGen.DEFAULTS, ...PalGen.STYLES.fidele, hues: [] }; PA.locks = {}; paChanged(true); }
+      PA.S.hues.push((h + 360) % 360); PA.S.hueTones.push(null); PA.S.autoHues = false; paChanged();
+    } else if (a === "reset") { PA.S = { ...PalGen.DEFAULTS, ...PalGen.STYLES.fidele, hues: [], hueTones: [] }; PA.locks = {}; paChanged(true); }
   });
   box.addEventListener("dblclick", e => { if (e.target.closest("[data-pick]")) paApply(); });
   back.addEventListener("pointerdown", e => { if (e.target === back) paClose(); });
@@ -6591,18 +6599,24 @@ function setupPaletteAssistant() {
   wheel.onpointerdown = e => {
     e.preventDefault();
     const h = wheelHue(e), S = PA.S;
-    if (S.autoHues || !S.hues.length) { S.autoHues = false; S.hues = [h]; drag = 0; }
+    if (S.autoHues || !S.hues.length) { S.autoHues = false; S.hues = [h]; S.hueTones = [null]; drag = 0; }
     else {
       const d = x => Math.abs(((x - h + 540) % 360) - 180);
       drag = S.hues.reduce((b, x, i) => d(x) < d(S.hues[b]) ? i : b, 0);
-      S.hues[drag] = h;
+      paSetHue(drag, h);
     }
     try { wheel.setPointerCapture(e.pointerId); } catch (err) { /* pointer already released */ }
     paChanged();
   };
-  wheel.onpointermove = e => { if (drag >= 0) { PA.S.hues[drag] = wheelHue(e); paChanged(); } };
+  wheel.onpointermove = e => { if (drag >= 0) { paSetHue(drag, wheelHue(e)); paChanged(); } };
   wheel.onpointerup = wheel.onpointercancel = () => { drag = -1; };
 }
+// New hue of a base colour: its saturation and lightness stay
+const paSetHue = (i, h) => { PA.S.hues[i] = h; const t = PA.S.hueTones[i]; if (t) delete t.hex; };
+const paHueColor = i => {
+  const t = PA.S.hueTones[i], h = PA.S.hues[i];
+  return t ? t.hex || PalGen.lchHex(t.L, t.C, h) : PalGen.lchHex(.65, .14, h);
+};
 const paMsg = (t, err = false) => { const m = $("paMsg"); m.textContent = t; m.classList.toggle("err", !!err); };
 const paPaints = () => {
   const p = PA.S.paints && (UP.palette || {})[PA.S.paints];
@@ -6713,7 +6727,7 @@ function paSync() {                          // settings -> controls
   $("paWheel").innerHTML = ghosts.map(h => `<i class="ghost" style="${at(h)}"></i>`).join("") +
     shown.map(h => `<i style="${at(h)};background:${PalGen.lchHex(.72, .14, h)}"></i>`).join("");
   $("paHues").innerHTML = own
-    ? S.hues.map((h, i) => `<span><input type="color" data-hue="${i}" value="${PalGen.lchHex(.65, .14, h)}" aria-label="Teinte de base ${i + 1}" title="Teinte de base ${i + 1} : choisir ou prendre à la pipette">` +
+    ? S.hues.map((h, i) => `<span><input type="color" data-hue="${i}" value="${paHueColor(i)}" aria-label="Teinte de base ${i + 1}" title="Teinte de base ${i + 1} : choisir ou prendre à la pipette">` +
         `<button type="button" data-hue-del="${i}" title="Retirer cette teinte" aria-label="Retirer la teinte ${i + 1}">×</button></span>`).join("") +
       (S.hues.length < 3 ? `<button type="button" data-pa="hueAdd" title="Ajoute une teinte de base (3 au maximum)">＋ Teinte</button>` : "")
     : `<span class="hint">${PA.hues.length ? "Teintes dominantes de l'image" : "Image sans teinte marquée : teintes au hasard"}</span>`;
