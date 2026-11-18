@@ -393,8 +393,8 @@
   // ---------------- Generation ----------------
   /* opts: layers [{tone, area, lock}], support, S (settings), imageHues [{h, weight}], seed, count,
    * supportGuard {tones, keep} (tone that must stay the closest to the support), paints [hex],
-   * near {colors, support} (variations of this proposal), pinned {colors, support} (shown first).
-   * Returns [{colors, support, scores, badges}], best first (`near` / `pinned`: that one comes first). */
+   * near {colors, support} (variations of this proposal), pinned {colors, support} (always shown first, unchanged).
+   * Returns [{colors, support, scores, badges}], best first (`pinned`, then the `near` reference, come first). */
   function generate(opts) {
     const S = { ...DEFAULTS, ...opts.S }, count = opts.count || 6, seed = (opts.seed || 1) >>> 0;
     const cache = new Map(), lab = h => { let v = cache.get(h); if (!v) cache.set(h, v = srgbLab(h)); return v; };
@@ -420,17 +420,15 @@
       seen.add(key);
       c.scores = score(cx, c); c.lab = c.colors.map(hexOklab); pool.push(c);
     };
-    let first = null;
-    const pin = cx.near || opts.pinned;
-    if (pin) {
-      first = { colors: pin.colors.map((c, i) => raw[i].lock || c.toLowerCase()), support: (pin.support || cx.support).toLowerCase() };
-      add(first);
-    }
+    const pinned = opts.pinned ? { colors: opts.pinned.colors.map(c => c.toLowerCase()), support: (opts.pinned.support || cx.support).toLowerCase() } : null;
+    const ref = cx.near ? { colors: cx.near.colors.map((c, i) => raw[i].lock || c.toLowerCase()), support: (cx.near.support || cx.support).toLowerCase() } : null;
+    if (pinned) add(pinned);
+    if (ref) add(ref);
     for (let i = 0; i < 140; i++) add((cx.near ? variation : candidate)(cx, (seed * 2654435761 + i * 40503) >>> 0));
     pool.sort((a, b) => b.scores.total - a.scores.total);
     // the best ones, each far enough from those already kept
     const dist = (a, b) => a.lab.reduce((s, x, i) => s + Math.hypot(x[0] - b.lab[i][0], x[1] - b.lab[i][1], x[2] - b.lab[i][2]), 0) / n * 100;
-    const kept = first ? [pool.find(c => c === first)] : [];
+    const kept = [pinned, ref].filter(c => c && pool.includes(c));
     const minDist = (cx.near ? 1.5 + 5 * cx.div : 3 + 16 * cx.div);
     for (const relax of [1, .6, .3, 0]) {
       for (const c of pool) {
@@ -438,7 +436,7 @@
         if (!kept.includes(c) && kept.every(k => dist(c, k) >= minDist * relax)) kept.push(c);
       }
     }
-    return kept.map(c => ({ colors: c.colors, support: c.support, scores: c.scores, badges: BADGE(c), pinned: c === first && !cx.near }));
+    return kept.map(c => ({ colors: c.colors, support: c.support, scores: c.scores, badges: BADGE(c), pinned: c === pinned }));
   }
 
   root.PalGen = { srgbLab, deltaE00, assignMin, hexLch, lchHex, maxChroma, imageHues, harmonyHues, placeLightness, generate, DEFAULTS, STYLES };

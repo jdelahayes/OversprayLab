@@ -668,9 +668,9 @@ By default each layer gets the tone computed from the image. To paint with your 
   one changing at least half of the layers; *Closest* goes back to the best one. The toggle next to
   it (**Keep the light → dark order**, remembered) limits the combinations to those where the
   lightest layer gets the lightest chosen colour, the next one the next lighter, and so on.
-- or open the **✦ Palette assistant…** (first entry of the *Colour palette…* menu): it builds six proposals for
-  the current layers, shown as thumbnails of the real stencils and computed in the browser; on opening, the first one
-  is the current colours. Pick a **style** (Faithful,
+- or open the **✦ Palette assistant…** (first entry of the *Colour palette…* menu): it builds proposals for
+  the current layers, shown as thumbnails of the real stencils and computed in the browser. The first card always
+  shows the colours the layers had when the window opened, and applying it brings them back. Pick a **style** (Faithful,
   Pop, Poster, Pastel, Vintage, Neon, Natural, Duotone, Monochrome) or set the **fidelity to the image** and what is taken
   from it (hue, hue and vividness, exact colour), the **base hues** (main hues of the image, or up to 3 on the wheel or
   with the eyedropper; the saturation of a chosen colour is used, as it is at vividness 60), the **harmony**, **vividness**, **lightness**, **contrast** and **diversity**. *Advanced* adds

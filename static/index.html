@@ -6466,7 +6466,7 @@ const PA_STYLES = [["fidele", "Fidèle"], ["pop", "Pop"], ["affiche", "Affiche"]
 const PA_BADGES = { pinned: "Couleurs à l'ouverture", readable: "Très lisible", weak: "Lisibilité faible", close: "Proche de l'image", vivid: "Vive" };
 const PA_COUNT = 6, PA_THUMB = 360;
 const PA = { S: null, seed: 1, res: [], sel: 0, near: null, locks: {}, targets: [], masks: [], areas: [], hues: [], huesFor: "",
-  sig: "", token: 0, raf: 0, back: null, tmp: null, size: [1, 1], opening: null, showOpening: false };
+  sig: "", token: 0, raf: 0, back: null, tmp: null, size: [1, 1], opening: null, fresh: false };
 
 const paRange = (k, label, min, max, title) => `<label class="pa-f" title="${title}"><span>${label}</span><output data-o="${k}"></output>` +
   `<input type="range" data-s="${k}" min="${min}" max="${max}" step="1" aria-label="${label}"></label>`;
@@ -6552,7 +6552,7 @@ function setupPaletteAssistant() {
     }
     if (b.dataset.pick !== undefined) return paSelectCard(+b.dataset.pick);
     if (b.dataset.more !== undefined) {
-      PA.near = PA.res[+b.dataset.more]; PA.showOpening = false; PA.seed++;
+      PA.near = PA.res[+b.dataset.more]; PA.fresh = false; PA.seed++;
       return paGenerate();
     }
     if (b.dataset.lock !== undefined) {
@@ -6567,7 +6567,7 @@ function setupPaletteAssistant() {
     }
     const a = b.dataset.pa;
     if (a === "close") paClose();
-    else if (a === "again") { PA.showOpening = false; PA.seed++; paGenerate(); }
+    else if (a === "again") { PA.fresh = false; PA.seed++; paGenerate(); }
     else if (a === "back") { PA.near = null; paGenerate(); }
     else if (a === "apply") paApply();
     else if (a === "save") paSave();
@@ -6680,12 +6680,12 @@ function paReadTargets() {
   });
   return PA.targets.map(T => `${T.index}:${T.tone}`).join();
 }
-// Colours when the window opens: first proposal, until the settings change; applying it restores
+// Colours when the window opens: always the first proposal; applying it restores
 // that exact state (automatic colours and palette shown included)
 function paCaptureOpening() {
   PA.opening = { colors: PA.targets.map(T => T.color.toLowerCase()), support: LAST.base.toLowerCase(),
     raw: $("layer_colors").value, pal: PAL_CUR, palLast: PAL_LAST };
-  PA.showOpening = true;
+  PA.fresh = true;
 }
 async function paOpen() {
   if (!LAST) return status("Calculez d'abord les couches", true);
@@ -6742,7 +6742,7 @@ function paSync() {                          // settings -> controls
 }
 function paChanged(keepStyle = false) {
   if (!keepStyle) PA.S.style = "";
-  PA.near = null; PA.showOpening = false;
+  PA.near = null; PA.fresh = false;
   paSync();
   cancelAnimationFrame(PA.raf);
   PA.raf = requestAnimationFrame(paGenerate);
@@ -6754,9 +6754,9 @@ function paGenerate() {
   PA.res = PalGen.generate({
     layers: PA.targets.map((T, i) => ({ tone: T.tone, area: PA.areas[i], lock: PA.locks[T.index] })),
     support: LAST.base, S: PA.S, imageHues: PA.hues, seed: PA.seed, count: PA_COUNT, paints,
-    near: PA.near, pinned: PA.showOpening ? PA.opening : null, supportGuard: skip ? { tones: LAST.palette, keep: LAST.support_label } : null,
+    near: PA.near, pinned: PA.opening, supportGuard: skip ? { tones: LAST.palette, keep: LAST.support_label } : null,
   });
-  PA.sel = 0;
+  PA.sel = PA.fresh || PA.res.length < 2 ? 0 : 1;      // new proposals: the first new one is selected
   $("paBack").hidden = !PA.near;
   const free = PA.targets.filter(T => !PA.locks[T.index]).length;
   $("paInfo").textContent = `${PA.targets.length} couche${PA.targets.length > 1 ? "s" : ""} à colorer`;
@@ -6813,7 +6813,7 @@ function paApply() {
   if (!p) return;
   const o = PA.opening;
   VARY = null;
-  if (p.pinned && p.colors.every((c, i) => c === o.colors[i])) {
+  if (p.pinned) {
     $("layer_colors").value = o.raw; PAL_LAST = o.palLast; showPaletteChoice(o.pal);
   } else {
     const m = layerColors();
