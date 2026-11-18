@@ -677,7 +677,7 @@ By default each layer gets the tone computed from the image. To paint with your 
   temperature, an accent colour, the hue distribution over the painted area, the value order, neutral anchors, the minimum
   legibility, a proposed support colour and **My paints** (only the colours of one of *My palettes*). Layer lightnesses
   are kept apart from each other and from the support, so that the image stays readable. **Lock** a layer to keep its
-  colour, use **More like this** for close variations, then **Apply to the layers** (Ctrl + Z undoes it) or **Save to My
+  colour, use **More like this** for close variations, then **Apply to the layers** or double-click a card (this closes the window; Ctrl + Z undoes it) or **Save to My
   palettes**. With options where the colour affects the cut (key details, merges, lines only), thumbnails are approximate.
 
 The chosen colours are used in the preview, the simulated render, the export and the file names.

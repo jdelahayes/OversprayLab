@@ -6524,7 +6524,7 @@ function setupPaletteAssistant() {
       <div class="pa-layers" id="paLayers"></div>
       <div class="pa-actions"><input id="paName" maxlength="40" placeholder="Nom de la palette" aria-label="Nom de la palette">
         <button type="button" data-pa="save" title="Ajoute les couleurs de la proposition choisie à « Mes palettes »">Enregistrer dans Mes palettes</button>
-        <button type="button" class="primary" data-pa="apply" title="Donne ces couleurs aux couches (annulable avec Ctrl + Z)">Appliquer aux couches</button>
+        <button type="button" class="primary" data-pa="apply" title="Donne ces couleurs aux couches et ferme l'assistant (annulable avec Ctrl + Z)">Appliquer aux couches</button>
         <p class="hint pa-msg" id="paMsg" role="status"></p></div>
     </div></div>`;
   box.addEventListener("input", e => {
@@ -6764,7 +6764,7 @@ function paGenerate() {
   $("paBack").hidden = !PA.near;
   const free = PA.targets.filter(T => !PA.locks[T.index]).length;
   $("paInfo").textContent = `${PA.targets.length} couche${PA.targets.length > 1 ? "s" : ""} à colorer`;
-  $("paHint").textContent = PA.near ? "Variantes de la proposition choisie" : "Cliquez une proposition pour la choisir, double-cliquez pour l'appliquer";
+  $("paHint").textContent = PA.near ? "Variantes de la proposition choisie" : "Cliquez une proposition pour la choisir, double-cliquez pour l'appliquer et fermer";
   const warn = [];
   if (paCutDepends()) warn.push("Avec ces options, la couleur influence la découpe : les miniatures sont approximatives et les pochoirs seront recalculés.");
   if (paints && paints.length < free) warn.push("Moins de peintures que de couches : certaines couches partagent une couleur.");
@@ -6845,8 +6845,8 @@ function paApply() {
     sup.value = p.support;
     sup.dispatchEvent(new Event("input", { bubbles: true })); sup.dispatchEvent(new Event("change", { bubbles: true }));
   }
-  const t = `Proposition ${PA.sel + 1} appliquée aux couches`;
-  status(t); paMsg(t);
+  status(`Proposition ${PA.sel + 1} appliquée aux couches`);
+  paClose();
   schedule();
 }
 async function paSave() {
