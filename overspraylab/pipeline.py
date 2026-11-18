@@ -75,6 +75,8 @@ class Params:
     color_vividness: float = 0.0
     layering: str = "exclusive"    # exclusive | cumulative
     skip_support: bool = True      # the tone closest to the support gets no stencil
+    # exclusive layers: what the material limits remove goes to the layers around it
+    fill_gaps: bool = False
     protect_lines: bool = False    # thin strokes (eyes, eyebrows…) escape the majority filter
     # Flat areas (poster look: full flat layers, no interleaving): 0 = off .. 100 = strongest.
     # Islands of a tone whose border with the surrounding area has a low contrast are absorbed by it
@@ -1075,6 +1077,82 @@ def clean_mask(mask: np.ndarray, p: Params, extra_area_mm2: float = 0.0) -> np.n
     return m
 
 
+def fill_gaps(masks: list, targets: list, labels: np.ndarray, palette: np.ndarray,
+              tones: list, p: Params) -> tuple[list, list]:
+    """Exclusive layers: gives what the cleaning removed to the layers around it, so that the support
+    does not show through. Each layer is cleaned alone and drops the pieces it cannot cut; they only
+    stay cuttable as part of an opening they touch. The layers grow together into each gap, one pixel
+    at a time: a strip between two tones is shared along its length instead of becoming a thin
+    tongue of one of them. A pixel reached by several layers goes to the tone closest to its own.
+    What a layer receives must respect the material limits: a part too thin for it is offered to the
+    other layers. Parts no layer can take stay bare. Returns the masks and the targets (what each
+    layer now has to paint, so that the pieces received are not reported as lost details)."""
+    zone = np.logical_or.reduce([t > 0 for t in targets])
+    todo = zone & ~np.logical_or.reduce([m > 0 for m in masks])
+    if not todo.any():
+        return masks, targets
+    r_open, r_close = p.min_opening_mm * p.px_per_mm / 2, p.min_strip_mm * p.px_per_mm / 2
+    margin = int(max(r_open, r_close)) + 3
+    ys, xs = np.nonzero(todo)
+    y0, y1 = max(int(ys.min()) - margin, 0), int(ys.max()) + margin + 1
+    x0, x1 = max(int(xs.min()) - margin, 0), int(xs.max()) + margin + 1
+    todo, area = todo[y0:y1, x0:x1], zone[y0:y1, x0:x1]
+    tone = labels[y0:y1, x0:x1]
+    lab = _lab(palette)
+    dist = np.linalg.norm(lab[:, None] - lab[tones][None], axis=2)      # tone x layer
+    kernel = cv2.getStructuringElement(cv2.MORPH_CROSS, (3, 3))
+    grown = [m[y0:y1, x0:x1].copy() for m in masks]
+    gained = [np.zeros_like(todo) for _ in masks]
+    refused = [np.zeros_like(todo) for _ in masks]      # too thin for this layer
+    for _ in range(4):
+        front = grown
+        while True:
+            best = np.full(todo.shape, np.inf)
+            owner = np.full(todo.shape, -1, np.int32)
+            for k, m in enumerate(front):
+                r, c = np.nonzero((cv2.dilate(m, kernel) > 0) & todo & ~refused[k])
+                d = dist[tone[r, c], k]
+                closer = d < best[r, c]
+                r, c = r[closer], c[closer]
+                best[r, c] = d[closer]
+                owner[r, c] = k
+            reached = owner >= 0
+            if not reached.any():
+                break
+            todo = todo & ~reached
+            front = [np.where(owner == k, 255, 0).astype(np.uint8) for k in range(len(grown))]
+            for k, new in enumerate(front):
+                grown[k] = grown[k] | new
+                gained[k] |= new > 0
+        again = False
+        for k, m in enumerate(grown):
+            if r_open < .5 or not gained[k].any():
+                continue
+            thin = gained[k] & ~(cv2.morphologyEx(m, cv2.MORPH_OPEN, disk(r_open)) > 0)
+            if thin.any():
+                grown[k] = np.where(thin, 0, m).astype(np.uint8)
+                gained[k] &= ~thin
+                refused[k] |= thin
+                todo = todo | thin
+                again = True
+        if not again:
+            break
+    masks, targets = list(masks), list(targets)
+    for k, m in enumerate(grown):
+        if not gained[k].any():
+            continue
+        add = gained[k]
+        if r_close >= .5:                # no material strip too narrow between the old and new parts
+            add = add | ((cv2.morphologyEx(m, cv2.MORPH_CLOSE, disk(r_close)) > 0) & area)
+        full = np.zeros_like(masks[k])
+        full[y0:y1, x0:x1] = np.where(add, 255, 0).astype(np.uint8)
+        masks[k] = masks[k] | full
+        got = np.zeros_like(masks[k])
+        got[y0:y1, x0:x1] = np.where(gained[k], 255, 0).astype(np.uint8)
+        targets[k] = targets[k] | got
+    return masks, targets
+
+
 def merge_area_mm2(amount: float) -> float:
     """Largest visible area (mm²) a merge may change, from the "merge instead of bridges" setting
     (0..150, progressive scale): 0 = never merge, ~0.3 mm² at 1, ~5 mm² at 50, 90 mm² at 100,
@@ -1721,6 +1799,8 @@ def build(prep: Prepared, p: Params, outline_region: np.ndarray | None = None,
         t = np.where(t, 255, 0).astype(np.uint8)
         targets.append(t)
         cleaned_all.append(clean_mask(t, p, extra_area))
+    if p.fill_gaps and p.layering == "exclusive" and cleaned_all:   # cumulative: the layer below shows
+        cleaned_all, targets = fill_gaps(cleaned_all, targets, labels, prep.palette, color_ids, p)
 
     # Effects of the layers (each layer its own stack), applied before lines, merges and bridges
     fx_all = fxmod.parse(p.layer_effects)  # also the outline stencils (numbered after the colour layers)

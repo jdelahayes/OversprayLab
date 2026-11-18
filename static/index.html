@@ -918,7 +918,10 @@
 
   <fieldset>
     <legend>Prétraitement de l'image</legend>
-    <label class="full"><input type="checkbox" id="pre_auto_levels"> Niveaux automatiques</label>
+    <div style="display:flex; align-items:center; gap:8px; margin:6px 0 2px">
+      <label class="full" style="margin:0"><input type="checkbox" id="pre_auto_levels"> Niveaux automatiques</label>
+      <button type="button" id="preReset" class="vt-small" title="Aucun prétraitement">Réinitialiser</button>
+    </div>
     <p class="hint">Étire les tons du plus sombre au plus clair.</p>
     <label class="row">Contraste local <span class="v" id="pre_clahe_v"></span>
       <input type="range" id="pre_clahe" min="0" max="100" step="5" value="0"></label>
@@ -941,7 +944,6 @@
     <div class="histo"><canvas id="histo" width="300" height="112" aria-label="Histogramme de luminance et seuils entre les teintes"></canvas></div>
     <div style="display:flex; gap:6px; margin:4px 0">
       <button type="button" id="thrAuto" class="vt-small" title="Revenir aux seuils calculés automatiquement">Seuils automatiques</button>
-      <button type="button" id="preReset" class="vt-small" title="Aucun prétraitement">Réinitialiser</button>
     </div>
     <p class="hint" id="thrHint">Faites glisser un trait de l'histogramme pour déplacer la frontière entre deux teintes
       (les seuils manuels s'activent alors). Sous l'histogramme : la teinte de chaque plage, puis la couleur de la
@@ -1007,6 +1009,7 @@
         </select>
         <p class="hint">Cumulatif : chaque pochoir ouvre sa couleur + les plus foncées. Moins de pièces fragiles et pas de liseré entre couleurs.</p>
         <div class="check"><input type="checkbox" id="skip_support" checked><label for="skip_support">La teinte la plus proche du support reste nue (pas de pochoir)</label></div>
+        <div class="check"><input type="checkbox" id="fill_gaps"><label for="fill_gaps">Combler les trous laissés par les limites du matériau</label></div>
         <div class="check"><input type="checkbox" id="protect_lines"><label for="protect_lines">Protéger les traits fins de la simplification (yeux, sourcils, mèches…)</label></div>
       </div>
     </div>
@@ -1587,7 +1590,7 @@ const PARAMS = ["support_w_mm", "support_h_mm", "support_color", "inner_margin_m
   "image_scale", "image_height_factor", "image_pos_x", "image_pos_y", "margin_mm", "sheet_mode", "sheet_border_mm", "reg_dims", "machine_max_mm", "mat_w_mm", "mat_h_mm", "mat_orient", "reg_corners", "reg_shape", "reg_size_mm", "layer_notches", "sheet_outline",
   "pre_auto_levels", "pre_clahe", "pre_gamma", "manual_thresholds", "thresholds", "pre_saturation", "pre_sharpen", "pre_remove_bg",
   "layer_colors", "layer_effects",
-  "n_layers", "detail", "hue_weight", "color_vividness", "flat_auto", "flat_tolerance", "flat_tolerances", "color_mode", "layering", "skip_support", "protect_lines",
+  "n_layers", "detail", "hue_weight", "color_vividness", "flat_auto", "flat_tolerance", "flat_tolerances", "color_mode", "layering", "skip_support", "fill_gaps", "protect_lines",
   "outline", "outline_target", "outline_method", "outline_sensitivity", "outline_width_mm", "outline_min_length_mm", "outline_subject", "outline_subject_mask", "outline_subject_weak", "outline_subject_de", "outline_subject_gap_every_mm", "outline_subject_gap_mm", "stencil_style", "line_zones", "line_zones_color", "line_sil_color", "outline_auto_color", "outline_color", "outline_zones", "outline_ref", "outline_whole_lines", "outline_line_sens", "outline_close_lines", "outline_channel", "outline_follow_mm",
   ...MAT_FIELDS, "merge_amount", "merge_channel_mm", "merge_channels", "merge_islands", "merge_line_islands",
   "tolerance_mm", "smooth_curves", "spray_mm", "px_per_mm"];
@@ -2794,6 +2797,7 @@ const TIPS = {
   flat_auto: "Aplats automatiques : un îlot d'une teinte est absorbé par la zone qui l'entoure quand la frontière entre eux est peu contrastée (variation douce de luminosité coupée par un seuil, pas un vrai bord). Plus haut = contraste toléré et taille des îlots absorbés plus grands. 0 = désactivé. Les yeux, traits sombres et bords francs restent.",
   flat_tolerance: "Zones d'aplat peintes (onglet Masques, masque Aplats) : chaque zone peinte séparément prend sa teinte principale partout où l'image en est assez proche. 0 = rien ne change ; 50 = les teintes voisines rejoignent la teinte principale ; 100 = toute la zone d'une seule couleur.",
   paintFlat: "Ouvre l'onglet Masques sur le masque Aplats : peignez ou cliquez (outil Objet) chaque zone à remplir d'une seule teinte (visage, fond, vêtement…). Chaque zone séparée est traitée seule.",
+  fill_gaps: "Ce que les limites du matériau retirent d'une couche est donné aux couches qui l'entourent, pour que le support ne se voie pas à travers. Empilement exclusif uniquement. Les formes changent et il peut falloir plus de ponts.",
   protect_lines: "Les traits fins, sombres ou clairs (yeux, sourcils, narines, mèches), gardent leur teinte au lieu d'être absorbés par la zone voisine lors de la simplification. Les traits plus fins que l'ouverture mini disparaissent quand même : utilisez alors « Détails clés estompés ».",
   outline_target: "Pochoir séparé : un pochoir de plus, peint en dernier, de la couleur choisie. Dans une couche : pas de pochoir en plus, les traits sont découpés dans une couche de couleur (plus foncée que la zone qu'ils traversent).",
   skip_support: "La teinte de l'image la plus proche de la couleur du support n'a pas de pochoir : le support reste visible à la place.",
@@ -2933,7 +2937,7 @@ function renderFx(force) {
   $("fxAll").checked = s.on;
   $("fxSync").checked = s.sync; $("fxFreed").value = s.freed;
   const cumul = val("layering") === "cumulative";
-  $("fxSync").disabled = $("fxFreed").disabled = cumul; $("fxExclHint").hidden = !cumul;
+  $("fxSync").disabled = $("fxFreed").disabled = $("fill_gaps").disabled = cumul; $("fxExclHint").hidden = !cumul;
   // focused control kept across the rebuild (keyboard use of the sliders)
   const a = document.activeElement, keep = a && box.contains(a)
     ? { id: a.closest(".fxitem")?.dataset.id, k: a.dataset.k, cls: a.className.split(" ")[0], l: a.closest(".fxlayer")?.dataset.l } : null;

@@ -284,7 +284,7 @@ only) and **Merging**.
   its own tolerance, the slider's; pressing it again brings the mask back to the general tolerance.
   (The *General* flat mask is unrelated to the *Automatic flat areas* slider.)
 - **Layer stacking**:
-  - **Exclusive** (default) – each stencil opens only its own tone (useful for flat, poster-like colours).
+  - **Exclusive** (default) – each stencil opens only its own tone (useful for flat, poster-like colours). The material limits can leave small unpainted gaps between tones: **Fill the gaps left by the material limits** (off by default) gives them to the layers around, within those same limits; shapes change and more bridges may be needed.
   - **Cumulative** – each stencil opens its own tone *and all darker ones*. Layers
     overlap, so small registration errors do not leave gaps.
 - **Protect thin strokes from simplification**: thin dark or light strokes (eyes, eyebrows,
