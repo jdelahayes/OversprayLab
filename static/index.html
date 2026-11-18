@@ -320,13 +320,13 @@
   /* Palette assistant */
   .palmenu .passist { border-top: none; border-bottom: 1px solid var(--line); margin: 0 0 4px; border-radius: 5px 5px 0 0; font-weight: 600; }
   #palAssist { z-index: 58; }
-  .pa { width: min(1160px, calc(100vw - 24px)); height: min(840px, calc(100vh - 24px)); display: flex; flex-direction: column; min-height: 0;
+  .pa { width: calc(100vw - 16px); height: calc(100vh - 16px); display: flex; flex-direction: column; min-height: 0;
         background: var(--panel); color: var(--ink); border: 1px solid var(--line); border-radius: 12px; box-shadow: 0 16px 40px rgba(0,0,0,.45); }
   .pa-head { display: flex; align-items: center; gap: 10px; padding: 10px 14px; border-bottom: 1px solid var(--line); }
   .pa-head h3 { margin: 0; font-size: 15px; }
   .pa-head .hint { margin: 0; flex: 1; min-width: 0; }
   .pa-head .pa-x { width: auto; padding: 2px 9px; font-size: 16px; line-height: 1.2; }
-  .pa-body { flex: 1; min-height: 0; display: grid; grid-template-columns: 300px minmax(0, 1fr); }
+  .pa-body { flex: 1; min-height: 0; display: grid; grid-template-columns: 280px minmax(0, 1fr); }
   .pa-set { overflow-y: auto; padding: 10px 14px; border-right: 1px solid var(--line); background: var(--soft); border-radius: 0 0 0 12px; }
   .pa-set h4 { margin: 12px 0 5px; font-size: 12px; font-weight: 600; }
   .pa-set h4:first-child { margin-top: 0; }
@@ -353,24 +353,24 @@
   .pa-set details { margin-top: 12px; border-top: 1px solid var(--line); padding-top: 8px; }
   .pa-set summary { cursor: pointer; font-size: 12px; font-weight: 600; }
   .pa-reset { width: 100%; margin-top: 10px; font-size: 12px; padding: 4px 6px; }
-  .pa-res { min-height: 0; display: flex; flex-direction: column; gap: 8px; padding: 10px 14px; }
+  .pa-res { min-height: 0; display: flex; flex-direction: column; gap: 6px; padding: 8px 10px; }
   .pa-tools { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
   .pa-tools button { width: auto; font-size: 12px; padding: 4px 10px; }
   .pa-tools .hint { margin: 0; flex: 1; min-width: 160px; }
   .pa-warn { margin: 0; padding: 5px 8px; font-size: 12px; border-radius: 6px; background: var(--soft); border-left: 3px solid var(--accent); }
-  .pa-grid { flex: 1; min-height: 0; overflow-y: auto; display: grid; grid-template-columns: repeat(auto-fill, minmax(215px, 1fr)); gap: 10px; align-content: start; padding: 2px; }
-  .pa-card { position: relative; border: 1px solid var(--line); border-radius: 9px; background: var(--soft); overflow: hidden; }
+  .pa-grid { flex: 1; min-height: 0; overflow: hidden; display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); grid-auto-rows: minmax(0, 1fr); gap: 6px; padding: 2px; }
+  .pa-card { position: relative; display: flex; flex-direction: column; min-width: 0; min-height: 0; border: 1px solid var(--line); border-radius: 9px; background: var(--soft); overflow: hidden; }
   .pa-card.sel { outline: 2px solid var(--accent); outline-offset: 0; border-color: var(--accent); }
-  .pa-pick { display: block; width: 100%; padding: 0; border: none; border-radius: 0; background: none; color: inherit; text-align: left; cursor: pointer; }
-  .pa-pick canvas { display: block; width: 100%; height: 150px; object-fit: contain; background: repeating-conic-gradient(rgba(127,127,127,.16) 0 25%, transparent 0 50%) 0 0 / 14px 14px; }
-  .pa-sw { display: flex; height: 14px; }
+  .pa-pick { flex: 1; min-height: 0; display: flex; flex-direction: column; width: 100%; padding: 0; border: none; border-radius: 0; background: none; color: inherit; text-align: left; cursor: pointer; }
+  .pa-pick canvas { display: block; flex: 1 1 0; width: 100%; height: 0; min-height: 0; object-fit: contain; background: repeating-conic-gradient(rgba(127,127,127,.16) 0 25%, transparent 0 50%) 0 0 / 14px 14px; }
+  .pa-sw { flex: none; display: flex; height: 10px; }
   .pa-sw i { flex: 1; }
-  .pa-foot { display: flex; align-items: center; gap: 4px; min-height: 26px; padding: 3px 5px; }
-  .pa-badges { flex: 1; min-width: 0; display: flex; flex-wrap: wrap; gap: 3px; }
+  .pa-foot { flex: none; display: flex; align-items: center; gap: 4px; height: 24px; padding: 0 4px; }
+  .pa-badges { flex: 1; min-width: 0; display: flex; gap: 3px; overflow: hidden; white-space: nowrap; }
   .pa-badges span { font-size: 10.5px; line-height: 1.5; padding: 0 5px; border-radius: 8px; border: 1px solid var(--line); color: var(--muted); }
   .pa-badges span.weak { color: #dc2626; border-color: #dc2626; }
   .pa-more { flex: none; width: auto; font-size: 11px; padding: 2px 6px; }
-  .pa-layers { display: flex; flex-wrap: wrap; gap: 5px; align-items: center; padding-top: 8px; border-top: 1px solid var(--line); }
+  .pa-layers { display: flex; flex-wrap: wrap; gap: 5px; align-items: center; padding-top: 6px; border-top: 1px solid var(--line); }
   .pa-layers > strong { font-size: 12px; font-weight: 600; margin-right: 3px; }
   .pa-lay { display: inline-flex; align-items: center; gap: 2px; border: 1px solid var(--line); border-radius: 6px; padding: 2px 3px; font-size: 11px; }
   .pa-lay input[type=color] { width: 26px; height: 20px; padding: 0; border: none; background: none; cursor: pointer; }
@@ -379,13 +379,16 @@
   .pa-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
   .pa-actions input { flex: 1 1 150px; min-width: 110px; font-size: 12px; padding: 5px 6px; border: 1px solid var(--line); border-radius: 6px; background: var(--soft); color: var(--ink); }
   .pa-actions button { width: auto; font-size: 12px; padding: 5px 12px; }
-  .pa-msg { flex: 1 1 100%; min-height: 1.2em; margin: 0; }
+  .pa-msg { flex: 1 1 100%; margin: 0; }
+  .pa-msg:empty { display: none; }
   .pa-msg.err { color: #dc2626; }
   @media (max-width: 780px) {
     .pa { height: calc(100vh - 12px); width: calc(100vw - 12px); }
     .pa-body { display: block; overflow-y: auto; }
     .pa-set { border-right: none; border-bottom: 1px solid var(--line); overflow: visible; border-radius: 0; }
-    .pa-grid { overflow: visible; }
+    .pa-grid { overflow: visible; grid-template-columns: repeat(auto-fill, minmax(160px, 1fr)) !important; grid-auto-rows: auto; grid-template-rows: none !important; }
+    .pa-pick { flex: none; }
+    .pa-pick canvas { flex: none; height: 170px; }
   }
   .paledit { position: fixed; z-index: 61; max-height: calc(100vh - 16px); overflow: auto; background: var(--panel);
              border: 1px solid var(--line); border-radius: 10px; padding: 8px 12px 10px; box-shadow: 0 10px 28px rgba(0,0,0,.4); font-size: 12px; }
@@ -6464,7 +6467,7 @@ function setupPalettes() {
 const PA_STYLES = [["fidele", "Fidèle"], ["pop", "Pop"], ["affiche", "Affiche"], ["pastel", "Pastel"], ["vintage", "Vintage"],
   ["neon", "Néon"], ["naturel", "Naturel"], ["duotone", "Duotone"], ["mono", "Monochrome"]];
 const PA_BADGES = { pinned: "Couleurs à l'ouverture", readable: "Très lisible", weak: "Lisibilité faible", close: "Proche de l'image", vivid: "Vive" };
-const PA_COUNT = 6, PA_THUMB = 360;
+const PA_COUNT = 6, PA_THUMB = 640;
 const PA = { S: null, seed: 1, res: [], sel: 0, near: null, locks: {}, targets: [], masks: [], areas: [], hues: [], huesFor: "",
   sig: "", token: 0, raf: 0, back: null, tmp: null, size: [1, 1], opening: null, fresh: false };
 
@@ -6589,6 +6592,7 @@ function setupPaletteAssistant() {
     }
   });
   // hue wheel: the pointer moves the closest chosen hue (first choice when the hues were automatic)
+  new ResizeObserver(() => paLayout()).observe($("paGrid"));
   const wheel = $("paWheel");
   wheel.style.background = `conic-gradient(${Array.from({ length: 13 }, (_, i) => PalGen.lchHex(.72, .14, i * 30)).join(", ")})`;
   let drag = -1;
@@ -6773,9 +6777,24 @@ function paGenerate() {
       <div class="pa-foot"><span class="pa-badges">${[...(p.pinned ? ["pinned"] : []), ...p.badges].map(b => `<span class="${b === "weak" ? "weak" : ""}">${PA_BADGES[b]}</span>`).join("")}</span>
       <button type="button" class="pa-more" data-more="${i}" title="Propose des variantes proches de celle-ci">Plus comme celle-ci</button></div></div>`;
   }).join("") || `<p class="hint">Aucune proposition avec ces réglages.</p>`;
-  paDrawAll(); paRenderLayers();
+  paDrawAll(); paRenderLayers(); paLayout();
   clearTimeout(PA.saveT);
   PA.saveT = setTimeout(() => savePref("palette_assistant", PA.S), 400);
+}
+// Number of columns giving the largest thumbnails for this window and this support format
+function paLayout() {
+  const grid = $("paGrid"), card = grid.querySelector(".pa-card"), n = PA.res.length;
+  if (!card || !n || !grid.clientWidth || matchMedia("(max-width: 780px)").matches) return;
+  const gap = 6, W = grid.clientWidth - 4, H = grid.clientHeight - 4, [aw, ah] = PA.size;
+  const extra = card.querySelector(".pa-sw").offsetHeight + card.querySelector(".pa-foot").offsetHeight + 2;
+  let best = 1, top = 0;
+  for (let c = 1; c <= n; c++) {
+    const r = Math.ceil(n / c), w = (W - gap * (c - 1)) / c, h = (H - gap * (r - 1)) / r - extra;
+    const k = Math.min(w / aw, h / ah);
+    if (k > top) { top = k; best = c; }
+  }
+  grid.style.gridTemplateColumns = `repeat(${best}, minmax(0, 1fr))`;
+  grid.style.gridTemplateRows = `repeat(${Math.ceil(n / best)}, minmax(0, 1fr))`;
 }
 function paDraw(cv, p) {
   const g = cv.getContext("2d"), tmp = PA.tmp, t = tmp.getContext("2d");
