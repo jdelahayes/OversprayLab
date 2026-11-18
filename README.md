@@ -603,7 +603,7 @@ the same settings line up from one layer to the next.
   colour in spraying order. Tick **Simulated render** to add the soft airbrush blur, and **Without
   bridges** to see the result once the bridge traces are retouched (bridges painted over). Use the layer
   buttons **1 2 3…** to hide layers.
-- **Compare** – a before/after slider between two versions, chosen above the view for each side
+- **Compare** – before/after view with a line to drag on the image, between two versions chosen above the view for each side
   (**Left** / **Right**): the original image, the current version or any snapshot of the project
   that holds its computed result (shown as it was saved, in the frame of the current version at the
   same mm scale, with the *Support*, *Simulated render* and *Without bridges* options of the view;

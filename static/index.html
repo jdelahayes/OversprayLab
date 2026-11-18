@@ -112,6 +112,12 @@
   .compare .top { position: absolute; inset: 0; width: 100%; height: 100%; clip-path: inset(0 50% 0 0); }
   /* thin black line, kept 1 screen pixel wide whatever the zoom */
   .compare .split { position: absolute; top: 0; bottom: 0; width: calc(1px / var(--zoom, 1)); transform: translateX(-50%); background: #000; pointer-events: none; }
+  /* wide invisible grip on the line, with a handle; same size on screen whatever the zoom */
+  .compare .splitgrip { position: absolute; top: 0; bottom: 0; left: 50%; width: calc(20px / var(--zoom, 1)); transform: translateX(-50%); pointer-events: auto; cursor: ew-resize; touch-action: none; }
+  .compare .splitgrip::after { content: ""; position: absolute; top: 50%; left: 50%; box-sizing: border-box; width: 12px; height: 12px; margin: -6px 0 0 -6px; transform: scale(calc(1 / var(--zoom, 1)));
+    background: var(--accent); border: 2px solid #fff; border-radius: 50%; box-shadow: 0 0 0 1px rgba(0,0,0,.7), 0 1px 4px rgba(0,0,0,.45); }
+  .compare .splitgrip:hover::after { transform: scale(calc(1.15 / var(--zoom, 1))); }
+  .compare .splitgrip.dragging::after { display: none; }   /* nothing but the line while it is moved */
   .compare .tag { position: absolute; top: 6px; font: 600 11px/1.4 system-ui, sans-serif; background: rgba(0,0,0,.55); color: #fff; padding: 1px 6px; border-radius: 4px; }
   /* Preview toolbar */
   .viewtools { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 10px; margin-bottom: 8px; font-size: 13px; }
@@ -177,8 +183,7 @@
   .comparebar { display: flex; align-items: center; gap: 6px 10px; flex-wrap: wrap; flex: 1 1 auto; font-size: 12px; }
   .comparebar label { display: inline-flex; align-items: center; gap: 4px; color: var(--muted); }
   .comparebar select { max-width: 180px; }
-  .comparebar .cmpside { display: inline-flex; align-items: center; gap: 4px 6px; flex-wrap: wrap; }
-  #compareRange { flex: 1 1 160px; min-width: 120px; margin: 0; accent-color: var(--accent); }
+  .comparebar .cmpsel { display: inline-flex; align-items: center; gap: 4px 10px; flex-wrap: wrap; }
   /* side by side: one pane per version, each in its own support frame */
   .sbs { display: flex; gap: 6px; align-items: center; justify-content: center; width: 100%; line-height: 0; }
   .sbs .sbspane { position: relative; flex: 1 1 0; min-width: 0; display: flex; justify-content: flex-end; align-items: center; }
@@ -1405,14 +1410,13 @@
       <input type="checkbox" id="preview_sim" hidden>
       <input type="checkbox" id="preview_nobridges" hidden>
     </span>
-    <!-- Compare: versions on each side, their layers, slider and side by side (toolbar above the view) -->
+    <!-- Compare: versions on each side, their layers and side by side (toolbar above the view) -->
     <div class="comparebar" id="compareBar" hidden>
-      <span class="cmpside"><label title="Version affichée à gauche du curseur">Gauche <select id="cmpLeft"></select></label>
-        <span class="vt-toggles" id="cmpLayL" role="group" aria-label="Couches affichées à gauche"></span></span>
-      <button type="button" class="vt-opt cmpslide" id="cmpSwap" aria-pressed="false" title="Affiche toute la version de gauche, puis toute celle de droite, à chaque clic ; le curseur reprend la main dès qu'on le déplace">⇄ Gauche / droite</button>
-      <input type="range" class="cmpslide" id="compareRange" min="0" max="100" value="50" aria-label="Position de la comparaison">
-      <span class="cmpside"><label title="Version affichée à droite du curseur">Droite <select id="cmpRight"></select></label>
-        <span class="vt-toggles" id="cmpLayR" role="group" aria-label="Couches affichées à droite"></span></span>
+      <span class="vt-toggles" id="cmpLayL" role="group" aria-label="Couches affichées à gauche"></span>
+      <span class="cmpsel"><label title="Version affichée à gauche de la ligne">Gauche <select id="cmpLeft"></select></label>
+        <label title="Version affichée à droite de la ligne">Droite <select id="cmpRight"></select></label></span>
+      <span class="vt-toggles" id="cmpLayR" role="group" aria-label="Couches affichées à droite"></span>
+      <button type="button" class="vt-opt cmpslide" id="cmpSwap" aria-pressed="false" title="Affiche toute la version de gauche, puis toute celle de droite, à chaque clic ; la ligne reprend la main dès qu'on la déplace">⇄ Gauche / droite</button>
       <button type="button" class="vt-opt" id="cmpSbs" aria-pressed="false" title="Affiche les deux versions l'une à côté de l'autre, au lieu de les superposer avec le curseur">Côte à côte</button>
     </div>
   </div>
@@ -5399,14 +5403,21 @@ async function renderPreview(st) {
     cv.dataset.mm = LAST.support_mm.join(",");      // the right side sets the size (an image for the original)
     top.classList.add("top");
     wrap.append(cv, top);
-    wrap.insertAdjacentHTML("beforeend", `<div class="split"></div>`);
-    const split = wrap.querySelector(".split");
+    wrap.insertAdjacentHTML("beforeend", `<div class="split"><div class="splitgrip" title="Glisser pour déplacer la séparation"></div></div>`);
+    const split = wrap.querySelector(".split"), grip = split.firstChild;
     const apply = v => { top.style.clipPath = `inset(0 ${100 - v}% 0 0)`; split.style.left = `${v}%`; };
-    // slider and labels outside the image, so that they stay usable once zoomed in
-    const rg = $("compareRange");
-    const set = v => { COMPARE_POS = v; rg.value = v; apply(v); compareButtons(); };
-    rg.value = COMPARE_POS;
-    rg.oninput = () => set(+rg.value);
+    const set = v => { COMPARE_POS = v; apply(v); compareButtons(); };
+    // the line itself is dragged on the view (the transformed image gives the position at any zoom)
+    const dragTo = e => { const r = top.getBoundingClientRect(); set(Math.round(clamp((e.clientX - r.left) / r.width * 100, 0, 100) * 10) / 10); };
+    grip.onpointerdown = e => {
+      if (e.button !== 0) return;
+      e.preventDefault(); e.stopPropagation();
+      grip.setPointerCapture(e.pointerId);
+      grip.classList.add("dragging");
+      grip.onpointermove = dragTo;
+    };
+    grip.onpointerup = grip.onpointercancel = () => { grip.onpointermove = null; grip.classList.remove("dragging"); };
+    grip.ondblclick = e => e.stopPropagation();          // no "fit to the view" from the line
     // whole left version, then whole right version, at each click
     $("cmpSwap").onclick = () => set(COMPARE_POS === 100 ? 0 : 100);
     apply(COMPARE_POS);
@@ -5421,7 +5432,7 @@ async function renderPreview(st) {
   applyZoom();
 }
 
-// ---------------- Compare tab: a version on each side of the slider ----------------
+// ---------------- Compare tab: a version on each side of the line ----------------
 // "orig" = original on the support, "cur" = current preview, "snap:v<n>" = computed result saved
 // in a snapshot of the project (fetched once: a snapshot never changes)
 // sbs = side by side instead of the slider; hid = numbers of the layers hidden on each side
@@ -5537,7 +5548,7 @@ function fitSideBySide(wrap) {
     p.firstElementChild.insertAdjacentHTML("beforeend", `<span class="tag">${p._tag}</span>`);
   }
 }
-// pressed states of the Compare bar; the slider and its buttons are useless side by side
+// pressed states of the Compare bar; the left / right button is useless side by side
 function compareButtons() {
   $("cmpSwap").setAttribute("aria-pressed", String(COMPARE_POS === 100 || COMPARE_POS === 0));
   $("cmpSbs").setAttribute("aria-pressed", String(CMP.sbs));
@@ -5613,6 +5624,7 @@ function setupZoom() {
   // capture phase: the pan takes over before the editors' own handlers
   st.addEventListener("pointerdown", e => {
     if (ZOOM.z <= 1 || !zoomTarget()) return;
+    if (e.button === 0 && !space && e.target.closest(".splitgrip")) return;   // the comparison line is dragged
     const ok = e.button === 1 || (e.button === 0 && (space || !editorView()));
     if (!ok) return;
     pan = { x: e.clientX - ZOOM.tx, y: e.clientY - ZOOM.ty, id: e.pointerId };

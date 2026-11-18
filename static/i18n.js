@@ -51,11 +51,11 @@ try {
     "Comparer à l'original": "Compare with original", "Original": "Original", "Comparer": "Compare",
     "Deux versions de part et d'autre d'un curseur : l'original, la version courante ou une snapshot du projet, au choix de chaque côté": "Two versions on either side of a slider: the original, the current version or a snapshot of the project, chosen for each side",
     "Gauche": "Left", "Droite": "Right",
-    "Version affichée à gauche du curseur": "Version shown left of the slider", "Version affichée à droite du curseur": "Version shown right of the slider",
+    "Version affichée à gauche de la ligne": "Version shown left of the line", "Version affichée à droite de la ligne": "Version shown right of the line",
     "Rendu de la snapshot indisponible": "Snapshot render unavailable",
     "⇄ Gauche / droite": "⇄ Left / right",
     "Couches affichées à gauche": "Layers shown on the left", "Couches affichées à droite": "Layers shown on the right", "Côte à côte": "Side by side",
-    "Affiche toute la version de gauche, puis toute celle de droite, à chaque clic ; le curseur reprend la main dès qu'on le déplace": "Shows the whole left version, then the whole right one, at each click; the slider takes over again as soon as it is moved",
+    "Affiche toute la version de gauche, puis toute celle de droite, à chaque clic ; la ligne reprend la main dès qu'on la déplace": "Shows the whole left version, then the whole right version, at each click; the line takes over again as soon as it is moved",
     "Affiche les deux versions l'une à côté de l'autre, au lieu de les superposer avec le curseur": "Shows both versions next to each other, instead of overlaying them with the slider",
     "Pas de résultat enregistré dans cette snapshot": "No computed result saved in this snapshot",
     "Masques peints au pinceau : zones des détails clés (pochoir de contours) ou sujet à garder (fond supprimé)": "Brush-painted masks: key-detail areas (outline stencil) or subject to keep (background removed)",
@@ -299,7 +299,7 @@ try {
       "Flat areas mask: each painted zone (or selected object) is filled with its main tone, without islands of other tones (tolerance: Simplification section)",
     "Peignez ou cliquez (outil Objet) chaque zone à remplir d'une seule teinte : visage, fond, vêtement… Chaque zone séparée prend sa teinte principale (tolérance : section Simplification).":
       "Paint or click (Object tool) each zone to fill with a single tone: face, background, clothing… Each separate zone takes its main tone (tolerance: Simplification section).",
-    "Partie de l'image utilisée (recadrage)": "Part of the image used (crop)", "Position de la comparaison": "Comparison position",
+    "Partie de l'image utilisée (recadrage)": "Part of the image used (crop)", "Glisser pour déplacer la séparation": "Drag to move the divider", 
     "Histogramme de luminance et seuils entre les teintes": "Luminance histogram and thresholds between tones",
     "Chargez une image pour voir l'histogramme": "Load an image to see the histogram",
     // Surface to paint
