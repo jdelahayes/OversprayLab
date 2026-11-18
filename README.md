@@ -195,6 +195,9 @@ Two blocks: **Crop** (crop frame, size, fit icons, inner margin) and **Alignment
 **Crop** tab – drag the frame handles to keep only the part of the image you want. The aspect
 ratio can be free, the support's, or fixed (1:1, 4:3, 3:4, 16:9, 9:16).
 
+Cropping leaves the image at its scale and place on the support: the stencil sheet and the marks
+follow the frame, and **Fit to stencil** enlarges the cropped image again if needed.
+
 ![Crop view, with the Image position section open](docs/screenshots/crop.jpg)
 
 **Layout** tab – place the image on the support:
@@ -502,6 +505,11 @@ section. Choose how the stencil sheet relates to the support:
 - Small square **notches** at the top of each sheet give the layer number.
 - For "inside the support" modes, the ruler measurements are shown under the view (*Ruler
   positioning* tab of the panel) and in the Layout view, and are exported in the files.
+- The marks follow the crop and the layout in the views. They turn **red** when the rules can no
+  longer be met. Sheet inside the support: the sheet falls off the support on the side of the mark
+  (that part is also shown in red, with the **Support** button on), the mark leaves the support, or
+  the border is too narrow for it. Sheet around the support: a mark moved into a support corner
+  (margin too small) touches the visible image.
 
 ### 5.8 Cutting machine
 

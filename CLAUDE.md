@@ -80,6 +80,8 @@ Hard-won constraints, verified by the author in Silhouette Studio – do not "cl
 
 ## Testing in the browser
 
+- Browser tests run in **Chrome** (Claude in Chrome extension), on the port 5001 instance; do not use
+  Edge, headless or not. If the extension is not connected, say so instead of switching browser.
 - Never alter the author's saved state: set `NO_REMEMBER = true` in the page before changing
   settings (otherwise localStorage `overspraylab.*` is overwritten; keys of the former name
   `stencilit.*` are migrated at the top of `i18n.js`), and back up / restore
