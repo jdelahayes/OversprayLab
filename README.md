@@ -132,7 +132,8 @@ Open the SVG files of the zip in Silhouette Studio, cut, and spray layer 1, 2, 3
   values. Hover any setting to get a tooltip explaining it.
 - **Centre – the views** (tabs) and, above the view, the layer buttons **1 2 3 …** to hide/show
   layers, plus the **Support**, **Mat**, **Sheet** and **Marks** buttons to show the support, the
-  cutting mat, the material sheet and the registration marks in every view.
+  cutting mat, the material sheet and the registration marks in every view. The **Background** list
+  sets the colour behind the view (checkerboard, white, greys or black).
   In every view the **mouse wheel zooms** around the cursor. To move the zoomed image, drag it in the
   computed views (Preview, Compare, Original, a single layer); in Crop, Layout and Masks, where the
   left button edits, drag with the **middle button** or hold **Space** while dragging. A
