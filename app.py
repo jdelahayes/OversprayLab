@@ -544,10 +544,32 @@ def subject_area(sess, lay, shape, source: str = "subject"):
 
 @app.post("/api/process")
 def api_process():
+    """Computes the stencils. `run` identifies the computation for /api/process/cancel; a cancelled
+    one answers {"cancelled": true} and leaves the last complete result of the session in place."""
     data = request.get_json(force=True)
     sess = SESSIONS.get(data.get("id", ""))
     if not sess:
         return jsonify(error="Session inconnue, rechargez l'image"), 404
+    run = data.get("run")
+    try:
+        with pl.cancellable(None if run is None else lambda: sess.get("calc_cancel") == run):
+            return compute(sess, data)
+    except pl.Cancelled:
+        return jsonify(cancelled=True)
+
+
+@app.post("/api/process/cancel")
+def api_process_cancel():
+    """Stops a computation replaced by a newer one (it ends at its next check)."""
+    data = request.get_json(force=True)
+    sess = SESSIONS.get(data.get("id", ""))
+    if not sess:
+        return jsonify(error="Session inconnue, rechargez l'image"), 404
+    sess["calc_cancel"] = data.get("run")
+    return jsonify(ok=True)
+
+
+def compute(sess, data):
     p = pl.Params.from_dict(data.get("params", {}))
     lay, warnings = pl.resolve_layout(p, sess["img"].shape)
     t0 = time.perf_counter()
@@ -574,12 +596,8 @@ def api_process():
         res = pl.recolor(sess["result"], p) if recolored else pl.build(sess["prep"], p, zone_regions=regions)
     except teed.TeedError as e:          # learned edges: model missing or unreadable
         return jsonify(error=str(e)), 503
-    sess["geom"] = geom
     if p.stencil_style == "line" and not res.layers:
         warnings.append("Trait seul : aucun trait (cochez les détails clés, la silhouette ou le coloriage)")
-    sess["result"] = res
-    sess["material"] = data.get("material")
-    sess["ui"] = data.get("ui")          # full interface state, for the project file
     sheet = hex_to_bgr((data.get("material") or {}).get("sheet_color", "#c8d3dc"))
     # Preview layers (support area): layer colour + transparency = openings.
     # The browser stacks them itself -> hiding a layer or toggling the blur is instant.
@@ -602,9 +620,10 @@ def api_process():
     # Images of the previous answer reused when only paints changed: overlays and blurred masks
     # do not depend on the colour, a layer view only on its own colour (kept: entries used now)
     old_cache = sess.get("png_cache", {}) if recolored else {}
-    cache = sess["png_cache"] = {}
+    cache = {}
 
     def cached(key, make):
+        pl.check_cancel()
         cache[key] = old_cache[key] if key in old_cache else make()
         return cache[key]
 
@@ -690,6 +709,13 @@ def api_process():
         recolored=recolored,     # colours only: the cut of the previous computation was kept
         seconds=round(time.perf_counter() - t0, 2),
     )
+    pl.check_cancel()
+    # stored only now: a cancelled computation leaves the previous result whole
+    sess["geom"] = geom
+    sess["result"] = res
+    sess["png_cache"] = cache
+    sess["material"] = data.get("material")
+    sess["ui"] = data.get("ui")  # full interface state, for the project file
     sess["last_out"] = out       # answer kept for the snapshots (shown again without computing)
     return jsonify(out)
 

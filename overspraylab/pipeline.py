@@ -6,6 +6,7 @@ in mm.
 """
 from __future__ import annotations
 
+import contextvars
 import io
 import json
 import math
@@ -13,6 +14,7 @@ import re
 import os
 import threading
 from collections import OrderedDict
+from concurrent.futures import wait as wait_futures
 from hashlib import blake2b
 from dataclasses import dataclass, field, fields, replace
 
@@ -21,6 +23,7 @@ import numpy as np
 
 from . import effects as fxmod
 from . import teed
+from .cancel import Cancelled, cancellable, check_cancel  # noqa: F401  (used through this module by app.py)
 
 
 OUTLINE_METHODS = ("canny", "xdog", "fdog", "ridge", "teed")
@@ -666,7 +669,9 @@ def prepare(img: np.ndarray, p: Params, lay: Layout, fg_src: np.ndarray | None =
     h0, w0 = src.shape[:2]
     interp = cv2.INTER_AREA if W < w0 else cv2.INTER_CUBIC
     raw = cv2.resize(src, (W, H), interpolation=interp)
+    check_cancel()
     resized = preprocess_image(raw, p, ppm)
+    check_cancel()
     fg = None
     if p.pre_remove_bg and fg_src is not None:
         fg = cv2.resize(fg_src[sy0:sy1, sx0:sx1].astype(np.uint8) * 255, (W, H),
@@ -681,7 +686,9 @@ def prepare(img: np.ndarray, p: Params, lay: Layout, fg_src: np.ndarray | None =
     sm = resized.copy()
     iters = 1 + int(round((1 - d) * 3))
     for _ in range(iters):
+        check_cancel()
         sm = cv2.bilateralFilter(sm, 7, 15 + (1 - d) * 55, 3 + (1 - d) * 6)
+    check_cancel()
 
     k = p.n_layers + (1 if p.skip_support else 0)
     lab = cv2.cvtColor(sm, cv2.COLOR_BGR2LAB).astype(np.float32)
@@ -704,6 +711,7 @@ def prepare(img: np.ndarray, p: Params, lay: Layout, fg_src: np.ndarray | None =
     k_eff = max(1, k_eff)
     crit = (cv2.TERM_CRITERIA_EPS + cv2.TERM_CRITERIA_MAX_ITER, 60, 0.2)
     _, _, centers = cv2.kmeans(X[idx], k_eff, None, crit, 3, cv2.KMEANS_PP_CENTERS)
+    check_cancel()
 
     # L* luminance (0..100) of the smoothed image: histogram and equivalent automatic thresholds
     Lh = L100[fg] if fg is not None else L100.ravel()
@@ -723,6 +731,7 @@ def prepare(img: np.ndarray, p: Params, lay: Layout, fg_src: np.ndarray | None =
         best = np.full(len(X), np.inf, np.float32)
         labels = np.zeros(len(X), np.int32)
         for i, c in enumerate(centers):
+            check_cancel()
             dist = ((X - c) ** 2).sum(axis=1)
             upd = dist < best
             best[upd] = dist[upd]
@@ -734,6 +743,7 @@ def prepare(img: np.ndarray, p: Params, lay: Layout, fg_src: np.ndarray | None =
     r = (0.15 + (1 - d) * 1.6) * p.px_per_mm
     before = labels
     labels = majority_filter(labels, n_lab, r)
+    check_cancel()
     if p.protect_lines:
         # thin strokes (dark or light) keep their own tone instead of being swallowed by the area around
         prot = thin_features(L100, p.px_per_mm)
@@ -741,6 +751,7 @@ def prepare(img: np.ndarray, p: Params, lay: Layout, fg_src: np.ndarray | None =
             prot &= fg
         labels = np.where(prot, before, labels)
 
+    check_cancel()
     # Tones sorted light -> dark by their mean lightness on the smoothed, preprocessed image
     # (the image the cut is computed on)
     lab_full = lab.reshape(H, W, 3)
@@ -766,10 +777,12 @@ def prepare(img: np.ndarray, p: Params, lay: Layout, fg_src: np.ndarray | None =
         m = cv2.resize(src[sy0:sy1, sx0:sx1], (W, H), interpolation=cv2.INTER_NEAREST) > 0
         return m & fg if fg is not None else m
 
+    check_cancel()
     if p.flat_auto > 0 or flat_src is not None or forced:
         flab = _flat_lab(lab_full, gray)
         if p.flat_auto > 0:
             labels = flatten_auto(labels, n_used, flab, p.flat_auto, inside if fg is not None else None, ppm)
+            check_cancel()
         if flat_src is not None:
             zones_m = zone_map(flat_src)
             if zones_m.any():
@@ -780,12 +793,14 @@ def prepare(img: np.ndarray, p: Params, lay: Layout, fg_src: np.ndarray | None =
     flat_zones = zone_map(flat_src) if flat_src is not None else None
     flat_forced_zones = {}
     for t, src in sorted(forced.items()):
+        check_cancel()
         zones_m = zone_map(src)
         if zones_m.any():
             flat_forced_zones[t] = zones_m
             labels = flatten_zones(labels, n_used, flab, zones_m, p.flat_tol(f"t{t}"), forced=t)
     # Paint colours measured on the original photo (resized, without preprocessing) over the same
     # zones: preprocessing helps the cut but must not dull or shift the colours
+    check_cancel()
     lab_raw = cv2.cvtColor(raw, cv2.COLOR_BGR2LAB).astype(np.float32)
     zones = [(labels_c == new) & inside for new in range(len(used))]
     # a tone absorbed everywhere by the flat areas keeps the colour of its former zone
@@ -871,6 +886,7 @@ def majority_filter(labels: np.ndarray, k: int, r: float) -> np.ndarray:
     acc = np.full(labels.shape, -1.0, np.float32)
     out = labels.copy()
     for i in range(k):
+        check_cancel()
         m = (labels == i).astype(np.float32)
         if not m.any():
             continue
@@ -1067,6 +1083,7 @@ def flatten_zones(labels: np.ndarray, k: int, lab: np.ndarray, zones: np.ndarray
 # --------------------------------------------------------------------------
 
 def clean_mask(mask: np.ndarray, p: Params, extra_area_mm2: float = 0.0) -> np.ndarray:
+    check_cancel()
     ppm = p.px_per_mm
     m = mask
     r_open = p.min_opening_mm * ppm / 2
@@ -1075,6 +1092,7 @@ def clean_mask(mask: np.ndarray, p: Params, extra_area_mm2: float = 0.0) -> np.n
     r_close = p.min_strip_mm * ppm / 2
     if r_close >= 0.5:
         m = cv2.morphologyEx(m, cv2.MORPH_CLOSE, disk(r_close))
+    check_cancel()
     amin = int((p.min_area_mm2 + extra_area_mm2) * ppm * ppm)
     if amin > 1:
         m = remove_small(m, amin)
@@ -1181,6 +1199,7 @@ def merge_zones(opening: np.ndarray, p: Params, hidden: np.ndarray | None = None
     them are kept too, unless `merge_line_islands` (the lines themselves are never closed).
     Modifies `opening` in place; returns (mask of the changed areas, number of merges).
     """
+    check_cancel()
     merged = np.zeros(opening.shape, bool)
     amax = merge_area_mm2(p.merge_amount) * p.px_per_mm ** 2
     if amax <= 0 or not (p.merge_channels or p.merge_islands):
@@ -1343,6 +1362,7 @@ def add_bridges(opening: np.ndarray, p: Params, hidden: np.ndarray | None = None
         # processed from nearest to farthest from the frame (much faster than recomputing
         # everything after each island). A bridge may stop on another island (chain): both
         # then form a group, linked to the frame in the next pass.
+        check_cancel()
         material = (opening == 0).astype(np.uint8)
         n, lab, stats, cents = cv2.connectedComponentsWithStats(material, connectivity=4)
         main = lab[0, 0]
@@ -1374,6 +1394,7 @@ def add_bridges(opening: np.ndarray, p: Params, hidden: np.ndarray | None = None
                 break
             if i in touched:
                 continue
+            check_cancel()
             want = max(p.min_bridges, 2 if stats[i, cv2.CC_STAT_AREA] > double_px else 1)
             cands = _candidates(lab, i, stats[i], cents[i], dist, near, hidden, dv, ppm,
                                 wide=want > 1, bw=bw)
@@ -1578,6 +1599,7 @@ def _candidates(lab, i, st, cent, dist, near, hidden, dmin, ppm, max_pts=96, wid
 
 def vectorize(opening: np.ndarray, p: Params) -> list[np.ndarray]:
     """Closed outlines in mm (list of Nx2 arrays)."""
+    check_cancel()
     ppm = p.px_per_mm
     cnts, _ = cv2.findContours(opening, cv2.RETR_LIST, cv2.CHAIN_APPROX_NONE)
     sigma = max(0.8, 0.2 * ppm)
@@ -1741,7 +1763,21 @@ def _run_jobs(jobs: list) -> list:
     if PARALLEL == "none" or len(jobs) < 2:
         return [layer_job(j) for j in jobs]
     try:
-        return list(_pool().map(layer_job, jobs))
+        pool = _pool()
+        if PARALLEL == "process":      # a job already started in another process runs to its end
+            futures = [pool.submit(layer_job, j) for j in jobs]
+        else:                          # each thread sees the cancellation of this computation
+            futures = [pool.submit(contextvars.copy_context().run, layer_job, j) for j in jobs]
+        pending = set(futures)
+        try:
+            while pending:
+                _, pending = wait_futures(pending, timeout=0.05)
+                check_cancel()
+        except Cancelled:
+            for f in futures:
+                f.cancel()
+            raise
+        return [f.result() for f in futures]
     except Exception:                  # pool unavailable (e.g. child process killed): serial
         return [layer_job(j) for j in jobs]
 
@@ -1875,6 +1911,7 @@ def build(prep: Prepared, p: Params, outline_region: np.ndarray | None = None,
     # Each layer (bridges + vectorisation) is independent of the others: computed in parallel
     jobs = []
     for li, ci in enumerate(color_ids):
+        check_cancel()
         cleaned = cleaned_all[li]
         hidden = None
         if li + 1 < len(color_ids):
@@ -1905,6 +1942,7 @@ def build(prep: Prepared, p: Params, outline_region: np.ndarray | None = None,
     out_masks = []                         # outline stencils done (image area), for their effects
     sim = sim_pre = None
     for g in order:
+        check_cancel()
         if sim is None:
             sim = res.detect_sim = image_sim(res)
             if need_pre:           # same render (lines added to the layers included), effects left out
@@ -2179,6 +2217,7 @@ def _fdog_strength(chans: list, ppm: float, dark: bool) -> np.ndarray:
     short hysteresis. The direction comes from the smoothed structure tensor of the first channel
     (an iterative Edge Tangent Flow gave the same lines, rounded the T-junctions and was 3x
     slower). Cached: the detection preview recomputes it at each change of sensitivity."""
+    check_cancel()
     h = blake2b(digest_size=16)
     for c in chans:
         h.update(np.ascontiguousarray(c, np.float32).tobytes())
@@ -2214,6 +2253,7 @@ def _fdog_strength(chans: list, ppm: float, dark: bool) -> np.ndarray:
         px, py = X.copy(), Y.copy()
         dx, dy = sgn * tx, sgn * ty
         for i in range(1, int(np.ceil(2 * sm / FDOG_STEP_PX)) + 1):
+            check_cancel()
             px += FDOG_STEP_PX * dx; py += FDOG_STEP_PX * dy
             ntx, nty = samp(tx, px, py), samp(ty, px, py)
             flip = (ntx * dx + nty * dy) < 0          # the tangent has no sign: keep going forward
@@ -2817,12 +2857,16 @@ def detect_key_details(prep: Prepared, sim: np.ndarray, p: Params,
             g2 += gx * gx + gy * gy
         return np.sqrt(g2)
 
+    check_cancel()
     lab_ref = lab(ref)
     g_ref = grad(lab_ref)
+    check_cancel()
     g_sim = grad(lab(sim))
+    check_cancel()
     # the paints reproduce the original photo: the loss of contrast is measured against it
     # (lines are still detected on the preprocessed image, sharper and more contrasted)
     g_orig = g_ref if prep.raw is None or prep.raw is ref else grad(lab(prep.raw))
+    check_cancel()
 
     # 1. Candidate lines (none when only the silhouette is drawn)
     if not p.outline:
@@ -2865,6 +2909,7 @@ def detect_key_details(prep: Prepared, sim: np.ndarray, p: Params,
         if method in ("xdog", "fdog"):   # faint lines of a low-contrast image stay candidates
             floor *= _contrast_factor(lab_ref[..., 0], region)
         edges = _crest(strength, floor)
+    check_cancel()
     b = max(2, int(round(0.5 * ppm)))   # no line on the edge of the image itself
     edges[:b, :] = False; edges[-b:, :] = False; edges[:, :b] = False; edges[:, -b:] = False
     if region is not None:               # mask painted by the user: search only inside
@@ -2888,7 +2933,9 @@ def detect_key_details(prep: Prepared, sim: np.ndarray, p: Params,
     cand = edges & (loss >= loss_min)
     # effective width: never less than the material's minimum opening (otherwise not cuttable)
     width = max(p.outline_width_mm, p.min_opening_mm * 1.05)
+    check_cancel()
     sil, gaps = subject_silhouette(prep, p, sim, gaps=True)   # selected subject's outline, always kept
+    check_cancel()
     if not cand.any():
         z = np.zeros(ref.shape[:2], bool)
         if sil is None:
@@ -3125,7 +3172,9 @@ def simulate_sheet(res: Result) -> np.ndarray:
     canvas[:] = res.support_color
     sig = max(0.3, p.spray_mm * p.px_per_mm)
     for L in res.layers:
+        check_cancel()
         mask = cv2.GaussianBlur(L.opening.astype(np.float32) / 255.0, (0, 0), sig)
+        check_cancel()
         a = (0.97 * mask)[..., None]
         canvas = canvas * (1 - a) + L.color.astype(np.float32) * a
     return np.clip(canvas, 0, 255).astype(np.uint8)

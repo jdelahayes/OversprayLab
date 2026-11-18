@@ -26,6 +26,8 @@ from dataclasses import dataclass, field
 import cv2
 import numpy as np
 
+from .cancel import check_cancel
+
 # --------------------------------------------------------------------------
 # Effect catalogue (served to the browser by /api/effects)
 # --------------------------------------------------------------------------
@@ -1245,6 +1247,7 @@ def apply_all(masks: list, effects: dict, p, image_bgr: np.ndarray, off_px: tupl
         ctx.index = i
         m = out[i]
         for kind, args in stack:
+            check_cancel()
             m = APPLY[kind](m, ctx, args)
         out[i] = m
         done.add(i)
@@ -1266,5 +1269,6 @@ def apply_alone(mask: np.ndarray, stack: list, p, image_bgr: np.ndarray, off_px:
                   index=len(below))
     m = mask
     for kind, args in stack:
+        check_cancel()
         m = APPLY[kind](m, ctx, args)
     return clean_after(m, p, None)

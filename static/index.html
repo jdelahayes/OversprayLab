@@ -4499,6 +4499,8 @@ function renderReco() {
 // Automatic computation (on every change) or on demand: in manual mode, a change only
 // marks the result as outdated ("Recompute" button highlighted).
 let DIRTY = false, GEN = 0;
+// computation running: CALC_RUN = { sid, id, cancelled }, CALC_GEN = value of GEN when it started
+let CALC_RUN = null, CALC_N = 0, CALC_GEN = 0;
 const autoCalc = () => $("auto_calc").checked;
 function schedule() {
   if (!SID) return;
@@ -4562,33 +4564,49 @@ function historyGo(step) {
 function updateCalcBtn() {
   const b = $("calcBtn");
   b.hidden = autoCalc() || !SID;
-  b.disabled = busy;
-  b.classList.toggle("dirty", DIRTY && !busy);
-  b.textContent = busy ? "Calcul en cours…" : DIRTY ? "Recalculer ●" : "À jour ✓";
+  const running = busy && GEN === CALC_GEN;   // settings changed since it started: it can be replaced
+  b.disabled = running;
+  b.classList.toggle("dirty", DIRTY && !running);
+  b.textContent = running ? "Calcul en cours…" : DIRTY ? "Recalculer ●" : "À jour ✓";
   b.title = DIRTY ? "Des réglages ont changé depuis le dernier calcul : cliquer pour recalculer (Ctrl + Entrée)"
                   : "Le résultat correspond aux réglages actuels (cliquer pour recalculer quand même)";
 }
 
+// A computation made obsolete is stopped on the server: the next one starts as soon as it answers
+function cancelCalc() {
+  if (!CALC_RUN || CALC_RUN.cancelled) return;
+  CALC_RUN.cancelled = true;
+  fetch("/api/process/cancel", { method: "POST", headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ id: CALC_RUN.sid, run: CALC_RUN.id }) }).catch(() => {});
+}
 async function process() {
   if (!SID) return;
   historyRecord();
-  if (busy) { again = true; return; }
+  if (busy) {
+    again = true;
+    if (CALC_RUN && (CALC_RUN.sid !== SID || CALC_KEY !== snapKey())) cancelCalc();   // same state: it goes on
+    return;
+  }
   CALC_KEY = snapKey();       // state being computed (a snapshot needs an up-to-date result)
   busy = true; status("Calcul en cours…");
   document.querySelector("header").classList.add("busy");
-  const gen = GEN; updateCalcBtn();
+  const gen = CALC_GEN = GEN; updateCalcBtn();
   const sid = SID;
+  CALC_RUN = { sid, id: `${Date.now()}.${++CALC_N}`, cancelled: false };
   try {
     const r = await fetch("/api/process", { method: "POST", headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ id: SID, params: params(), material: material(), ui: uiState() }) });
+      body: JSON.stringify({ id: SID, run: CALC_RUN.id, params: params(), material: material(), ui: uiState() }) });
     const j = await r.json();
     if (!r.ok) throw new Error(j.error || "Erreur");
-    j.sid = sid;              // image the result belongs to (the mask background checks it)
-    IMG_CACHE = new Map(); LAST = j; render(); renderZones(); rememberSettings(); updateSummaries(); paRefresh();
-    status(j.recolored ? `Couleurs mises à jour en ${j.seconds} s (découpe inchangée)` : `Calculé en ${j.seconds} s`);
-    if (GEN === gen) DIRTY = false;               // nothing changed during the computation
-    $("export").disabled = false;
+    if (!j.cancelled) {
+      j.sid = sid;            // image the result belongs to (the mask background checks it)
+      IMG_CACHE = new Map(); LAST = j; render(); renderZones(); rememberSettings(); updateSummaries(); paRefresh();
+      status(j.recolored ? `Couleurs mises à jour en ${j.seconds} s (découpe inchangée)` : `Calculé en ${j.seconds} s`);
+      if (GEN === gen) DIRTY = false;             // nothing changed during the computation
+      $("export").disabled = false;
+    }
   } catch (e) { status(e.message, true); }
+  CALC_RUN = null;
   busy = false;
   if (!again) document.querySelector("header").classList.remove("busy");
   updateCalcBtn();
