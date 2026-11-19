@@ -82,7 +82,7 @@ try {
       "Saves the current version (image, masks, settings and computed result) as a new snapshot in the project folder; a snapshot never changes afterwards",
     "Nom (facultatif)": "Name (optional)", "Nom de la snapshot": "Snapshot name",
     "Cliquer pour renommer la snapshot": "Click to rename the snapshot",
-    "Version courante": "Current version",
+    "Version courante": "Current version", "Image source": "Source image", "Image prétraitée": "Preprocessed image",
     "Exporter cette snapshot en zip : pochoirs et projet rechargeable ne contenant qu'elle": "Export this snapshot as a zip: stencils and a reloadable project holding only this snapshot",
     "Exporter la snapshot": "Export the snapshot",
     "Supprimer cette snapshot (définitivement : son répertoire est effacé)": "Delete this snapshot (for good: its folder is erased)",
@@ -101,6 +101,17 @@ try {
     "Ce dossier de projet ne contient aucune snapshot": "This project folder holds no snapshot",
     "Zip exporté par OversprayLab (image, masques, réglages et snapshots), ou seulement son fichier infos.json (réglages appliqués à l'image chargée)":
       "Zip exported by OversprayLab (image, masks, settings and snapshots), or just its infos.json file (settings applied to the loaded image)",
+    "Tous les projets…": "All projects…", "Tous les projets": "All projects",
+    "Tous les projets du dossier des projets, avec recherche par nom": "All the projects of the projects folder, with a search by name",
+    "Rechercher un projet": "Search for a project",
+    "Filtre sur le nom du projet et de son dossier ; Entrée ouvre le premier": "Filters on the name of the project and of its folder; Enter opens the first one",
+    "Trier les projets": "Sort the projects", "Ordre des projets": "Order of the projects",
+    "Les plus récents d'abord": "Most recent first", "Par nom": "By name",
+    "Aucun projet ne correspond à la recherche": "No project matches the search",
+    "Aucun projet : la première snapshot (ou le premier export) d'un projet le crée dans le dossier des projets.": "No project: the first snapshot (or the first export) of a project creates it in the projects folder.",
+    "Projet ouvert : revenir à sa dernière snapshot": "Open project: back to its last snapshot",
+    "Ouvrir ce projet à sa dernière snapshot": "Open this project at its last snapshot",
+    "Ce projet n'a aucune snapshot": "This project has no snapshot",
     "Dossier des projets :": "Projects folder:", "Serveur injoignable": "Server unreachable",
     "Aucun projet récent : la première snapshot (ou le premier export) d'un projet le crée dans le dossier des projets.": "No recent project: the first snapshot (or the first export) of a project creates it in the projects folder.",
     "Ouverture de la snapshot…": "Opening the snapshot…",
@@ -980,6 +991,7 @@ try {
     "Marge gardée libre tout autour de l'image par « Ajuster au support » (et la taille 100 %).": "Margin kept free around the image by “Fit to support” (and the 100 % size).",
     "Étire les tons de l'image du plus sombre au plus clair avant le découpage en teintes (utile pour les photos ternes).": "Stretches the image tones from darkest to lightest before splitting into tones (useful for dull photos).",
     "Contraste local : accentue les volumes (visage, plis) zone par zone. 0 = désactivé.": "Local contrast: enhances volumes (face, folds) area by area. 0 = off.",
+    "Contraste local de l'image où les traits de la zone sont cherchés, en plus du prétraitement : fait ressortir les traits dans les ombres et les zones peu contrastées, sans changer les couches. Trop fort : le grain et les textures donnent des traits parasites. 0 = désactivé.": "Local contrast of the image the zone's lines are looked for in, on top of the preprocessing: brings out lines in shadows and low-contrast areas without changing the layers. Too strong: grain and textures give stray lines. 0 = off.",
     "Tons moyens : au-dessus de 1 éclaircit, en dessous assombrit, sans toucher au noir et au blanc.": "Midtones: above 1 lightens, below darkens, without touching black and white.",
     "Saturation des couleurs (100 % = inchangée) : plus haut sépare mieux les teintes proches d'une image couleur.": "Colour saturation (100 % = unchanged): higher better separates close tones of a colour image.",
     "Netteté (masque flou, ≈ 0,3 mm) : surtout utile au pochoir de contours ; trop forte, elle crée du bruit.": "Sharpness (unsharp mask, ≈ 0.3 mm): mostly useful for the outline stencil; too strong, it adds noise.",
@@ -1156,6 +1168,7 @@ try {
   const MASK_EN = { "contours": "outline", "sujet": "subject", "silhouette": "silhouette", "aplats": "flat areas", "contours (détails clés)": "outline (key details)" };
   const decEN = x => x.replace(/(\d),(\d)/g, "$1.$2");
   const P = [
+    [/^(\d+) projets?$/, (m, n) => plural(n, "project")],
     [/^(\d+) couches? à colorer$/, (m, n) => `${plural(n, "layer")} to colour`],
     [/^Proposition (\d+)$/, (m, n) => `Proposal ${n}`],
     [/^Proposition (\d+) appliquée aux couches$/, (m, n) => `Proposal ${n} applied to the layers`],

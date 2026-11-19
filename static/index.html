@@ -283,6 +283,22 @@
   .projitem .pmeta { color: var(--muted); font-size: 12px; }
   .projpop .folder { word-break: break-all; }
   .projbtns { display: flex; flex-wrap: wrap; gap: 6px; }
+  /* All the projects: window in the style of the palette assistant */
+  #projAll { z-index: 58; }
+  .pj-head { flex-wrap: wrap; }
+  .pj-head input[type=search] { width: 220px; max-width: 100%; }
+  .pj-head select { width: auto; }
+  .pj-grid { flex: 1; min-height: 0; overflow-y: auto; padding: 14px; display: grid; gap: 12px; align-content: start;
+             grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); }
+  .pj-card { display: flex; flex-direction: column; gap: 3px; padding: 6px; border: 1px solid var(--line); border-radius: 10px;
+             background: var(--soft); color: var(--ink); text-align: left; cursor: pointer; font: inherit; min-width: 0; }
+  .pj-card:hover:not(:disabled), .pj-card:focus-visible { border-color: var(--accent); }
+  .pj-card:disabled { opacity: .55; cursor: default; }
+  .pj-card.cur { border-color: var(--accent); box-shadow: inset 0 0 0 1px var(--accent); }
+  .pj-card img, .pj-card .nothumb { width: 100%; aspect-ratio: 4 / 3; object-fit: contain; border-radius: 6px; background: var(--panel); }
+  .pj-card .pname { font-weight: 600; margin-top: 3px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .pj-card .pmeta { color: var(--muted); font-size: 12px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .pj-empty { grid-column: 1 / -1; }
   .modalback { position: fixed; inset: 0; z-index: 80; background: rgba(0,0,0,.45); display: flex; align-items: center; justify-content: center; }
   .modalback[hidden] { display: none; }
   .modal { width: 380px; max-width: calc(100vw - 32px); background: var(--panel); color: var(--ink); border: 1px solid var(--line);
@@ -696,6 +712,7 @@
   <h4>Projets récents</h4>
   <div class="projlist" id="projList"></div>
   <div class="projbtns">
+    <button type="button" id="projAllBtn" title="Tous les projets du dossier des projets, avec recherche par nom">Tous les projets…</button>
     <button type="button" id="projDirBtn" title="Dossier d'un projet OversprayLab (celui qui contient projet.json), où qu'il soit : il est ouvert à sa dernière snapshot, et copié dans le dossier des projets s'il n'y est pas déjà">Ouvrir un dossier…</button>
     <button type="button" id="projFileBtn" title="Zip exporté par OversprayLab (image, masques, réglages et snapshots)">Ouvrir un export…</button>
   </div>
@@ -715,6 +732,16 @@
 </div>
 <div class="colorpop" id="colorPop" role="dialog" aria-label="Couleur de la couche" hidden></div>
 <div class="paledit" id="palEdit" role="dialog" aria-label="Éditeur de palette" hidden></div>
+<div class="modalback" id="projAll" hidden><div class="pa" role="dialog" aria-modal="true" aria-labelledby="pjTitle">
+  <div class="pa-head pj-head"><h3 id="pjTitle">Tous les projets</h3><p class="hint" id="pjInfo"></p>
+    <input type="search" id="pjSearch" placeholder="Rechercher un projet" aria-label="Rechercher un projet" title="Filtre sur le nom du projet et de son dossier ; Entrée ouvre le premier">
+    <select id="pjSort" aria-label="Trier les projets" title="Ordre des projets">
+      <option value="used">Les plus récents d'abord</option>
+      <option value="name">Par nom</option>
+    </select>
+    <button type="button" class="pa-x" id="pjClose" title="Fermer" aria-label="Fermer">×</button></div>
+  <div class="pj-grid" id="pjGrid"></div>
+</div></div>
 <div class="modalback" id="palAssist" hidden><div class="pa" role="dialog" aria-modal="true" aria-labelledby="paTitle"></div></div>
 <div class="colorpop" id="pickPop" role="dialog" aria-label="Choix de la couleur" hidden></div>
 <main>
@@ -1129,6 +1156,8 @@
           <option value="colour">la couleur (ignore les ombres)</option>
           <option value="both">la luminosité et la couleur</option>
         </select></label>
+      <label class="row">Contraste local <span class="v" id="outline_clahe_v"></span>
+        <input type="range" id="outline_clahe" min="0" max="100" step="5" value="0"></label>
       <label class="row sel" for="outline_ref" title="Ce à quoi l'image est comparée pour trouver les détails clés de la zone. Rendu des couches avant leurs effets : les traits ne bougent pas quand on ajoute ou change un effet. Après leurs effets : les traits compensent ce que les effets font disparaître. Image seule : tous les traits de l'image, choisis par la sensibilité seule, sans tenir compte des couches.">Comparer à
         <select id="outline_ref">
           <option value="layers">Rendu des couches, avant leurs effets</option>
@@ -1645,7 +1674,7 @@ const PARAMS = ["support_w_mm", "support_h_mm", "support_color", "inner_margin_m
   "manual_thresholds", "thresholds", "pre_saturation", "pre_sharpen", "pre_remove_bg",
   "layer_colors", "layer_effects",
   "n_layers", "detail", "hue_weight", "color_vividness", "flat_auto", "flat_tolerance", "flat_tolerances", "color_mode", "layering", "skip_support", "fill_gaps", "protect_lines",
-  "outline", "outline_target", "outline_method", "outline_sensitivity", "outline_width_mm", "outline_min_length_mm", "outline_subject", "outline_subject_mask", "outline_subject_pos", "outline_subject_width_mm", "outline_subject_weak", "outline_subject_de", "outline_subject_gap_every_mm", "outline_subject_gap_mm", "stencil_style", "line_zones", "line_zones_color", "line_sil_color", "outline_auto_color", "outline_color", "outline_zones", "outline_ref", "outline_whole_lines", "outline_line_sens", "outline_close_lines", "outline_channel", "outline_follow_mm",
+  "outline", "outline_target", "outline_method", "outline_sensitivity", "outline_width_mm", "outline_min_length_mm", "outline_subject", "outline_subject_mask", "outline_subject_pos", "outline_subject_width_mm", "outline_subject_weak", "outline_subject_de", "outline_subject_gap_every_mm", "outline_subject_gap_mm", "stencil_style", "line_zones", "line_zones_color", "line_sil_color", "outline_auto_color", "outline_color", "outline_zones", "outline_ref", "outline_whole_lines", "outline_line_sens", "outline_close_lines", "outline_channel", "outline_follow_mm", "outline_clahe",
   ...MAT_FIELDS, "merge_amount", "merge_channel_mm", "merge_channels", "merge_islands", "merge_line_islands",
   "tolerance_mm", "smooth_curves", "spray_mm", "px_per_mm"];
 const SUPPORT_COLORS = [["Blanc", "#ffffff"], ["Ivoire", "#f3ecd9"], ["Kraft", "#c8a26e"], ["Gris", "#9a9a9a"], ["Noir", "#1e1e1e"]];
@@ -2759,7 +2788,7 @@ function restoreSettings() {
   return true;
 }
 function showValues() {
-  ["n_layers", "detail", "hue_weight", "color_vividness", "flat_auto", "flat_tolerance", "tolerance_mm", "spray_mm", "px_per_mm", "image_scale", "image_pos_x", "image_pos_y", "outline_sensitivity", "pre_clahe", "pre_contrast", "pre_shadows", "pre_highlights", "pre_black", "pre_white", "pre_gamma", "pre_saturation", "pre_sharpen", "merge_amount"].forEach(k => {
+  ["n_layers", "detail", "hue_weight", "color_vividness", "flat_auto", "flat_tolerance", "tolerance_mm", "spray_mm", "px_per_mm", "image_scale", "image_pos_x", "image_pos_y", "outline_sensitivity", "outline_clahe", "pre_clahe", "pre_contrast", "pre_shadows", "pre_highlights", "pre_black", "pre_white", "pre_gamma", "pre_saturation", "pre_sharpen", "merge_amount"].forEach(k => {
     const o = $(k + "_v");
     if (o) o.textContent = k.startsWith("image_") ? (+$(k).value).toFixed(1) : k === "pre_gamma" ? (+$(k).value).toFixed(2) : $(k).value;
   });
@@ -2973,6 +3002,7 @@ const TIPS = {
   outline_sensitivity: "Quantité de détails retenus (bas = seulement les plus marqués). Échelle progressive : de 1 % des traits candidats à 0 jusqu'à 95 % à 100, environ 10 % à 50.",
   outline_width_mm: "Largeur du trait du pochoir de contours, en mm (jamais moins que l'ouverture mini du matériau).",
   outline_min_length_mm: "Les traits plus courts que cette longueur sont ignorés.",
+  outline_clahe: "Contraste local de l'image où les traits de la zone sont cherchés, en plus du prétraitement : fait ressortir les traits dans les ombres et les zones peu contrastées, sans changer les couches. Trop fort : le grain et les textures donnent des traits parasites. 0 = désactivé.",
   outline_follow_mm: "Traits dessinés (DoG, fluide) et contours appris (TEED) : distance sur laquelle un trait retenu est prolongé le long de lui-même, tant qu'il reste presque aussi marqué. Plus long : traits d'un seul tenant, moins de trous ; mais un trait faible partant d'un départ marqué est aussi prolongé. 0 : point par point. Conseillé : 12 mm en DoG, 4 mm en fluide, 8 mm en TEED.",
   outline_subject: "Trace le contour d'un masque (le sujet sélectionné, un masque dédié à la silhouette ou le masque des détails clés), avec ou sans les détails clés. Utile quand le sujet se détache mal du fond. Le bord de l'image n'est pas tracé.",
   outline_subject_mask: "Masque dont le contour est tracé : le masque sujet (objet sélectionné ou zone détourée), le masque silhouette dédié (onglet Masques), ou le masque des détails clés.",
@@ -3310,7 +3340,7 @@ function zoneCanvas(id) { if (!ZCV[id]) ZCV[id] = maskCanvas(); return ZCV[id]; 
 function zLegacy() {               // one zone made of the outline fields (earlier projects)
   const t = val("outline_target"), dest = t === "stencil" ? "A" : t;
   return { zones: [{ id: "z1", name: "Zone 1", on: true, method: val("outline_method"), sensitivity: val("outline_sensitivity"),
-                     width_mm: val("outline_width_mm"), min_length_mm: val("outline_min_length_mm"), dest, ref: val("outline_ref"), whole: val("outline_whole_lines"), line_sens: val("outline_line_sens"), close: val("outline_close_lines"), channel: val("outline_channel"), follow_mm: val("outline_follow_mm") }],
+                     width_mm: val("outline_width_mm"), min_length_mm: val("outline_min_length_mm"), dest, ref: val("outline_ref"), whole: val("outline_whole_lines"), line_sens: val("outline_line_sens"), close: val("outline_close_lines"), channel: val("outline_channel"), follow_mm: val("outline_follow_mm"), clahe: val("outline_clahe") }],
            groups: { A: { auto: val("outline_auto_color"), color: val("outline_color") } }, sil_dest: dest };
 }
 function zState() {
@@ -3343,7 +3373,7 @@ const destLabel = d => d === "darkest" ? "dans la couche la plus foncée" : d ==
 function fieldsToZone() {
   const s = zState(), z = zCur(s);
   Object.assign(z, { method: val("outline_method"), sensitivity: val("outline_sensitivity"),
-                     width_mm: val("outline_width_mm"), min_length_mm: val("outline_min_length_mm"), ref: val("outline_ref"), whole: val("outline_whole_lines"), line_sens: val("outline_line_sens"), close: val("outline_close_lines"), channel: val("outline_channel"), follow_mm: val("outline_follow_mm") });
+                     width_mm: val("outline_width_mm"), min_length_mm: val("outline_min_length_mm"), ref: val("outline_ref"), whole: val("outline_whole_lines"), line_sens: val("outline_line_sens"), close: val("outline_close_lines"), channel: val("outline_channel"), follow_mm: val("outline_follow_mm"), clahe: val("outline_clahe") });
   const g = colourGroup(s, z);
   if (g) s.groups[g] = { auto: val("outline_auto_color"), color: val("outline_color") };
   zSave(s);
@@ -3360,6 +3390,7 @@ function zoneToFields() {
   $("outline_whole_lines").checked = z.whole === true;
   $("outline_line_sens").value = Number.isFinite(+z.line_sens) ? z.line_sens : 50;
   $("outline_follow_mm").value = z.follow_mm != null && Number.isFinite(+z.follow_mm) ? z.follow_mm : 12;   // zones of earlier versions: 12
+  $("outline_clahe").value = Number.isFinite(+z.clahe) ? z.clahe : 0;
   syncLineSens();
   const tsel = $("outline_target"), tv = isGroup(z.dest) ? "stencil" : z.dest;
   if (![...tsel.options].some(o => o.value === tv)) tsel.add(new Option(destLabel(tv), tv));   // "L<n>"
@@ -3496,7 +3527,7 @@ function setupZones() {
   form.querySelector(".cancel").onclick = () => close(false);
   input.addEventListener("keydown", e => { if (e.key === "Enter") { e.preventDefault(); close(true); } else if (e.key === "Escape") close(false); });
   // the fields of the section edit the zone shown
-  ["outline_method", "outline_sensitivity", "outline_width_mm", "outline_min_length_mm", "outline_auto_color", "outline_color", "outline_ref", "outline_whole_lines", "outline_line_sens", "outline_close_lines", "outline_channel", "outline_follow_mm"]
+  ["outline_method", "outline_sensitivity", "outline_width_mm", "outline_min_length_mm", "outline_auto_color", "outline_color", "outline_ref", "outline_whole_lines", "outline_line_sens", "outline_close_lines", "outline_channel", "outline_follow_mm", "outline_clahe"]
     .forEach(k => { $(k).addEventListener("change", fieldsToZone); $(k).addEventListener("input", fieldsToZone); });
   ["outline_ref", "outline_whole_lines", "outline_line_sens", "outline_close_lines", "outline_channel"].forEach(k => $(k).addEventListener("change", () => { enableOutline(); detectPreview(); }));
   $("outline_whole_lines").addEventListener("change", syncLineSens);
@@ -3868,7 +3899,7 @@ async function init() {
     }
   });
   $("outline_target").addEventListener("change", () => { syncOutlineTarget(); enableOutline(); detectPreview(); });
-  ["outline_sensitivity", "outline_width_mm", "outline_min_length_mm", "outline_follow_mm"].forEach(k => $(k).addEventListener("change", enableOutline));
+  ["outline_sensitivity", "outline_width_mm", "outline_min_length_mm", "outline_follow_mm", "outline_clahe"].forEach(k => $(k).addEventListener("change", enableOutline));
   ["outline_method", "outline_auto_color", "outline_color", "outline_subject", "outline_subject_mask", "outline_subject_pos", "outline_subject_width_mm", "outline_subject_weak", "outline_subject_de", "outline_subject_gap_every_mm", "outline_subject_gap_mm"].forEach(k => $(k).addEventListener("change", detectPreview));
   $("outline_subject_weak").addEventListener("change", syncSilhouetteSource);
   $("stencil_style").addEventListener("change", () => { syncStyle(); detectPreview(); });
@@ -3896,7 +3927,7 @@ async function init() {
   setupMaskBg();
   $("paintSilhouette").onclick = () => { $("maskKind").value = val("outline_subject_mask"); VIEW = "mask"; SEL = null; render(); };
   $("mCopy").onchange = () => { const to = $("mCopy").value; $("mCopy").value = ""; copyMask(maskKind(), to); };
-  ["outline_sensitivity", "outline_width_mm", "outline_min_length_mm", "outline_follow_mm"].forEach(k => $(k).addEventListener("input", detectPreview));
+  ["outline_sensitivity", "outline_width_mm", "outline_min_length_mm", "outline_follow_mm", "outline_clahe"].forEach(k => $(k).addEventListener("input", detectPreview));
   $("mClear").onclick = () => {
     const kind = maskKind(), c = maskCv(kind);
     if (!c) return;
@@ -4461,12 +4492,69 @@ async function openFolder(files) {
   await applyOpened(j, j.filename);
   status(`Projet ouvert : ${(j.project && j.project.name) || j.filename}`);
 }
+// All the projects of the projects folder (the popup lists only the 5 most recent): searchable
+// grid of cards; a card opens the project at its last snapshot
+const PJ = { list: [], token: 0 };
+const pjNorm = t => String(t || "").normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase();
+async function showAllProjects() {
+  hideProjects();
+  const back = $("projAll"), tok = ++PJ.token;
+  back.hidden = false;
+  $("pjSearch").value = "";
+  $("pjInfo").textContent = "";
+  $("pjGrid").innerHTML = `<p class="hint pj-empty">Chargement…</p>`;
+  $("pjSearch").focus();
+  let j;
+  try { j = await (await fetch("/api/projects")).json(); }
+  catch (e) { if (tok === PJ.token) $("pjGrid").innerHTML = `<p class="hint pj-empty">Serveur injoignable</p>`; return; }
+  if (tok !== PJ.token || back.hidden) return;
+  PJ.list = j.projects || [];
+  PJ.folder = j.folder || "";
+  renderAllProjects();
+}
+function hideAllProjects() { PJ.token++; $("projAll").hidden = true; $("openProject").focus(); }
+function pjShown() {
+  const q = pjNorm($("pjSearch").value).trim().split(/\s+/).filter(Boolean);
+  const ps = PJ.list.filter(p => { const t = pjNorm(p.name + " " + p.dir); return q.every(w => t.includes(w)); });
+  if ($("pjSort").value === "name")
+    ps.sort((a, b) => a.name.localeCompare(b.name, undefined, { numeric: true, sensitivity: "base" }) || a.dir.localeCompare(b.dir));
+  return ps;
+}
+function renderAllProjects() {
+  const ps = pjShown(), grid = $("pjGrid");
+  $("pjInfo").innerHTML = `<span>${PJ.list.length > 1 ? `${PJ.list.length} projets` : `${PJ.list.length} projet`}</span> · <span data-noi18n>${escH(PJ.folder)}</span>`;
+  if (!PJ.list.length) { grid.innerHTML = `<p class="hint pj-empty">Aucun projet : la première snapshot (ou le premier export) d'un projet le crée dans le dossier des projets.</p>`; return; }
+  if (!ps.length) { grid.innerHTML = `<p class="hint pj-empty">Aucun projet ne correspond à la recherche</p>`; return; }
+  grid.innerHTML = ps.map(p => `<button type="button" class="pj-card${p.dir === PROJ.dir ? " cur" : ""}" data-dir="${escH(p.dir)}" data-snap="${p.last || ""}"${p.last ? "" : " disabled"}
+      title="${p.last ? (p.dir === PROJ.dir ? "Projet ouvert : revenir à sa dernière snapshot" : "Ouvrir ce projet à sa dernière snapshot") : "Ce projet n'a aucune snapshot"}">
+      ${p.thumb ? `<img src="${thumbUrl(p.dir, p.last)}" alt="" loading="lazy">` : `<span class="nothumb"></span>`}
+      <span class="pname" data-noi18n>${escH(p.name)}</span>
+      ${p.dir !== p.name ? `<span class="pmeta" data-noi18n>${escH(p.dir)}</span>` : ""}
+      <span class="pmeta">${p.count} snapshot${p.count > 1 ? "s" : ""}${p.used ? ` · ${snapDate(p.used, true)}` : ""}</span></button>`).join("");
+}
+function pjOpen(b) {
+  if (!b || b.disabled) return;
+  hideAllProjects();
+  openSnapshot(b.dataset.dir, b.dataset.snap);
+}
+function setupAllProjects() {
+  const back = $("projAll");
+  $("projAllBtn").onclick = showAllProjects;
+  $("pjClose").onclick = hideAllProjects;
+  $("pjSearch").addEventListener("input", renderAllProjects);
+  $("pjSort").addEventListener("change", renderAllProjects);
+  $("pjSearch").addEventListener("keydown", e => { if (e.key === "Enter") { e.preventDefault(); pjOpen($("pjGrid").querySelector(".pj-card:not(:disabled)")); } });
+  $("pjGrid").addEventListener("click", e => pjOpen(e.target.closest(".pj-card")));
+  back.addEventListener("click", e => { if (e.target === back) hideAllProjects(); });
+  document.addEventListener("keydown", e => { if (e.key === "Escape" && !back.hidden) { e.preventDefault(); hideAllProjects(); } });
+}
 function hideProjects() { $("projPop").hidden = true; $("openProject").setAttribute("aria-expanded", "false"); }
 function setupProjects() {
   const btn = $("openProject"), pop = $("projPop");
   btn.onclick = e => { e.stopPropagation(); pop.hidden ? showProjects() : hideProjects(); };
   $("projFileBtn").onclick = () => { hideProjects(); $("projectFile").click(); };
   $("projDirBtn").onclick = () => { hideProjects(); $("projectDir").click(); };
+  setupAllProjects();
   $("projectDir").onchange = e => { const fs = [...e.target.files]; e.target.value = ""; if (fs.length) openFolder(fs); };
   document.addEventListener("pointerdown", e => { if (!pop.hidden && !pop.contains(e.target) && e.target !== btn) hideProjects(); });
   document.addEventListener("keydown", e => { if (e.key === "Escape" && !pop.hidden) { hideProjects(); btn.focus(); } });
@@ -5545,7 +5633,7 @@ function preprocessPreview() {
       // the view stays where it is: the preview is shown when the Original tab is open
       if (VIEW === "reference" && SEL === null) {
         if (!busy) render(); else { const st = $("stage"); st.innerHTML = `<img src="${j.image}" alt="Image prétraitée sur le support" data-mm="${LAST.support_mm.join(",")}">`; fitStage(); }
-      }
+      } else if (VIEW === "compare" && SEL === null && !busy && (CMP.left === "pre" || CMP.right === "pre")) render();
       drawHisto();
     } catch (e) { /* optional preview */ }
   }, 60);
@@ -5647,7 +5735,8 @@ async function renderPreview(st) {
 }
 
 // ---------------- Compare tab: a version on each side of the line ----------------
-// "orig" = original on the support, "cur" = current preview, "snap:v<n>" = computed result saved
+// "orig" = source image on the support, "pre" = preprocessed image (source when no preprocessing),
+// "cur" = current preview, "snap:v<n>" = computed result saved
 // in a snapshot of the project (fetched once: a snapshot never changes)
 // sbs = side by side instead of the slider; hid = numbers of the layers hidden on each side
 const CMP = { left: "orig", right: "cur", sbs: false, hid: { left: new Set(), right: new Set() } };
@@ -5664,10 +5753,11 @@ function snapRender(id) {
 // version of a side (rendered with that side's hidden layers) and its layer buttons
 async function compareSide(side) {
   const v = CMP[side];
-  if (v === "orig") {
+  if (v === "orig" || v === "pre") {
     compareLayers(side, []);
     const im = new Image();
-    im.alt = "Original"; im.draggable = false; im.src = LAST.reference;
+    im.alt = cmpTag(v); im.draggable = false;
+    im.src = v === "pre" && LAST.reference_pre || LAST.reference;
     await im.decode().catch(() => {});
     return im;
   }
@@ -5692,7 +5782,8 @@ function compareLayers(side, layers) {
 }
 const cmpSnap = v => v.startsWith("snap:") && PROJ.dir ? PROJ.snapshots.find(s => s.id === v.slice(5)) : null;
 function cmpTag(v) {
-  if (v === "orig") return "Original";
+  if (v === "orig") return "Image source";
+  if (v === "pre") return "Image prétraitée";
   const s = cmpSnap(v);
   if (s) return `<span data-noi18n>${escH(snapName(s))}</span>`;
   return $("preview_sim").checked ? "Rendu simulé" : "Prévisualisation";
@@ -5705,7 +5796,8 @@ function renderCompareBar() {
   const snaps = PROJ.dir ? PROJ.snapshots.filter(s => s.computed !== false) : [];
   const before = CMP.left + CMP.right + $("cmpLeft").dataset.opts;
   if (CMP.dir !== PROJ.dir) { CMP.dir = PROJ.dir; compareReset("left"); compareReset("right"); }   // other project: same ids, other versions
-  const opts = [`<option value="orig">Original</option>`, `<option value="cur">Version courante</option>`]
+  const opts = [`<option value="orig">Image source</option>`, `<option value="pre">Image prétraitée</option>`,
+    `<option value="cur">Version courante</option>`]
     .concat(snaps.map(s => `<option value="snap:${s.id}" data-noi18n>${escH(snapName(s))}${s.label ? ` (${s.id})` : ""}</option>`)).join("");
   for (const side of ["left", "right"]) {
     if (CMP[side].startsWith("snap:") && !snaps.some(s => "snap:" + s.id === CMP[side])) compareReset(side);

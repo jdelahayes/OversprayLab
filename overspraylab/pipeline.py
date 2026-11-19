@@ -129,6 +129,9 @@ class Params:
     # as marked (hysteresis); 0 = point by point. Longer = lines in one piece, but also faint ones
     # extended from a strong start (default = HYST_MM_DOG)
     outline_follow_mm: float = 12.0
+    # local contrast (CLAHE, 0..100) of the image the zone's lines are looked for in, on top of the
+    # preprocessing: brings out lines in shadows and flat areas without touching the layers
+    outline_clahe: float = 0.0
     outline_subject: bool = False       # also draw the outline of a mask (silhouette of the subject)
     outline_subject_mask: str = "subject"   # mask whose outline is drawn: subject | outline | silhouette
     outline_subject_weak: bool = False      # silhouette only where the edge stands out poorly in the render
@@ -247,6 +250,7 @@ class Params:
             p.outline_subject_pos = "center"
         p.outline_subject_width_mm = float(np.clip(p.outline_subject_width_mm, 0, 20))
         p.outline_follow_mm = float(np.clip(p.outline_follow_mm, 0, 50))
+        p.outline_clahe = float(np.clip(p.outline_clahe, 0, 100))
         p.px_per_mm = float(np.clip(p.px_per_mm, 2, 16))
         p.support_w_mm = float(np.clip(p.support_w_mm, 20, 3000))
         p.support_h_mm = float(np.clip(p.support_h_mm, 20, 3000))
@@ -2109,7 +2113,8 @@ def outline_plan(p: Params) -> tuple[list, dict, str]:
     zones = [dict(id="z1", name="Zone 1", on=True, method=p.outline_method, sensitivity=p.outline_sensitivity,
                   width_mm=p.outline_width_mm, min_length_mm=p.outline_min_length_mm, dest=legacy,
                   ref=p.outline_ref, whole=bool(p.outline_whole_lines), line_sens=p.outline_line_sens,
-                  close=p.outline_close_lines, channel=p.outline_channel, follow_mm=p.outline_follow_mm)]
+                  close=p.outline_close_lines, channel=p.outline_channel, follow_mm=p.outline_follow_mm,
+                  clahe=p.outline_clahe)]
     sil = legacy
     try:
         data = json.loads(p.outline_zones) if p.outline_zones else None
@@ -2144,7 +2149,7 @@ def outline_plan(p: Params) -> tuple[list, dict, str]:
                           close=z.get("close") if z.get("close") in CLOSE_LINES else "",
                           channel=z.get("channel") if z.get("channel") in OUTLINE_CHANNELS else "light",
                           whole=z.get("whole") is True, line_sens=num("line_sens", 0, 100, 50.0),
-                          follow_mm=num("follow_mm", 0, 50, HYST_MM_DOG)))
+                          follow_mm=num("follow_mm", 0, 50, HYST_MM_DOG), clahe=num("clahe", 0, 100, 0.0)))
     if not zones:
         return outline_plan(replace(p, outline_zones=""))
     sil = data.get("sil_dest") if ok_dest(data.get("sil_dest")) else zones[0]["dest"]
@@ -2161,7 +2166,7 @@ def zone_params(p: Params, z: dict) -> Params:
                    outline_sensitivity=z["sensitivity"], outline_width_mm=z["width_mm"],
                    outline_min_length_mm=z["min_length_mm"], outline_ref=z["ref"], outline_whole_lines=z["whole"],
                    outline_line_sens=z["line_sens"], outline_close_lines=z["close"], outline_channel=z["channel"],
-                   outline_follow_mm=z["follow_mm"],
+                   outline_follow_mm=z["follow_mm"], outline_clahe=z["clahe"],
                    outline_target="stencil" if _GROUP.match(z["dest"]) else z["dest"])
 
 
@@ -2927,6 +2932,17 @@ def _close_lines(lines: np.ndarray, stroke: np.ndarray, p: Params, region: np.nd
     return out, stroke
 
 
+def detail_image(prep: Prepared, p: Params) -> np.ndarray:
+    """Image the key-detail lines of a zone are looked for in: the preprocessed image, plus the
+    zone's own local contrast (`outline_clahe`, same scale as `pre_clahe`), which the layers never see."""
+    if p.outline_clahe <= 0:
+        return prep.resized
+    lab = cv2.cvtColor(prep.resized, cv2.COLOR_BGR2LAB)
+    clahe = cv2.createCLAHE(clipLimit=1.0 + p.outline_clahe / 100.0 * 4.0, tileGridSize=(8, 8))
+    lab[..., 0] = clahe.apply(lab[..., 0])
+    return cv2.cvtColor(lab, cv2.COLOR_LAB2BGR)
+
+
 def detect_key_details(prep: Prepared, sim: np.ndarray, p: Params,
                        region: np.ndarray | None = None, dark: bool = True,
                        stages: bool = False):
@@ -2944,7 +2960,7 @@ def detect_key_details(prep: Prepared, sim: np.ndarray, p: Params,
     intermediate masks (for the detection preview): detected, selected, kept, short, stroke.
     """
     ppm = p.px_per_mm
-    ref = prep.resized
+    ref = detail_image(prep, p)
     method = p.outline_method
 
     def lab(img):
@@ -2968,7 +2984,8 @@ def detect_key_details(prep: Prepared, sim: np.ndarray, p: Params,
     check_cancel()
     # the paints reproduce the original photo: the loss of contrast is measured against it
     # (lines are still detected on the preprocessed image, sharper and more contrasted)
-    g_orig = g_ref if prep.raw is None or prep.raw is ref else grad(lab(prep.raw))
+    orig = prep.raw if prep.raw is not None else prep.resized
+    g_orig = g_ref if orig is ref else grad(lab(orig))
     check_cancel()
 
     # 1. Candidate lines (none when only the silhouette is drawn)

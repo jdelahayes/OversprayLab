@@ -436,6 +436,11 @@ and that layer gets more islands and bridges. **Detection method**:
 **colour** – the colourfulness (chroma), where a shadow over a colour hardly shows while a black or
 grey line stays sharp: useful when a shadow covers the drawing – or **both**.
 
+**Local contrast** (each zone, 0 = off): local contrast (CLAHE, same scale as the preprocessing
+one) added only to the image the zone's lines are looked for in. It brings out lines in shadows and
+low-contrast areas without changing the colour layers; too strong, grain and textures give stray
+lines. The loss of sharpness is still measured against the original photo.
+
 **Compare with** (each zone): what the image is compared with to find the lines –
 the **render of the layers before their effects** (default: the lines do not move when a layer
 effect is added or changed), the **render after their effects** (the lines make up for what the
@@ -624,7 +629,8 @@ the same settings line up from one layer to the next.
   bridges** to see the result once the bridge traces are retouched (bridges painted over). Use the layer
   buttons **1 2 3…** to hide layers.
 - **Compare** – before/after view with a line to drag on the image, between two versions chosen above the view for each side
-  (**Left** / **Right**): the original image, the current version or any snapshot of the project
+  (**Left** / **Right**): the source image, the preprocessed image (updated live while the
+  preprocessing settings change), the current version or any snapshot of the project
   that holds its computed result (shown as it was saved, in the frame of the current version at the
   same mm scale, with the *Support*, *Simulated render* and *Without bridges* options of the view;
   the layer buttons next to each side's version choose the layers shown on that side, independently
@@ -800,7 +806,9 @@ squares with their hex codes, placed left of the page, to prepare your paints.
   masks, the reduced image when the snapshot works on one, a thumbnail and the computed result).
   The folder is created by the first snapshot or the first export.
 - **Re-open a project**: *Open a project…* lists the **5 most recent projects** (opened at their last
-  snapshot); *Open a folder…* opens any project folder (the one holding `projet.json`, wherever it
+  snapshot); *All projects…* opens a window with every project of the projects folder as thumbnails,
+  with a search on the project and folder names and a sort by date or by name (Enter in the search
+  opens the first one); *Open a folder…* opens any project folder (the one holding `projet.json`, wherever it
   is: it is copied into the projects folder if it is not there yet, or only its missing snapshots);
   *Open an export…* (or drop the file on the image box) reads an export:
   - the **.zip** restores everything: image, masks, settings, crop, colours – then recomputes; a zip
