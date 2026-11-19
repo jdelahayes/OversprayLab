@@ -657,6 +657,9 @@ def compute(sess, data):
             **cached((L.index, "overlays"), lambda: {
                 k: (png_b64(o, 900) if o is not None and (k != "img_merged" or L.n_merged) else None)
                 for k, o in zip(("img_bridges", "img_lost", "img_merged", "img_flat"), pl.layer_overlays(res, L))}),
+            # how well the material is held (structural bridges), shown on demand
+            "img_support": cached((L.index, "support"),
+                                  lambda: (lambda o: png_b64(o, 900) if o is not None else None)(pl.support_map(res, L))),
             "mask_flat": cached((L.index, "mflat", hexc), lambda: rgba_b64(L.color, flat)),
             "mask_sim": cached((L.index, "msim", hexc), lambda: rgba_b64(L.color, soft)),
             "mask_flat_nb": cached((L.index, "mflat_nb", hexc), lambda: rgba_b64(L.color, flat_nb)) if L.bridges else None,

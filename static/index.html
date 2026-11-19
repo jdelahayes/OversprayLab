@@ -461,7 +461,7 @@
   .stage .lv { max-width: 100%; }
   .stage[data-bg] .lv { background: var(--view-bg); }
   .stage .lv img { max-width: none; max-height: none; width: 100%; height: 100%; }
-  body.no-bridges .lv .ov-bridges, body.no-lost .lv .ov-lost, body.no-merged .lv .ov-merged, body.no-flat .lv .ov-flat { display: none; }
+  body.no-bridges .lv .ov-bridges, body.no-lost .lv .ov-lost, body.no-merged .lv .ov-merged, body.no-flat .lv .ov-flat, body.no-support .lv .ov-support { display: none; }
   /* registration marks (vector overlay, "Marks" button) */
   .regov { position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none; overflow: visible; z-index: 5; }
   .regov polygon, .regov circle { fill: rgba(255,255,255,.9); stroke: #222; stroke-width: 1; vector-effect: non-scaling-stroke; }
@@ -1401,6 +1401,8 @@
         </select></label>
       <p class="hint">Les ponts d'un même îlot sont répartis tout autour. Plus de ponts = îlots mieux tenus (papier, grands îlots), mais plus de traces à retoucher.</p>
       <label class="row">2 ponts au-delà de (mm²) <input type="number" id="double_bridge_area_mm2" step="50" min="0" max="100000"></label>
+      <label class="row">Espacement max entre appuis (mm) <input type="number" id="bridge_spacing_mm" step="5" min="0" max="2000" value="80"></label>
+      <p class="hint">Ponts structurels : le long des bords de la matière mal tenue (grande pièce pendue à une bande étroite, îlot, bande fine), deux appuis ne sont jamais plus éloignés que cet espacement. 0 = désactivé.</p>
     </div>
     <label class="subhead" for="sheet_mode">Feuille du pochoir</label>
     <div class="ogroup">
@@ -1656,6 +1658,7 @@
     <button type="button" class="lgbtn" id="lgLost" aria-pressed="true" title="Afficher / masquer les détails supprimés par les contraintes du matériau"><i style="background:#ff8c00"></i>détail supprimé</button>
     <button type="button" class="lgbtn" id="lgMerged" aria-pressed="true" title="Afficher / masquer les zones fusionnées au lieu d'un pont (chenal fermé ou petit îlot supprimé)"><i style="background:#963cc8"></i>fusion</button>
     <button type="button" class="lgbtn" id="lgFlat" aria-pressed="true" title="Afficher / masquer les zones d'aplat peintes sur les vues des couches : zones de l'aplat Générale là où elles ont abouti dans la couche, et zones forcées dans la couche"><i style="background:#14b8a6"></i>aplat</button>
+    <button type="button" class="lgbtn" id="lgSupport" aria-pressed="false" title="Afficher / masquer la carte du maintien de la matière : vert = près d'un appui (feuille solide ou pont), jaune, puis orange = à la limite de l'espacement entre appuis (encore accepté), rouge = au-delà : il manque un pont (aucune place n'a été trouvée). Fort le long des bords (ce que tiennent les ponts structurels), léger à l'intérieur des pièces larges ; la feuille solide reste sans couleur."><i style="background:linear-gradient(90deg,#28b43c,#f0d200,#ff8c00 75%,#e61e1e 75%)"></i>maintien</button>
   </div>
   <div class="layers" id="layers"><p class="hint">Les pochoirs apparaîtront ici, dans l'ordre de pulvérisation.</p></div>
 </div>
@@ -1667,7 +1670,7 @@
 const $ = id => document.getElementById(id);
 let SID = null, MATS = {}, LAST = null, VIEW = "preview", SEL = null, timer = null, busy = false, again = false;
 
-const MAT_FIELDS = ["min_opening_mm", "min_strip_mm", "bridge_width_mm", "min_area_mm2", "double_bridge_area_mm2", "min_bridges", "bridges"];
+const MAT_FIELDS = ["min_opening_mm", "min_strip_mm", "bridge_width_mm", "min_area_mm2", "double_bridge_area_mm2", "min_bridges", "bridges", "bridge_spacing_mm"];
 const PARAMS = ["support_w_mm", "support_h_mm", "support_color", "inner_margin_mm",
   "image_scale", "image_height_factor", "image_pos_x", "image_pos_y", "margin_mm", "sheet_mode", "sheet_border_mm", "reg_dims", "machine_max_mm", "mat_w_mm", "mat_h_mm", "mat_orient", "reg_corners", "reg_shape", "reg_size_mm", "layer_notches", "sheet_outline",
   "pre_auto_levels", "pre_clahe", "pre_contrast", "pre_shadows", "pre_highlights", "pre_black", "pre_white", "pre_gamma", "pre_curve",
@@ -3031,6 +3034,7 @@ const TIPS = {
   merge_line_islands: "Quand les traits des détails clés sont mis dans une couche, ils encerclent souvent de petites zones claires qui demandent chacune un pont. Coché : ces petits îlots peuvent aussi être supprimés (peints), dans la même limite de surface ; le trait lui-même n'est jamais coupé. Attention : l'intérieur d'un petit motif cerclé (un œil…) peut alors être rempli.",
   min_bridges: "Nombre minimal de ponts par îlot (2 ou plus = îlot mieux tenu, mais plus de ponts visibles).",
   double_bridge_area_mm2: "Au-delà de cette surface (mm²), un îlot reçoit au moins 2 ponts.",
+  bridge_spacing_mm: "Distance maximale entre deux appuis successifs le long du bord de la matière, en mm (au moins la largeur des ponts). Seule la feuille reliée au cadre par des passages d'au moins 6 mm de large compte comme tenue ; ailleurs (pièce pendue à une bande étroite, îlot tenu par ses ponts, bande fine), un bord trop loin d'un appui se soulève (feuille stockée roulée) et reçoit un pont, avec un autre en face sur une bande fine. C'est un maximum : les ponts se placent où un pont court est possible, les écarts réels sont souvent plus petits. 0 = pas de ponts structurels.",
   tolerance_mm: "Tolérance de simplification des contours : plus haut = moins de nœuds, contours moins fidèles.",
   smooth_curves: "Contours en courbes de Bézier (coupe plus douce) plutôt qu'en segments droits.",
   spray_mm: "Flou de l'aérographe utilisé par le rendu simulé, en mm.",
@@ -3596,6 +3600,13 @@ async function init() {
     if (k.startsWith("user:")) MATBAR.setDirty(true);
     else if (k !== "custom") { $("material").value = "custom"; cutInfo(); }
   }));
+  // spacing of the structural bridges: 0 (off) or at least the bridge width (as the engine)
+  const clampSpacing = () => {
+    const v = val("bridge_spacing_mm"), w = val("bridge_width_mm");
+    if (v > 0 && v < w) { $("bridge_spacing_mm").value = w; schedule(); }
+  };
+  $("bridge_spacing_mm").addEventListener("change", clampSpacing);
+  $("bridge_width_mm").addEventListener("change", clampSpacing);
 
   // Saved presets: Save / Save as… / Rename… / Delete bars
   SUPBAR = makePresetBar({
@@ -3773,12 +3784,14 @@ async function init() {
     else syncStockPreset();
     stockChanged();
   }));
+  setOverlay("lgSupport", "no-support", false);      // off unless remembered on
   try {
     const ov = JSON.parse(localStorage.getItem("overspraylab.surlignages") || "{}");
     setOverlay("lgBridges", "no-bridges", ov.bridges !== false);
     setOverlay("lgLost", "no-lost", ov.lost !== false);
     setOverlay("lgMerged", "no-merged", ov.merged !== false);
     setOverlay("lgFlat", "no-flat", ov.flat !== false);
+    setOverlay("lgSupport", "no-support", ov.support === true);
   } catch (e) { /* storage unavailable */ }
   const saveOverlays = () => {
     try {
@@ -3786,13 +3799,15 @@ async function init() {
         bridges: $("lgBridges").getAttribute("aria-pressed") === "true",
         lost: $("lgLost").getAttribute("aria-pressed") === "true",
         merged: $("lgMerged").getAttribute("aria-pressed") === "true",
-        flat: $("lgFlat").getAttribute("aria-pressed") === "true" }));
+        flat: $("lgFlat").getAttribute("aria-pressed") === "true",
+        support: $("lgSupport").getAttribute("aria-pressed") === "true" }));
     } catch (e) { /* storage unavailable */ }
   };
   $("lgBridges").onclick = () => { setOverlay("lgBridges", "no-bridges", $("lgBridges").getAttribute("aria-pressed") !== "true"); saveOverlays(); };
   $("lgLost").onclick = () => { setOverlay("lgLost", "no-lost", $("lgLost").getAttribute("aria-pressed") !== "true"); saveOverlays(); };
   $("lgMerged").onclick = () => { setOverlay("lgMerged", "no-merged", $("lgMerged").getAttribute("aria-pressed") !== "true"); saveOverlays(); };
   $("lgFlat").onclick = () => { setOverlay("lgFlat", "no-flat", $("lgFlat").getAttribute("aria-pressed") !== "true"); saveOverlays(); };
+  $("lgSupport").onclick = () => { setOverlay("lgSupport", "no-support", $("lgSupport").getAttribute("aria-pressed") !== "true"); saveOverlays(); };
   $("optPre").onclick = () => { SHOW_PRE = !SHOW_PRE; render(); };
   $("show_reg").addEventListener("change", () => { render(); rememberSettings(); });
   const setViewBg = () => {                        // display preference, not part of the project
@@ -4693,9 +4708,15 @@ function historyGo(step) {
 }
 function updateCalcBtn() {
   const b = $("calcBtn");
-  b.hidden = autoCalc() || !SID;
+  b.hidden = !SID;
   const running = busy && GEN === CALC_GEN;   // settings changed since it started: it can be replaced
   b.disabled = running;
+  if (autoCalc()) {                           // auto mode: forces a computation (e.g. a restored result)
+    b.classList.remove("dirty");
+    b.textContent = running ? "Calcul en cours…" : "Recalculer ↻";
+    b.title = "Relance le calcul avec les réglages actuels, par exemple pour mettre à jour un résultat restauré à l'ouverture d'un projet (Ctrl + Entrée)";
+    return;
+  }
   b.classList.toggle("dirty", DIRTY && !running);
   b.textContent = running ? "Calcul en cours…" : DIRTY ? "Recalculer ●" : "À jour ✓";
   b.title = DIRTY ? "Des réglages ont changé depuis le dernier calcul : cliquer pour recalculer (Ctrl + Entrée)"
@@ -6120,6 +6141,8 @@ function render() {
           <button type="button" class="eye" aria-pressed="${!HIDDEN.has(L.index)}" title="Afficher / masquer dans la prévisualisation" aria-label="Afficher / masquer dans la prévisualisation">${eyeIcon(!HIDDEN.has(L.index))}</button></div>
         ${L.paths} tracés · ${L.nodes} nœuds · ${L.islands} îlot${L.islands > 1 ? "s" : ""} · ${L.bridges} ponts${L.merged ? ` · ${L.merged} fusion${L.merged > 1 ? "s" : ""}` : ""}<br>
         ${L.short_islands ? `<span style="color:#d97706">⚠ ${L.short_islands} îlot(s) sans place pour ${val("min_bridges")} ponts</span><br>` : ""}
+        ${L.struct_bridges ? `dont ${L.struct_bridges} pont(s) structurel(s)<br>` : ""}
+        ${L.weak_spots ? `<span style="color:#d97706">⚠ ${L.weak_spots} partie(s) tenue(s) d'un seul côté, sans place pour un pont</span><br>` : ""}
         Coupe : ${L.cut_length_m} m · détails supprimés : ${L.lost_pct} %
       </div>
     </div>`).join("");
@@ -6164,6 +6187,7 @@ function layerStack(L, attrs = "") {
     (L.img_lost ? `<img class="ov ov-lost" src="${L.img_lost}" alt="">` : "") +
     (L.img_merged ? `<img class="ov ov-merged" src="${L.img_merged}" alt="">` : "") +
     (L.img_flat ? `<img class="ov ov-flat" src="${L.img_flat}" alt="">` : "") +
+    (L.img_support ? `<img class="ov ov-support" src="${L.img_support}" alt="">` : "") +
     (L.img_bridges ? `<img class="ov ov-bridges" src="${L.img_bridges}" alt="">` : "") +
     (LAST && L.reg ? regSVG(L.reg, [0, 0, LAST.sheet_mm[0], LAST.sheet_mm[1]]) : "") + `</div>`;
 }

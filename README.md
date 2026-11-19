@@ -47,7 +47,7 @@ OversprayLab does all the tedious work for you:
 | Problem | What OversprayLab does |
 |---|---|
 | A photo has millions of colours | Reduces it to **2 – 8 paint tones**, sorted from light to dark (spraying order). |
-| A hole inside a hole falls out of the stencil (the inside of an "O") | Detects these **islands** and adds thin **bridges** to hold them, preferably where a darker layer will paint over them. |
+| A hole inside a hole falls out of the stencil (the inside of an "O") | Detects these **islands** and adds thin **bridges** to hold them, preferably where a darker layer will paint over them. Badly held parts (held from one side only, long thin strips, large islands) get **structural bridges** too. |
 | Shapes too thin to cut or too fragile | Enforces the **material limits** (minimum opening, minimum material strip, minimum piece area). |
 | Layers must line up perfectly | Adds **registration marks** (corner brackets, crosses or pin holes) and **notches** showing the layer number. |
 | Fine details get lost in the blur of the airbrush | Optional **key-detail lines** (a separate outline stencil sprayed last, or cut into a colour layer), plus the **silhouette** of the subject if you want it to stand out. |
@@ -153,8 +153,9 @@ Open the SVG files of the zip in Silhouette Studio, cut, and spray layer 1, 2, 3
 
 **Auto compute** (header): when ticked, every change recomputes the stencils. Untick it for big
 images: the header button turns into a pulsing orange **Recompute ●** as soon as a setting has
-changed; click it or press **Ctrl + Enter**. While a computation runs, the header turns orange and
-striped.
+changed; click it or press **Ctrl + Enter**. When ticked, the same button reads **Recompute ↻** and
+forces a computation with the current settings (for example to update a result restored when a
+project or snapshot was opened). While a computation runs, the header turns orange and striped.
 
 ---
 
@@ -552,6 +553,15 @@ islands instead of bridging them is set in *Simplification* (5.5).
 - **Bridges**: **Automatic bridges (islands)**, **Bridge width** and **Minimum bridges per island**.
   Bridges are placed short, away from other edges, and preferably where a darker layer will paint
   over them (invisible bridges).
+  **Max spacing between supports** (mm, at least the bridge width, 0 = off; 80 for Mylar, 60 for
+  card, off for adhesive vinyl) adds **structural bridges** to material that is attached but badly
+  held. Only the sheet joined to the frame by paths at least 6 mm wide counts as held; along every
+  other edge of material (a large piece hanging from a narrow strip, an island held by its bridges,
+  a thin strip), two successive supports (measured along the material) are never farther apart than
+  the spacing: a bridge goes where the edge is farthest from a support, plus one on the opposite
+  edge of a thin strip so it cannot pivot. It is a maximum, the actual gaps are often smaller. Without them, a
+  sheet stored rolled lifts these parts and the stencil is hard to lay and position. The layer card
+  counts them and warns about parts that found no room for one.
 
 ### 5.10 Layer effects
 
@@ -647,7 +657,10 @@ the same settings line up from one layer to the next.
   **removed detail** are buttons that highlight bridges (red) and details removed by the material
   limits; **merge** highlights the zones merged instead of a bridge (violet); **flat area** shows
   the painted flat zones of the layer (teal: zones of the General flat mask where they ended in this layer, and zones
-  forced into it). A card warns you about remaining problems (for example an island that could not be
+  forced into it); **support** (off by default) maps how well the material is held: the solid sheet
+  stays uncoloured, the rest goes from green (next to a support: solid sheet or bridge) through
+  yellow to orange (at the limit of the *Max spacing between supports*, still accepted); red means
+  beyond the limit, where a bridge is missing (no room was found for one), strongly along the edges and lightly inside wide pieces. A card warns you about remaining problems (for example an island that could not be
   bridged).
 
 If many details are removed, increase the size of the image, lower the level of detail or choose a

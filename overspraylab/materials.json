@@ -8,6 +8,7 @@
     "double_bridge_area_mm2": 300,
     "min_bridges": 2,
     "bridges": true,
+    "bridge_spacing_mm": 60,
     "sheet_color": "#e9dfc8"
   },
   "vinyle": {
@@ -19,6 +20,7 @@
     "double_bridge_area_mm2": 600,
     "min_bridges": 1,
     "bridges": true,
+    "bridge_spacing_mm": 0,
     "sheet_color": "#d9dde2"
   },
   "mylar": {
@@ -30,6 +32,7 @@
     "double_bridge_area_mm2": 400,
     "min_bridges": 1,
     "bridges": true,
+    "bridge_spacing_mm": 80,
     "sheet_color": "#cfe0e6"
   }
 }

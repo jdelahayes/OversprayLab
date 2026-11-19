@@ -42,6 +42,9 @@ try {
     "Coché : chaque modification relance le calcul. Décoché : le calcul ne se fait qu'à la demande (bouton à côté, ou Ctrl + Entrée).": "Checked: every change recomputes. Unchecked: compute only on demand (button next to it, or Ctrl + Enter).",
     "À jour ✓": "Up to date ✓",
     "Recalculer ●": "Recompute ●",
+    "Recalculer ↻": "Recompute ↻",
+    "Relance le calcul avec les réglages actuels, par exemple pour mettre à jour un résultat restauré à l'ouverture d'un projet (Ctrl + Entrée)":
+      "Runs the computation again with the current settings, for example to update a result restored when a project was opened (Ctrl + Enter)",
     "Calcul en cours…": "Computing…",
     "Des réglages ont changé depuis le dernier calcul : cliquer pour recalculer (Ctrl + Entrée)": "Settings changed since the last computation: click to recompute (Ctrl + Enter)",
     "Le résultat correspond aux réglages actuels (cliquer pour recalculer quand même)": "The result matches the current settings (click to recompute anyway)",
@@ -567,6 +570,9 @@ try {
     "Quand les traits des détails clés sont mis dans une couche, ils encerclent souvent de petites zones claires qui demandent chacune un pont. Coché : ces petits îlots peuvent aussi être supprimés (peints), dans la même limite de surface ; le trait lui-même n'est jamais coupé. Attention : l'intérieur d'un petit motif cerclé (un œil…) peut alors être rempli.": "When key-detail lines are put in a layer, they often enclose small light areas that each need a bridge. Checked: these small islands may be removed (painted) too, within the same area limit; the line itself is never cut. Beware: the inside of a small circled motif (an eye…) may then be filled.",
     "Désactivée : les îlots sont toujours tenus par des ponts.": "Off: islands are always held by bridges.",
     "fusion": "merge",
+    "maintien": "support",
+    "Afficher / masquer la carte du maintien de la matière : vert = près d'un appui (feuille solide ou pont), jaune, puis orange = à la limite de l'espacement entre appuis (encore accepté), rouge = au-delà : il manque un pont (aucune place n'a été trouvée). Fort le long des bords (ce que tiennent les ponts structurels), léger à l'intérieur des pièces larges ; la feuille solide reste sans couleur.":
+      "Show / hide the map of how well the material is held: green = next to a support (solid sheet or bridge), yellow, then orange = at the limit of the spacing between supports (still accepted), red = beyond: a bridge is missing (no room was found). Strong along the edges (what the structural bridges hold), light inside wide pieces; the solid sheet stays uncoloured.",
     "Afficher / masquer les zones fusionnées au lieu d'un pont (chenal fermé ou petit îlot supprimé)": "Show / hide the zones merged instead of a bridge (closed channel or removed small island)",
     "Au lieu d'un pont, ferme un chenal étroit (l'îlot se soude au reste de la feuille) ou supprime un petit îlot (il est peint), si la zone modifiée reste petite. 0 = toujours des ponts. Une zone repeinte ensuite par une couche plus foncée ne compte pas ; la modification compte moins si les deux teintes sont proches.": "Instead of a bridge, closes a narrow channel (the island is welded to the rest of the sheet) or removes a small island (it gets painted), if the changed area stays small. 0 = always bridges. An area repainted later by a darker layer does not count; the change counts less when both tones are close.",
     "Seuls les passages d'ouverture plus étroits que cette largeur peuvent être fermés (au-delà, c'est une vraie zone peinte).": "Only opening passages narrower than this width may be closed (wider ones are real painted areas).",
@@ -579,6 +585,11 @@ try {
     "Mon matériau": "My material", "Ouverture mini (mm)": "Minimum opening (mm)", "Bande de matière mini (mm)": "Minimum material strip (mm)",
     "Surface mini d'une pièce (mm²)": "Minimum piece area (mm²)", "Ponts automatiques (îlots)": "Automatic bridges (islands)",
     "Largeur des ponts (mm)": "Bridge width (mm)", "Ponts minimum par îlot": "Minimum bridges per island", "2 ponts au-delà de (mm²)": "2 bridges above (mm²)",
+    "Espacement max entre appuis (mm)": "Max spacing between supports (mm)",
+    "Ponts structurels : le long des bords de la matière mal tenue (grande pièce pendue à une bande étroite, îlot, bande fine), deux appuis ne sont jamais plus éloignés que cet espacement. 0 = désactivé.":
+      "Structural bridges: along the edges of badly held material (a large piece hanging from a narrow strip, an island, a thin strip), two supports are never farther apart than this spacing. 0 = off.",
+    "Distance maximale entre deux appuis successifs le long du bord de la matière, en mm (au moins la largeur des ponts). Seule la feuille reliée au cadre par des passages d'au moins 6 mm de large compte comme tenue ; ailleurs (pièce pendue à une bande étroite, îlot tenu par ses ponts, bande fine), un bord trop loin d'un appui se soulève (feuille stockée roulée) et reçoit un pont, avec un autre en face sur une bande fine. C'est un maximum : les ponts se placent où un pont court est possible, les écarts réels sont souvent plus petits. 0 = pas de ponts structurels.":
+      "Largest distance between two successive supports along the edge of the material, in mm (at least the bridge width). Only the sheet joined to the frame by paths at least 6 mm wide counts as held; elsewhere (a piece hanging from a narrow strip, an island held by its bridges, a thin strip), an edge too far from a support lifts (sheet stored rolled) and gets a bridge, with another one facing it on a thin strip. It is a maximum: bridges go where a short bridge is possible, so the actual gaps are often smaller. 0 = no structural bridges.",
     "Les ponts d'un même îlot sont répartis tout autour. Plus de ponts = îlots mieux tenus (papier, grands îlots), mais plus de traces à retoucher.": "An island's bridges are spread all around it. More bridges = better-held islands (paper, large islands), but more marks to touch up.",
     "Papier épais / carte (160-300 g/m²)": "Heavy paper / card (160-300 gsm)", "Vinyle adhésif": "Adhesive vinyl", "Mylar (0,1-0,19 mm)": "Mylar (0.1-0.19 mm)",
     "Le papier se déchire facilement : préférez des ponts larges et des bandes de matière généreuses.": "Paper tears easily: prefer wide bridges and generous material strips.",
@@ -1261,6 +1272,9 @@ try {
     [/^Fusion acceptée jusqu'à ([\d.]+) mm² modifiés \(zone visible\), sinon un pont\.$/,
       (m, a) => `Merge accepted up to ${a} mm² changed (visible area), otherwise a bridge.`],
     [/^⚠ (\d+) îlot\(s\) sans place pour (\d+) ponts$/, (m, a, b) => `⚠ ${a} island(s) without room for ${b} bridges`],
+    [/^dont (\d+) pont\(s\) structurel\(s\)$/, (m, a) => `including ${a} structural bridge(s)`],
+    [/^⚠ (\d+) partie\(s\) tenue\(s\) d'un seul côté, sans place pour un pont$/,
+      (m, a) => `⚠ ${a} part(s) held from one side only, with no room for a bridge`],
     [/^Coupe : ([\d.]+) m · détails supprimés : ([\d.]+) %$/, (m, a, b) => `Cut: ${a} m · removed details: ${b} %`],
     [/^Palette « (.+) »$/, (m, n) => `Palette “${tr(n)}”`],
     [/^Palette « (.+) » appliquée à (\d+) couches?$/, (m, n, k) => `Palette “${tr(n)}” applied to ${plural(k, "layer")}`],

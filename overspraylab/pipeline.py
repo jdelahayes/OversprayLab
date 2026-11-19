@@ -164,6 +164,9 @@ class Params:
     double_bridge_area_mm2: float = 400.0
     min_bridges: int = 1           # minimum number of bridges per island (1 to 4)
     bridges: bool = True
+    # Structural bridges (0 = off): largest spacing between two supports along the material, in mm
+    # (a part held from one side only, or a long thin strip); see add_struct_bridges
+    bridge_spacing_mm: float = 0.0
     # Merging zones instead of bridges (0 = off): see merge_zones
     merge_amount: float = 0.0      # 0..150, progressive scale of the largest visible change accepted
     merge_channel_mm: float = 2.5  # A: channels of opening narrower than this may be closed
@@ -264,6 +267,9 @@ class Params:
         p.image_pos_x = float(np.clip(p.image_pos_x, -100, 200))
         p.image_pos_y = float(np.clip(p.image_pos_y, -100, 200))
         p.min_bridges = int(np.clip(p.min_bridges, 1, 4))
+        p.bridge_spacing_mm = float(np.clip(p.bridge_spacing_mm, 0, 2000))
+        if 0 < p.bridge_spacing_mm < p.bridge_width_mm:    # at least the width of a bridge
+            p.bridge_spacing_mm = p.bridge_width_mm
         p.reg_corners = p.reg_corners if p.reg_corners in (0, 3, 4) else 4
         p.sheet_mode = p.sheet_mode if p.sheet_mode in ("around", "fit") else "fit"
         p.mat_orient = p.mat_orient if p.mat_orient in ("portrait", "landscape") else "portrait"
@@ -1701,6 +1707,344 @@ def _candidates(lab, i, st, cent, dist, near, hidden, dmin, ppm, max_pts=96, wid
 
 
 # --------------------------------------------------------------------------
+# 4b. Structural bridges: material that is attached, but badly held
+# --------------------------------------------------------------------------
+# A part of the sheet may touch the frame and still be badly held: a large piece hanging from a
+# narrow strip (it hinges, a sheet stored rolled lifts it), or a long thin strip held at one end
+# (or at both ends, but very long). The "solid" sheet is the material joined to the frame by paths
+# at least SPAN_RIGID_MM wide; every other edge of material (wide pieces and thin strips alike) must
+# be within half the spacing (`bridge_spacing_mm`) of a support, measured through the material
+# (geodesic distance, on a reduced copy). The farthest edge gets a bridge first (onto material that
+# is better held), plus one on the opposite edge when it is a thin strip; bridges become supports.
+SPAN_PPM = 3.0             # resolution of the analysis (px/mm)
+SPAN_RIGID_MM = 6.0        # material joined to the frame by paths at least this wide is solid
+SPAN_BRIDGE_MAX_MM = 15.0  # longest structural bridge
+SPAN_MAX_BRIDGES = 150     # per layer (safety)
+_K8 = np.ones((3, 3), np.uint8)
+_K4 = cv2.getStructuringElement(cv2.MORPH_CROSS, (3, 3))
+
+
+def _geodesic(src: np.ndarray, mat: np.ndarray, limit: float) -> np.ndarray:
+    """Geodesic distance (px, octagonal approximation) from `src` through `mat`, up to `limit` px;
+    inf beyond it or where unreachable."""
+    D = np.full(mat.shape, np.inf, np.float32)
+    m = mat.astype(np.uint8)
+    cur = (src.astype(np.uint8) & m)
+    D[cur > 0] = 0
+    for it in range(1, int(limit / 1.08) + 2):
+        nxt = cv2.dilate(cur, _K8 if it % 2 else _K4) & m
+        new = nxt > cur
+        if not new.any():
+            break
+        D[new] = it * 1.08
+        cur = nxt
+    return D
+
+
+def _ray_bridge(work, xs, ys, maxlen, land_ok, hidden, bw, away=None, n_ang=48, avoid=None, focus=None):
+    """Best straight bridge leaving the material at one of the edge points (xs, ys), crossing an
+    opening up to the first material met, where `land_ok(ax, ay, qx, qy, length)` (arrays -> bool
+    array) accepts it. `away`: unit vector, only directions within 60° of it. Score = length weighted
+    by the visible share (as `_candidates`); bridges running along an edge are rejected.
+    `avoid`: (existing bridges [(x1, y1, x2, y2)], radius px): a bridge whose middle is that close to
+    the middle of one of them is a last resort. `focus`: (x, y) the point to hold; the distance
+    from the anchor to it counts like the length of the bridge. Returns ((ax, ay), (qx, qy)) or None."""
+    if len(xs) == 0:
+        return None
+    H, W = work.shape
+    ang = np.linspace(0, 2 * np.pi, n_ang, endpoint=False)
+    dx, dy = np.cos(ang), np.sin(ang)
+    if away is not None:
+        keep = dx * away[0] + dy * away[1] >= 0.5
+        dx, dy = dx[keep], dy[keep]
+    steps = np.arange(1, int(maxlen) + 1, dtype=np.float32)
+    px = np.rint(xs[:, None, None] + dx[None, :, None] * steps).astype(np.int32)
+    py = np.rint(ys[:, None, None] + dy[None, :, None] * steps).astype(np.int32)
+    inb = (px >= 0) & (px < W) & (py >= 0) & (py < H)
+    m = work[py.clip(0, H - 1), px.clip(0, W - 1)] > 0
+    empty = ~m & inb
+    solid = m & inb
+    g0 = np.argmax(empty, axis=2)
+    ok = empty.any(axis=2) & (g0 <= 3)             # the ray leaves the material at once
+    idx = np.arange(len(steps))[None, None, :]
+    after = solid & (idx > g0[..., None])
+    h = np.argmax(after, axis=2)
+    ok &= after.any(axis=2)
+    ci, ai = np.nonzero(ok)
+    if len(ci) == 0:
+        return None
+    hh = h[ci, ai]
+    # the opening crossed must not be left through the sheet edge before the landing point
+    ok_in = inb[ci, ai, hh]
+    ci, ai, hh = ci[ok_in], ai[ok_in], hh[ok_in]
+    ax, ay = xs[ci], ys[ci]
+    qx, qy = px[ci, ai, hh], py[ci, ai, hh]
+    length = (hh + 1).astype(np.float32)
+    good = land_ok(ax, ay, qx, qy, length)
+    if not good.any():
+        return None
+    ax, ay, qx, qy, length = ax[good], ay[good], qx[good], qy[good], length[good]
+    off = np.zeros(len(length), np.float32) if focus is None else         np.hypot(ax - focus[0], ay - focus[1]).astype(np.float32)
+    order = np.argsort(length + off)[:40]
+    if avoid is not None and avoid[0]:
+        near = np.zeros(len(length), bool)
+        mx, my = (ax + qx) / 2, (ay + qy) / 2
+        for (x1, y1, x2, y2) in avoid[0]:
+            near |= np.hypot(mx - (x1 + x2) / 2, my - (y1 + y2) / 2) < avoid[1]
+        order = np.argsort(length + off + near * 1e6)[:40]
+    best = []
+    for k in order:
+        a, q, ln = (int(ax[k]), int(ay[k])), (int(qx[k]), int(qy[k])), float(length[k])
+        vis = 1.0
+        if hidden is not None:
+            n = max(2, int(ln))
+            lx = np.linspace(a[0], q[0], n).round().astype(int)
+            ly = np.linspace(a[1], q[1], n).round().astype(int)
+            vis = 1.0 - float(hidden[ly, lx].mean())
+        crowd = 1e6 if avoid is not None and avoid[0] and min(
+            math.hypot((a[0] + q[0] - x1 - x2) / 2, (a[1] + q[1] - y1 - y2) / 2) for (x1, y1, x2, y2) in avoid[0]) < avoid[1] else 0
+        best.append(((ln + 1) * (0.15 + 0.85 * vis) + float(off[k]) + crowd, a, q))
+    best.sort()
+    for _s, a, q in best:
+        if _clear_of_material(work, 1, a[0], a[1], q, bw):
+            return a, q
+    return None
+
+
+def _solid_sheet(work: np.ndarray, ppm: float, s: float) -> tuple:
+    """Material reduced by `s` (bool), the solid sheet in it (material joined to the frame by paths
+    at least SPAN_RIGID_MM wide; None when there is no material) and the material at least that wide."""
+    H, W = work.shape
+    w, h = max(1, int(round(W * s))), max(1, int(round(H * s)))
+    mat = cv2.resize(work.astype(np.float32), (w, h), interpolation=cv2.INTER_AREA) > 0.3
+    k = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (max(3, int(SPAN_RIGID_MM * ppm * s) | 1),) * 2)
+    opened = cv2.morphologyEx(mat.astype(np.uint8), cv2.MORPH_OPEN, k)
+    n, plab = cv2.connectedComponents(opened, connectivity=4)
+    if n < 2:
+        return mat, None, opened > 0
+    frame = int(plab[0, 0])
+    if not frame:
+        frame = 1 + int(np.argmax(np.bincount(plab.ravel())[1:]))
+    return mat, plab == frame, opened > 0
+
+
+SUPPORT_MAP_REF_MM = 80.0   # spacing the support map is scaled to when structural bridges are off
+
+
+def support_map(res: "Result", L: "Layer") -> np.ndarray | None:
+    """How well the material of a layer is held (BGRA overlay, sheet size; None without material):
+    the solid sheet is left transparent; the rest of the material is coloured by its distance to a
+    support (solid sheet or bridge) through the material, compared with half the spacing between
+    supports: green = next to a support, yellow, orange = at the limit (still accepted), red =
+    beyond it (a bridge is missing there: only where none found room).
+    Strong along the edges (what the structural bridges hold), light inside wide pieces."""
+    p = res.params
+    ppm = p.px_per_mm
+    s = min(1.0, SPAN_PPM / ppm)
+    work = (L.opening == 0).astype(np.uint8)
+    mat, solid, _wide = _solid_sheet(work, ppm, s)
+    if solid is None:
+        return None
+    half = (p.bridge_spacing_mm if p.bridge_spacing_mm > 0 else SUPPORT_MAP_REF_MM) / 2 * ppm * s
+    src = solid.astype(np.uint8)
+    bwl = max(1, int(round(p.bridge_width_mm * ppm * s)))
+    for (x1, y1, x2, y2) in L.bridges:              # a bridge is a support (as in add_struct_bridges)
+        cv2.line(src, (int(x1 * s), int(y1 * s)), (int(x2 * s), int(y2 * s)), 1, thickness=bwl)
+    D = _geodesic(src > 0, mat, 1.5 * half)
+    r = np.clip(np.where(np.isfinite(D), D / half, 1.5), 0, 1.5)
+    weak = mat & ~solid
+    # green (0) -> yellow (0.6) -> orange (limit) | red beyond -> dark red, BGR
+    stops = np.array([[0.0, 60, 180, 40], [0.6, 0, 210, 240], [1.0, 0, 140, 255], [1.0001, 30, 30, 230],
+                      [1.5, 40, 0, 120]], np.float32)
+    col = np.stack([np.interp(r, stops[:, 0], stops[:, c]) for c in (1, 2, 3)], -1).astype(np.uint8)
+    out = np.zeros(mat.shape + (4,), np.uint8)
+    out[..., :3] = col
+    # the rule holds the edges: a band along them is coloured strongly, the inside of a wide piece lightly
+    depth = cv2.distanceTransform(mat.astype(np.uint8), cv2.DIST_L2, 3)
+    band = depth <= SPAN_RIGID_MM / 2 * ppm * s
+    out[..., 3] = np.where(weak & band, 210, np.where(weak, 70, 0)).astype(np.uint8)
+    H, W = work.shape
+    out = cv2.resize(out, (W, H), interpolation=cv2.INTER_NEAREST)
+    out[..., 3][work == 0] = 0                     # openings stay clear (reduced copy is coarser)
+    return out
+
+
+def add_struct_bridges(opening: np.ndarray, p: Params, hidden: np.ndarray | None = None) -> tuple[list, int]:
+    """Structural bridges (see above), after the island bridges. Modifies `opening` in place.
+    Returns (bridges [(x1, y1, x2, y2)] in pixels, number of weak spots that got no bridge)."""
+    if not p.bridges or p.bridge_spacing_mm <= 0:
+        return [], 0
+    ppm = p.px_per_mm
+    bw = max(1, int(round(p.bridge_width_mm * ppm)))
+    s = min(1.0, SPAN_PPM / ppm)          # full resolution -> analysis
+    H, W = opening.shape
+    w, h = max(1, int(round(W * s))), max(1, int(round(H * s)))
+    span = max(1.0, p.bridge_spacing_mm / 2 * ppm * s)   # farthest an edge may be from a support
+    maxlen = SPAN_BRIDGE_MAX_MM * ppm
+    bwl = max(1, int(round(bw * s)))
+    orig = opening.copy()
+    work = (opening == 0).astype(np.uint8)
+    mat, solid, wide = _solid_sheet(work, ppm, s)
+    if solid is None:
+        return [], 0
+    # thin strips (narrower than SPAN_RIGID_MM), and those long enough to need a bridge on each edge
+    tn, tlab, tst, _c = cv2.connectedComponentsWithStats((mat & ~wide).astype(np.uint8), connectivity=8)
+    long_strip = np.hypot(tst[:, cv2.CC_STAT_WIDTH], tst[:, cv2.CC_STAT_HEIGHT]) >= span
+    long_strip[0] = False
+    mat0 = mat.copy()                      # without the structural bridges (see _prune_struct)
+    m8 = mat.astype(np.uint8)
+    edge = mat & (cv2.erode(m8, _K8, borderType=cv2.BORDER_REPLICATE) == 0)
+    measured = edge & ~solid               # edges of the material not part of the solid sheet
+    cap = 3 * span
+    D = np.minimum(_geodesic(solid, mat, cap), cap)
+    bridges, weak = [], 0
+    groups, reach = [], []                 # bridges placed together, and where they hold
+    given = np.zeros((h, w), bool)
+    yy, xx = np.mgrid[0:h, 0:w]
+
+    def lo(x, y):
+        return (np.clip((np.asarray(y) * s).astype(int), 0, h - 1),
+                np.clip((np.asarray(x) * s).astype(int), 0, w - 1))
+
+    def edge_points(region_lo, near=None, r=0.0):
+        """Full-resolution material edge points inside a reduced region (at most 200)."""
+        ys_, xs_ = np.nonzero(region_lo)
+        if len(xs_) == 0:
+            return np.zeros(0, int), np.zeros(0, int)
+        x0, x1 = max(0, int(xs_.min() / s) - 2), min(W, int((xs_.max() + 1) / s) + 2)
+        y0, y1 = max(0, int(ys_.min() / s) - 2), min(H, int((ys_.max() + 1) / s) + 2)
+        sub = work[y0:y1, x0:x1]
+        e = (sub > 0) & (cv2.erode(sub, _K8, borderType=cv2.BORDER_REPLICATE) == 0)
+        ey, ex = np.nonzero(e)
+        ex, ey = ex + x0, ey + y0
+        keep = region_lo[lo(ex, ey)]
+        if near is not None:
+            keep &= np.hypot(ex - near[0], ey - near[1]) <= r
+        ex, ey = ex[keep], ey[keep]
+        if len(ex) > 200:
+            sel = np.linspace(0, len(ex) - 1, 200).astype(int)
+            ex, ey = ex[sel], ey[sel]
+        return ex, ey
+
+    def draw(a, q):
+        cv2.line(opening, a, q, 0, thickness=bw)
+        cv2.line(work, a, q, 1, thickness=bw)
+        bridges.append((a[0], a[1], q[0], q[1]))
+
+    def gain(need, Dref):
+        return lambda ax, ay, qx, qy, ln: Dref[lo(ax, ay)] - (Dref[lo(qx, qy)] + ln * s) >= need
+
+    while len(bridges) < SPAN_MAX_BRIDGES:
+        check_cancel()
+        Dm = np.where(measured & ~given, D, 0)
+        far = float(Dm.max())
+        if far <= span:
+            break
+        fy, fx = np.unravel_index(int(np.argmax(Dm)), Dm.shape)
+        reg = (Dm >= far - span / 2) & ((yy - fy) ** 2 + (xx - fx) ** 2 <= (span / 2) ** 2)
+        ex, ey = edge_points(reg)
+        b = _ray_bridge(work, ex, ey, maxlen, gain(span / 2, D), hidden, bw,
+                        avoid=(bridges, min(p.bridge_spacing_mm / 4, 10.0) * ppm), focus=(fx / s, fy / s))
+        if b is None:
+            given |= cv2.dilate(reg.astype(np.uint8), _K8, iterations=max(1, int(span / 4))) > 0
+            weak += 1
+            continue
+        new = [b]
+        groups.append(new)
+        (ax, ay), (qx, qy) = b
+        d = np.array([qx - ax, qy - ay], np.float64)
+        d /= max(1e-6, float(np.hypot(*d)))
+        draw(*b)
+        # a long thin strip: the opposite edge of the same strip, at the same place, so the strip
+        # cannot pivot on its bridge (not at a short neck, nor from the piece across the opening)
+        b2 = None
+        t = int(tlab[lo(ax, ay)])
+        if t and long_strip[t]:
+            around = np.zeros((h, w), np.uint8)
+            cv2.circle(around, (int(ax * s), int(ay * s)), max(2, int(SPAN_RIGID_MM * ppm * s)), 1, -1)
+            ox, oy = edge_points((around > 0) & (tlab == t), near=(ax, ay), r=SPAN_RIGID_MM * ppm)
+            b2 = _ray_bridge(work, ox, oy, maxlen, gain(span / 4, D), hidden, bw, away=-d)
+        if b2 is not None and len(bridges) < SPAN_MAX_BRIDGES:
+            draw(*b2)
+            new.append(b2)
+        # the bridges are supports: distances updated around them only (paths leaving that window
+        # are ignored, which can only overestimate)
+        pts = np.array([c for a, q in new for c in (a, q)], np.float64) * s
+        x0, y0 = (np.maximum(0, pts.min(0) - cap - 2)).astype(int)
+        x1, y1 = (np.minimum((w, h), pts.max(0) + cap + 3)).astype(int)
+        nb = np.zeros((y1 - y0, x1 - x0), np.uint8)
+        for a, q in new:
+            cv2.line(nb, (int(a[0] * s) - x0, int(a[1] * s) - y0), (int(q[0] * s) - x0, int(q[1] * s) - y0),
+                     1, thickness=bwl)
+        mat[y0:y1, x0:x1] |= nb > 0
+        D[y0:y1, x0:x1] = np.minimum(D[y0:y1, x0:x1], np.minimum(_geodesic(nb > 0, mat[y0:y1, x0:x1], cap), cap))
+        reach.append(((y0, y1, x0, x1), nb))
+    if len(groups) > 1:
+        keep = _prune_struct(reach, solid, mat0, measured & ~given, span, cap, [
+            sum(math.hypot(q[0] - a[0], q[1] - a[1]) for a, q in g) for g in groups])
+        if len(keep) < len(groups):
+            opening[:] = orig
+            bridges = []
+            for g in keep:
+                for a, q in groups[g]:
+                    draw(a, q)
+    return bridges, weak
+
+
+def _prune_struct(reach: list, solid, mat0, measured, span: float, cap: float, length: list) -> list:
+    """Indices of the structural bridges to keep: the greedy placement (farthest edge first) never
+    revisits a bridge that later ones made useless (e.g. one at the tip of a piece, then one nearer
+    that also covers the tip). Removes them one at a time, the longest first, as long as every
+    measured edge stays within `span` of a support. One entry per group of bridges placed together
+    (a bridge and the one on the opposite edge of its strip): `reach` = (window, its bridges drawn in
+    it), `length` = their length. Distances go through the material without the structural bridges
+    (`mat0`), each group adding only its own: a removed bridge is no longer a path either."""
+    base = np.minimum(_geodesic(solid, mat0, cap), cap)
+    dist = []
+    for (y0, y1, x0, x1), nb in reach:
+        src = nb > 0
+        dist.append(np.minimum(_geodesic(src, mat0[y0:y1, x0:x1] | src, cap), cap))
+    alive = list(range(len(reach)))
+    while len(alive) > 0:
+        check_cancel()
+        # nearest and second nearest support of every pixel (the solid sheet cannot be removed)
+        D1, D2 = base.copy(), np.full(base.shape, cap, np.float32)
+        A = np.full(base.shape, -1, np.int32)
+        for g in alive:
+            (y0, y1, x0, x1), _nb = reach[g]
+            G = dist[g]
+            d1, d2, a = D1[y0:y1, x0:x1], D2[y0:y1, x0:x1], A[y0:y1, x0:x1]
+            better = G < d1
+            D2[y0:y1, x0:x1] = np.where(better, d1, np.minimum(d2, G))
+            D1[y0:y1, x0:x1] = np.where(better, G, d1)
+            A[y0:y1, x0:x1] = np.where(better, g, a)
+        useless = []
+        for g in alive:
+            (y0, y1, x0, x1), _nb = reach[g]
+            m = measured[y0:y1, x0:x1]
+            if not m.any():
+                useless.append(g)
+                continue
+            without = np.where(A[y0:y1, x0:x1] == g, D2[y0:y1, x0:x1], D1[y0:y1, x0:x1])
+            if float(without[m].max()) <= span:
+                useless.append(g)
+        if not useless:
+            break
+        alive.remove(max(useless, key=lambda g: length[g]))
+    return alive
+
+
+def hold_material(opening: np.ndarray, p: Params, hidden: np.ndarray | None = None) -> tuple:
+    """Island bridges, then structural bridges. Modifies `opening` in place.
+    Returns (bridges, islands, short islands, structural bridges, weak spots without a bridge)."""
+    if not p.bridges:
+        return [], 0, 0, 0, 0
+    bridges, n_isl, n_short = add_bridges(opening, p, hidden)
+    sb, weak = add_struct_bridges(opening, p, hidden)
+    return bridges + sb, n_isl, n_short, len(sb), weak
+
+
+# --------------------------------------------------------------------------
 # 5. Vectorisation
 # --------------------------------------------------------------------------
 
@@ -1752,6 +2096,8 @@ class Layer:
     paths: list              # outlines in mm (sheet coordinates)
     islands: int = 0         # number of islands connected by bridges
     short_islands: int = 0   # islands that could not get the requested minimum of bridges
+    struct_bridges: int = 0  # structural bridges (included in `bridges`), see add_struct_bridges
+    weak_spots: int = 0      # parts held from one side only that got no structural bridge
     kind: str = "color"      # "color" (flat colour) or "outline" (key-detail outlines)
     merged: np.ndarray | None = None   # areas changed by merges instead of bridges (whole sheet)
     n_merged: int = 0        # number of merges (closed channels + removed islands)
@@ -1825,8 +2171,8 @@ def layer_job(job):
     `protect`: areas no merge may change (lines added to the layer); `weight`: see merge_zones."""
     opening, hidden, p, weight, protect = job
     merged, n_merged = merge_zones(opening, p, hidden, weight, protect)
-    bridges, n_isl, n_short = add_bridges(opening, p, hidden) if p.bridges else ([], 0, 0)
-    return opening, bridges, n_isl, n_short, vectorize(opening, p), merged, n_merged
+    held = hold_material(opening, p, hidden)
+    return opening, held, vectorize(opening, p), merged, n_merged
 
 
 # Parallelism between layers: "thread" (default), "process" (separate processes), or "none" (serial)
@@ -2034,12 +2380,13 @@ def build(prep: Prepared, p: Params, outline_region: np.ndarray | None = None,
     results = run_layer_jobs(jobs)
     layers = []
     for li, ci in enumerate(color_ids):
-        opening, bridges, n_isl, n_short, paths, merged, n_merged = results[li]
+        opening, (bridges, n_isl, n_short, n_struct, n_weak), paths, merged, n_merged = results[li]
         target, cleaned = targets[li], cleaned_all[li]
         layers.append(Layer(index=li + 1, color=colors[li], target=target,
                             opening=opening, lost=cv2.bitwise_xor(pre_fx[li] if li + 1 in fx else cleaned, target),
                             bridges=bridges, paths=paths,
-                            islands=n_isl, short_islands=n_short, merged=merged, n_merged=n_merged, tone=ci))
+                            islands=n_isl, short_islands=n_short, struct_bridges=n_struct, weak_spots=n_weak,
+                            merged=merged, n_merged=n_merged, tone=ci))
     res = make_result(layers, detect_sim=detect_sim, detect_painted=detect_painted, lines_added=lines_added,
                       detect_sim_pre=detect_sim_pre, zone_lines=_zone_lines(entries))
 
@@ -2079,10 +2426,11 @@ def build(prep: Prepared, p: Params, outline_region: np.ndarray | None = None,
             out_masks.append(cleaned)
             opening = place(cleaned)
             merged, n_merged = merge_line_islands(opening, p, color, support)
-            bridges, n_isl, n_short = add_bridges(opening, p, None) if p.bridges else ([], 0, 0)
+            bridges, n_isl, n_short, n_struct, n_weak = hold_material(opening, p, None)
             layers.append(Layer(index=n_out, color=color, target=target, opening=opening,
                                 lost=lost, bridges=bridges, paths=vectorize(opening, p),
-                                islands=n_isl, short_islands=n_short, merged=merged, n_merged=n_merged,
+                                islands=n_isl, short_islands=n_short, struct_bridges=n_struct, weak_spots=n_weak,
+                                merged=merged, n_merged=n_merged,
                                 kind="outline", group=g))
     res.zone_lines = _zone_lines(entries)       # counted once every zone has been searched
     return res
@@ -2672,10 +3020,11 @@ def line_stencils(prep: Prepared, p: Params, entries: list, groups: dict, suppor
         done.append(cleaned)
         opening = place(cleaned)
         merged, n_merged = merge_line_islands(opening, p, c, support)
-        bridges, n_isl, n_short = add_bridges(opening, p, None) if p.bridges else ([], 0, 0)
+        bridges, n_isl, n_short, n_struct, n_weak = hold_material(opening, p, None)
         layers.append(Layer(index=i + 1, color=c, target=target, opening=opening,
                             lost=lost, bridges=bridges,
                             paths=vectorize(opening, p), islands=n_isl, short_islands=n_short,
+                            struct_bridges=n_struct, weak_spots=n_weak,
                             merged=merged, n_merged=n_merged, kind="outline", sources=tuple(srcs)))
     return layers
 
@@ -3507,6 +3856,8 @@ def layer_stats(L: Layer) -> dict:
         "islands": L.islands,
         "kind": L.kind,
         "short_islands": L.short_islands,
+        "struct_bridges": L.struct_bridges,
+        "weak_spots": L.weak_spots,
         "cut_length_m": round(length / 1000, 2),
         "lost_pct": round(100 * float((L.lost > 0).mean()), 1),
     }
