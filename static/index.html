@@ -454,6 +454,12 @@
   body.no-stock .sframe .sf-sheet, body.no-stock .lay .sheetol { display: none; }   /* "Sheet" button */
   .histo { margin: 6px 0 2px; border: 1px solid var(--line); border-radius: 6px; overflow: hidden; line-height: 0; }
   .histo canvas { width: 100%; height: 112px; display: block; touch-action: none; }
+  .histo.curve canvas { height: 200px; cursor: crosshair; }
+  .curve-presets { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 4px; margin: 4px 0; }
+  .curve-presets button { display: flex; flex-direction: column; align-items: center; gap: 2px; min-width: 0;
+    padding: 3px 2px; font-size: 10.5px; line-height: 1.15; }
+  .curve-presets button[aria-pressed="true"] { border-color: var(--accent); color: var(--accent); }
+  .curve-presets svg { width: 100%; height: 22px; fill: none; stroke: currentColor; stroke-width: 2; }
   .legend i { display: inline-block; width: 12px; height: 12px; border-radius: 3px; vertical-align: -2px; margin-right: 4px; }
   .empty { color: var(--muted); text-align: center; padding: 80px 20px; }
   .reco { background: var(--soft); border: 1px solid var(--line); border-left: 3px solid var(--accent);
@@ -940,9 +946,27 @@
     <label class="row">Contraste local <span class="v" id="pre_clahe_v"></span>
       <input type="range" id="pre_clahe" min="0" max="100" step="5" value="0"></label>
     <p class="hint">Fait ressortir les volumes (visage, plis) avant le découpage en teintes.</p>
+    <label class="row">Contraste global <span class="v" id="pre_contrast_v"></span>
+      <input type="range" id="pre_contrast" min="-100" max="100" step="5" value="0"></label>
+    <p class="hint">Sépare les grandes masses claires et sombres.</p>
+    <label class="row">Ombres <span class="v" id="pre_shadows_v"></span>
+      <input type="range" id="pre_shadows" min="-100" max="100" step="5" value="0"></label>
+    <label class="row">Hautes lumières <span class="v" id="pre_highlights_v"></span>
+      <input type="range" id="pre_highlights" min="-100" max="100" step="5" value="0"></label>
+    <p class="hint">Éclaircissent (+) ou assombrissent (−) seulement les tons sombres ou les tons clairs.</p>
+    <label class="row">Point noir <span class="v" id="pre_black_v"></span>
+      <input type="range" id="pre_black" min="0" max="45" step="1" value="0"></label>
+    <label class="row">Point blanc <span class="v" id="pre_white_v"></span>
+      <input type="range" id="pre_white" min="55" max="100" step="1" value="100"></label>
+    <p class="hint">Les tons au-delà de ces points deviennent noir ou blanc purs.</p>
     <label class="row">Tons moyens (gamma) <span class="v" id="pre_gamma_v"></span>
       <input type="range" id="pre_gamma" min="0.4" max="2.5" step="0.05" value="1"></label>
     <p class="hint">Au-dessus de 1, éclaircit les tons moyens ; en dessous, les assombrit.</p>
+    <div class="subhead">Courbe de tons</div>
+    <div class="curve-presets" id="curvePresets"></div>
+    <div class="histo curve"><canvas id="toneCurve" width="300" height="200" aria-label="Courbe de tons : luminance d'entrée en horizontal, de sortie en vertical"></canvas></div>
+    <p class="hint">Cliquez pour ajouter un point, glissez pour le déplacer, double-cliquez pour le retirer. En fond : les tons avant la courbe.</p>
+    <input type="hidden" id="pre_curve" value="">
     <label class="row">Saturation (%) <span class="v" id="pre_saturation_v"></span>
       <input type="range" id="pre_saturation" min="0" max="250" step="5" value="100"></label>
     <p class="hint">Sépare mieux les teintes proches d'une image couleur.</p>
@@ -1617,7 +1641,8 @@ let SID = null, MATS = {}, LAST = null, VIEW = "preview", SEL = null, timer = nu
 const MAT_FIELDS = ["min_opening_mm", "min_strip_mm", "bridge_width_mm", "min_area_mm2", "double_bridge_area_mm2", "min_bridges", "bridges"];
 const PARAMS = ["support_w_mm", "support_h_mm", "support_color", "inner_margin_mm",
   "image_scale", "image_height_factor", "image_pos_x", "image_pos_y", "margin_mm", "sheet_mode", "sheet_border_mm", "reg_dims", "machine_max_mm", "mat_w_mm", "mat_h_mm", "mat_orient", "reg_corners", "reg_shape", "reg_size_mm", "layer_notches", "sheet_outline",
-  "pre_auto_levels", "pre_clahe", "pre_gamma", "manual_thresholds", "thresholds", "pre_saturation", "pre_sharpen", "pre_remove_bg",
+  "pre_auto_levels", "pre_clahe", "pre_contrast", "pre_shadows", "pre_highlights", "pre_black", "pre_white", "pre_gamma", "pre_curve",
+  "manual_thresholds", "thresholds", "pre_saturation", "pre_sharpen", "pre_remove_bg",
   "layer_colors", "layer_effects",
   "n_layers", "detail", "hue_weight", "color_vividness", "flat_auto", "flat_tolerance", "flat_tolerances", "color_mode", "layering", "skip_support", "fill_gaps", "protect_lines",
   "outline", "outline_target", "outline_method", "outline_sensitivity", "outline_width_mm", "outline_min_length_mm", "outline_subject", "outline_subject_mask", "outline_subject_pos", "outline_subject_width_mm", "outline_subject_weak", "outline_subject_de", "outline_subject_gap_every_mm", "outline_subject_gap_mm", "stencil_style", "line_zones", "line_zones_color", "line_sil_color", "outline_auto_color", "outline_color", "outline_zones", "outline_ref", "outline_whole_lines", "outline_line_sens", "outline_close_lines", "outline_channel", "outline_follow_mm",
@@ -2510,6 +2535,7 @@ function setVals(o) {
   // settings saved before per-mask flat tolerances: "auto" = the loaded flat_tolerance
   if (o && "flat_tolerance" in o && !("flat_tolerances" in o)) $("flat_tolerances").value = JSON.stringify({ auto: +o.flat_tolerance });
   flatTolToField();
+  drawCurve();
 }
 async function presetCall(method, url, body) {
   try {
@@ -2733,7 +2759,7 @@ function restoreSettings() {
   return true;
 }
 function showValues() {
-  ["n_layers", "detail", "hue_weight", "color_vividness", "flat_auto", "flat_tolerance", "tolerance_mm", "spray_mm", "px_per_mm", "image_scale", "image_pos_x", "image_pos_y", "outline_sensitivity", "pre_clahe", "pre_gamma", "pre_saturation", "pre_sharpen", "merge_amount"].forEach(k => {
+  ["n_layers", "detail", "hue_weight", "color_vividness", "flat_auto", "flat_tolerance", "tolerance_mm", "spray_mm", "px_per_mm", "image_scale", "image_pos_x", "image_pos_y", "outline_sensitivity", "pre_clahe", "pre_contrast", "pre_shadows", "pre_highlights", "pre_black", "pre_white", "pre_gamma", "pre_saturation", "pre_sharpen", "merge_amount"].forEach(k => {
     const o = $(k + "_v");
     if (o) o.textContent = k.startsWith("image_") ? (+$(k).value).toFixed(1) : k === "pre_gamma" ? (+$(k).value).toFixed(2) : $(k).value;
   });
@@ -2767,7 +2793,13 @@ const SECTION_SUMMARY = {
     const a = [];
     if (val("pre_auto_levels")) a.push("niveaux");
     if (val("pre_clahe") > 0) a.push(`contraste ${val("pre_clahe")}`);
+    if (val("pre_contrast")) a.push(`contraste global ${val("pre_contrast")}`);
+    if (val("pre_shadows")) a.push(`ombres ${val("pre_shadows")}`);
+    if (val("pre_highlights")) a.push(`lumières ${val("pre_highlights")}`);
+    if (val("pre_black") > 0) a.push(`noir ${val("pre_black")}`);
+    if (val("pre_white") < 100) a.push(`blanc ${val("pre_white")}`);
     if (Math.abs(val("pre_gamma") - 1) > 1e-3) a.push(`gamma ${val("pre_gamma").toFixed(2)}`);
+    if (val("pre_curve")) a.push("courbe");
     if (val("manual_thresholds")) a.push("seuils manuels");
     if (val("pre_saturation") !== 100) a.push(`saturation ${val("pre_saturation")} %`);
     if (val("pre_sharpen") > 0) a.push(`netteté ${val("pre_sharpen")}`);
@@ -2892,6 +2924,11 @@ const TIPS = {
   inner_margin_mm: "Marge gardée libre tout autour de l'image par « Ajuster au support » (et la taille 100 %).",
   pre_auto_levels: "Étire les tons de l'image du plus sombre au plus clair avant le découpage en teintes (utile pour les photos ternes).",
   pre_clahe: "Contraste local : accentue les volumes (visage, plis) zone par zone. 0 = désactivé.",
+  pre_contrast: "Contraste global : courbe en S autour des tons moyens. Négatif = image plus douce.",
+  pre_shadows: "Ombres : éclaircit (+) ou assombrit (−) les tons sombres, sans toucher aux tons clairs.",
+  pre_highlights: "Hautes lumières : éclaircit (+) ou assombrit (−) les tons clairs, sans toucher aux tons sombres.",
+  pre_black: "Point noir : les tons plus sombres que cette luminance deviennent noirs.",
+  pre_white: "Point blanc : les tons plus clairs que cette luminance deviennent blancs.",
   pre_gamma: "Tons moyens : au-dessus de 1 éclaircit, en dessous assombrit, sans toucher au noir et au blanc.",
   pre_saturation: "Saturation des couleurs (100 % = inchangée) : plus haut sépare mieux les teintes proches d'une image couleur.",
   pre_sharpen: "Netteté (masque flou, ≈ 0,3 mm) : surtout utile au pochoir de contours ; trop forte, elle crée du bruit.",
@@ -3636,9 +3673,10 @@ async function init() {
   };
   setupColorPop();
   setupPickPop();
-  setupHisto(); drawHisto();
-  ["pre_auto_levels", "pre_clahe", "pre_gamma", "pre_saturation", "pre_sharpen"].forEach(k => $(k).addEventListener("change", () => { updateSummaries(); recommend(false); }));
-  ["pre_clahe", "pre_gamma", "pre_saturation", "pre_sharpen"].forEach(k => $(k).addEventListener("input", preprocessPreview));
+  setupCurve(); setupHisto(); drawHisto();
+  const PRE_SLIDERS = ["pre_clahe", "pre_contrast", "pre_shadows", "pre_highlights", "pre_black", "pre_white", "pre_gamma", "pre_saturation", "pre_sharpen"];
+  ["pre_auto_levels", ...PRE_SLIDERS].forEach(k => $(k).addEventListener("change", () => { updateSummaries(); recommend(false); }));
+  PRE_SLIDERS.forEach(k => $(k).addEventListener("input", preprocessPreview));
   ["pre_auto_levels", "pre_remove_bg"].forEach(k => $(k).addEventListener("change", preprocessPreview));
   $("pre_remove_bg").addEventListener("change", () => {
     updateSummaries();
@@ -3650,6 +3688,8 @@ async function init() {
   $("thrAuto").onclick = () => { $("manual_thresholds").checked = false; updateSummaries(); drawHisto(); schedule(); };
   $("preReset").onclick = () => {
     $("pre_auto_levels").checked = false; $("pre_clahe").value = 0; $("pre_gamma").value = 1;
+    ["pre_contrast", "pre_shadows", "pre_highlights", "pre_black"].forEach(k => $(k).value = 0);
+    $("pre_white").value = 100; $("pre_curve").value = "";
     $("pre_saturation").value = 100; $("pre_sharpen").value = 0; $("pre_remove_bg").checked = false;
     $("manual_thresholds").checked = false; $("thresholds").value = "";
     showValues(); updateSummaries(); drawHisto(); recommend(false); schedule(); preprocessPreview();
@@ -4463,6 +4503,8 @@ async function recommend(apply) {
     body: JSON.stringify({ id: SID, color_mode: val("color_mode"), skip_support: val("skip_support"),
       crop: { crop_x: CROP.x, crop_y: CROP.y, crop_w: CROP.w, crop_h: CROP.h,
               pre_auto_levels: val("pre_auto_levels"), pre_clahe: val("pre_clahe"), pre_gamma: val("pre_gamma"),
+              pre_contrast: val("pre_contrast"), pre_shadows: val("pre_shadows"), pre_highlights: val("pre_highlights"),
+              pre_black: val("pre_black"), pre_white: val("pre_white"), pre_curve: val("pre_curve"),
               pre_saturation: val("pre_saturation"), pre_sharpen: val("pre_sharpen") } }) });
   if (!r.ok) return;
   RECO = await r.json();
@@ -5498,7 +5540,7 @@ function preprocessPreview() {
         body: JSON.stringify({ id: SID, params: params() }) });
       const j = await r.json();
       if (!r.ok || id !== PRE_REQ || !LAST) return;
-      LAST.reference_pre = j.image; LAST.histogram = j.histogram;
+      LAST.reference_pre = j.image; LAST.histogram = j.histogram; LAST.curve_histogram = j.curve_histogram;
       SHOW_PRE = true;
       // the view stays where it is: the preview is shown when the Original tab is open
       if (VIEW === "reference" && SEL === null) {
@@ -6037,6 +6079,132 @@ function setOverlay(btn, cls, on) {
   $(btn).setAttribute("aria-pressed", String(on));
   document.body.classList.toggle(cls, !on);
 }
+// ---------------- Preprocessing: tone curve ----------------
+// Field pre_curve: "x,y;x,y;..." (L* 0..100), "" = no correction. Interpolation: see curve_values
+// on the server.
+const CURVE_MAX = 16, CURVE_PAD = 7;
+const CURVE_PRESETS = [
+  ["Linéaire", "Aucune correction", "0,0;100,100"],
+  ["Contraste doux", "Courbe en S légère", "0,0;25,20;75,80;100,100"],
+  ["Contraste fort", "Courbe en S marquée : moins de tons intermédiaires", "0,0;25,12;75,88;100,100"],
+  ["Éclaircir", "Éclaircit surtout les tons moyens", "0,0;50,63;100,100"],
+  ["Assombrir", "Assombrit surtout les tons moyens", "0,0;50,37;100,100"],
+  ["Ouvrir ombres", "Fait réapparaître les détails des zones sombres", "0,0;20,33;55,63;100,100"],
+  ["Retenir lumières", "Fait réapparaître les détails des zones claires", "0,0;45,37;80,67;100,100"],
+  ["Paliers", "Regroupe les tons en trois plages presque uniformes : aplats plus nets", "0,0;25,10;38,47;62,53;75,90;100,100"],
+];
+function parseCurve(t) {
+  const pts = String(t || "").split(";").map(s => s.split(",").map(Number))
+    .filter(p => p.length === 2 && p.every(isFinite)).slice(0, CURVE_MAX)
+    .map(p => p.map(v => clamp(v, 0, 100))).sort((a, b) => a[0] - b[0])
+    .filter((p, i, a) => !i || p[0] - a[i - 1][0] >= 0.5);
+  return pts.length >= 2 ? pts : [[0, 0], [100, 100]];
+}
+function curveText(pts) {             // "" for the identity, like the server
+  const same = pts[0][0] === 0 && pts[pts.length - 1][0] === 100 && pts.every(p => Math.abs(p[0] - p[1]) < 0.05);
+  return same ? "" : pts.map(p => p.join(",")).join(";");
+}
+function curveFn(pts) {               // monotone cubic through the points, flat outside them
+  const n = pts.length, x = pts.map(p => p[0]), y = pts.map(p => p[1]), h = [], d = [], m = [];
+  for (let i = 0; i < n - 1; i++) { h[i] = x[i + 1] - x[i]; d[i] = (y[i + 1] - y[i]) / h[i]; }
+  m[0] = d[0]; m[n - 1] = d[n - 2];
+  for (let i = 1; i < n - 1; i++) {
+    if (d[i - 1] * d[i] <= 0) { m[i] = 0; continue; }
+    const a = 2 * h[i] + h[i - 1], b = h[i] + 2 * h[i - 1];
+    m[i] = (a + b) / (a / d[i - 1] + b / d[i]);
+  }
+  return v => {
+    const u = clamp(v, x[0], x[n - 1]);
+    let i = 0; while (i < n - 2 && u >= x[i + 1]) i++;
+    const t = (u - x[i]) / h[i], t2 = t * t, t3 = t2 * t;
+    return clamp((2 * t3 - 3 * t2 + 1) * y[i] + (t3 - 2 * t2 + t) * h[i] * m[i]
+      + (-2 * t3 + 3 * t2) * y[i + 1] + (t3 - t2) * h[i] * m[i + 1], 0, 100);
+  };
+}
+function drawCurve() {
+  const cv = $("toneCurve"), ctx = cv.getContext("2d"), W = cv.width, H = cv.height, P = CURVE_PAD;
+  const X = x => P + x / 100 * (W - 2 * P), Y = y => H - P - y / 100 * (H - 2 * P);
+  const css = getComputedStyle(document.body), accent = (css.getPropertyValue("--accent") || "#f97316").trim();
+  const muted = (css.getPropertyValue("--muted") || "#888").trim(), pts = parseCurve($("pre_curve").value);
+  ctx.clearRect(0, 0, W, H);
+  const hist = LAST && (LAST.curve_histogram || LAST.histogram);
+  if (hist) {
+    ctx.fillStyle = "rgba(150,160,175,.45)";
+    hist.forEach((v, i) => { const b = v * (H - 2 * P); ctx.fillRect(X(i), H - P - b, Math.max(1, X(1) - X(0) - 0.3), b); });
+  }
+  ctx.strokeStyle = muted; ctx.globalAlpha = 0.3; ctx.lineWidth = 1;
+  ctx.beginPath();
+  [0, 25, 50, 75, 100].forEach(v => { ctx.moveTo(X(v), Y(0)); ctx.lineTo(X(v), Y(100)); ctx.moveTo(X(0), Y(v)); ctx.lineTo(X(100), Y(v)); });
+  ctx.stroke();
+  ctx.globalAlpha = 0.7; ctx.setLineDash([4, 3]);
+  ctx.beginPath(); ctx.moveTo(X(0), Y(0)); ctx.lineTo(X(100), Y(100)); ctx.stroke();
+  ctx.setLineDash([]); ctx.globalAlpha = 1;
+  const f = curveFn(pts);
+  ctx.strokeStyle = accent; ctx.lineWidth = 2; ctx.beginPath();
+  for (let i = 0; i <= 200; i++) { const x = i / 2; ctx[i ? "lineTo" : "moveTo"](X(x), Y(f(x))); }
+  ctx.stroke();
+  ctx.fillStyle = accent;
+  pts.forEach(p => { ctx.beginPath(); ctx.arc(X(p[0]), Y(p[1]), 4, 0, 7); ctx.fill(); });
+  const cur = curveText(pts);
+  $("curvePresets").querySelectorAll("button").forEach(b => b.setAttribute("aria-pressed", String(b.dataset.curve === cur)));
+}
+function curveChanged() { updateSummaries(); recommend(false); schedule(); }
+function setupCurve() {
+  const cv = $("toneCurve"), box = $("curvePresets");
+  box.innerHTML = CURVE_PRESETS.map(([name, tip, pts]) => {
+    const f = curveFn(parseCurve(pts)), d = Array.from({ length: 41 }, (_, i) => `${i ? "L" : "M"}${i * 2.5} ${100 - f(i * 2.5)}`).join("");
+    return `<button type="button" data-curve="${curveText(parseCurve(pts))}" title="${tip}"><svg viewBox="-4 -4 108 108" preserveAspectRatio="none" aria-hidden="true"><path vector-effect="non-scaling-stroke" d="${d}"/></svg>${name}</button>`;
+  }).join("");
+  box.onclick = e => {
+    const b = e.target.closest("button"); if (!b) return;
+    $("pre_curve").value = b.dataset.curve;
+    drawCurve(); preprocessPreview(); curveChanged();
+  };
+  const at = e => {                   // pointer position in curve units (L*)
+    const r = cv.getBoundingClientRect(), P = CURVE_PAD;
+    return [((e.clientX - r.left) / r.width * cv.width - P) / (cv.width - 2 * P) * 100,
+            (cv.height - P - (e.clientY - r.top) / r.height * cv.height) / (cv.height - 2 * P) * 100];
+  };
+  const hit = (pts, e) => {           // point under the pointer (within about 10 canvas pixels)
+    const [x, y] = at(e), sx = (cv.width - 2 * CURVE_PAD) / 100, sy = (cv.height - 2 * CURVE_PAD) / 100;
+    let best = -1, dist = 100;
+    pts.forEach((p, i) => { const d = ((p[0] - x) * sx) ** 2 + ((p[1] - y) * sy) ** 2; if (d < dist) { dist = d; best = i; } });
+    return best;
+  };
+  const store = pts => { $("pre_curve").value = curveText(pts); drawCurve(); preprocessPreview(); };
+  const remove = e => {               // the two end points stay
+    const pts = parseCurve($("pre_curve").value), i = hit(pts, e);
+    if (i <= 0 || i >= pts.length - 1) return;
+    pts.splice(i, 1); store(pts); curveChanged();
+  };
+  const round1 = v => Math.round(v * 10) / 10;
+  let drag = null;
+  cv.onpointerdown = e => {
+    if (e.button !== 0) return;
+    e.preventDefault();
+    const pts = parseCurve($("pre_curve").value);
+    let i = hit(pts, e), changed = false;
+    if (i < 0) {
+      const [x, y] = at(e), nx = round1(clamp(x, 0, 100));
+      if (pts.length >= CURVE_MAX || pts.some(p => Math.abs(p[0] - nx) < 1)) return;
+      i = pts.findIndex(p => p[0] > nx);
+      if (i < 0) i = pts.length;
+      pts.splice(i, 0, [nx, round1(clamp(y, 0, 100))]);
+      changed = true; store(pts);
+    }
+    drag = { pts, i, changed };
+    cv.setPointerCapture(e.pointerId);
+  };
+  cv.onpointermove = e => {
+    if (!drag) { cv.style.cursor = hit(parseCurve($("pre_curve").value), e) >= 0 ? "grab" : "crosshair"; return; }
+    const { pts, i } = drag, [x, y] = at(e);
+    pts[i] = [round1(clamp(x, i ? pts[i - 1][0] + 1 : 0, i < pts.length - 1 ? pts[i + 1][0] - 1 : 100)), round1(clamp(y, 0, 100))];
+    drag.changed = true; store(pts);
+  };
+  cv.onpointerup = cv.onpointercancel = () => { const d = drag; drag = null; if (d && d.changed) curveChanged(); };
+  cv.ondblclick = remove;
+  cv.oncontextmenu = e => { e.preventDefault(); remove(e); };
+}
 // ---------------- Preprocessing: histogram and thresholds between tones ----------------
 const parseThr = t => String(t || "").split(",").map(Number).filter(v => isFinite(v) && v > 0 && v < 100).sort((a, b) => a - b);
 function currentThr() {
@@ -6045,6 +6213,7 @@ function currentThr() {
   return (val("manual_thresholds") && man.length === LAST.auto_thresholds.length) ? man : LAST.auto_thresholds.slice();
 }
 function drawHisto() {
+  drawCurve();
   // under the histogram: tone strip (tone of each range) + layer strip (colour of the layer painting it)
   const cv = $("histo"), ctx = cv.getContext("2d"), W = cv.width, H = cv.height, toneH = 8, layH = 16, strip = toneH + layH;
   ctx.clearRect(0, 0, W, H);

@@ -234,11 +234,20 @@ original photo, over the same zones, so a strong preprocessing does not dull or 
 |---|---|
 | **Auto levels** | the image is dull or does not use the full range from black to white. |
 | **Local contrast** (CLAHE) | volumes (face, folds) look flat; brings them out area by area. |
+| **Global contrast** | the large light and dark masses are not separated enough (S curve around the midtones). |
+| **Shadows** / **Highlights** | only the dark, or only the light, tones need lightening or darkening. |
+| **Black point** / **White point** | the darkest or lightest tones should merge into plain black or white. |
 | **Midtones (gamma)** | the middle tones are too dark (> 1 lightens) or too light (< 1 darkens). |
+| **Tone curve** | you want full control of the tones, or a quick result with one of its presets. |
 | **Saturation** | two different colours end up in the same tone (colour images). |
 | **Sharpness** | you use the outline stencil and want crisper edges (keep it light). |
 | **Manual thresholds between tones** | you want to decide yourself where one tone ends and the next begins. |
 | **Remove the background** | the background should stay bare support (see §5.6). |
+
+**Tone curve**: click to add a point, drag to move it, double-click (or right-click) to remove it.
+Behind the curve, the histogram of the tones entering it. The presets above it (soft or strong
+contrast, lighten, darken, open shadows, hold highlights, plateaus) replace the curve in one click;
+it can then be adjusted by hand.
 
 **Manual thresholds**: the histogram shows one line per boundary between two tones (dotted lines =
 automatic thresholds). Drag a line to switch to manual thresholds: each tone becomes a luminance

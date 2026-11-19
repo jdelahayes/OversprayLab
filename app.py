@@ -35,8 +35,8 @@ SESSIONS: dict[str, dict] = {}
 LOCK = threading.Lock()
 
 PREP_KEYS = ("support_w_mm", "support_h_mm", "px_per_mm", "detail", "n_layers", "color_mode", "skip_support",
-             "pre_auto_levels", "pre_clahe", "pre_gamma", "manual_thresholds", "thresholds",
-             "pre_saturation", "pre_sharpen", "pre_remove_bg", "protect_lines", "hue_weight", "color_vividness",
+             "pre_auto_levels", "pre_clahe", "pre_gamma", "pre_contrast", "pre_shadows", "pre_highlights",
+             "pre_black", "pre_white", "pre_curve", "manual_thresholds", "thresholds", "pre_saturation", "pre_sharpen", "pre_remove_bg", "protect_lines", "hue_weight", "color_vividness",
              "flat_auto", "flat_tolerance", "flat_tolerances")
 
 
@@ -246,7 +246,8 @@ def api_recommend():
     x0, y0, x1, y1 = pl.crop_rect(p, sess["img"].shape)
     src = pl.preprocess_image(sess["img"][y0:y1, x0:x1], p)   # recommendation on the preprocessed image
     gray = pl.is_grayscale(src) if mode == "auto" else mode == "gray"
-    key = (gray, skip, x0, y0, x1, y1, p.pre_auto_levels, p.pre_clahe, p.pre_gamma, p.pre_saturation, p.pre_sharpen)
+    key = (gray, skip, x0, y0, x1, y1, p.pre_auto_levels, p.pre_clahe, p.pre_gamma, p.pre_contrast, p.pre_shadows,
+           p.pre_highlights, p.pre_black, p.pre_white, p.pre_curve, p.pre_saturation, p.pre_sharpen)
     cache = sess.setdefault("reco", {})
     if key not in cache:
         cache[key] = pl.recommend_layers(src, gray, skip)
@@ -504,12 +505,15 @@ def api_prepreview():
     r = (round(vx0 * ppm * k), round(vy0 * ppm * k), round(vx1 * ppm * k), round(vy1 * ppm * k))
     r = (r[0], r[1], min(size[0], max(r[0] + 1, r[2])), min(size[1], max(r[1] + 1, r[3])))
     x0, y0, x1, y1 = lay.src_rect
-    part = cv2.resize(sess["img"][y0:y1, x0:x1], (r[2] - r[0], r[3] - r[1]), interpolation=cv2.INTER_AREA)
-    part = pl.preprocess_image(part, p, ppm * k)          # same sharpening radius in mm as in the full computation
+    source = cv2.resize(sess["img"][y0:y1, x0:x1], (r[2] - r[0], r[3] - r[1]), interpolation=cv2.INTER_AREA)
+    part = pl.preprocess_image(source, p, ppm * k)        # same sharpening radius in mm as in the full computation
+    if part is source:
+        part = source.copy()
     fg = None
     if p.pre_remove_bg and sess.get("fg") is not None:
         fg = cv2.resize(sess["fg"][y0:y1, x0:x1].astype(np.uint8) * 255, (part.shape[1], part.shape[0]),
                         interpolation=cv2.INTER_LINEAR) > 127
+    curve_hist = pl.tone_histogram(source, p, fg)
     support = pl.hex_to_bgr(p.support_color).astype(np.uint8)
     if fg is not None:
         part[~fg] = support
@@ -520,7 +524,7 @@ def api_prepreview():
     Lh = L[fg] if fg is not None and fg.any() else L.ravel()
     hist = np.bincount(np.clip(Lh, 0, 99.999).astype(np.int32), minlength=100).astype(np.float64)
     hist = (hist / max(1.0, hist.max())).round(4).tolist()
-    return jsonify(image=png_b64(out), size=list(size), histogram=hist)
+    return jsonify(image=png_b64(out), size=list(size), histogram=hist, curve_histogram=curve_hist)
 
 
 SILHOUETTE_MASK_NAMES = {"subject": "sujet", "outline": "contours (détails clés)", "silhouette": "silhouette"}
@@ -685,6 +689,8 @@ def compute(sess, data):
         reference_pre=png_b64(on_support(pre_view(res))) if pre_on else None,
         subject_used=res.prepared.fg is not None,
         histogram=res.prepared.hist,
+        curve_histogram=pl.tone_histogram(res.prepared.raw if res.prepared.raw is not None else res.prepared.resized,
+                                          p, res.prepared.fg),
         auto_thresholds=res.prepared.auto_thresholds,
         thresholds_used=res.prepared.thresholds_used,
         palette=[pl.bgr_hex(c) for c in res.prepared.palette],

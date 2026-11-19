@@ -37,6 +37,8 @@ def into_layers(d) -> bool:
 OUTLINE_REFS = ("layers", "effects", "image")
 CLOSE_LINES = ("", "median", "outer", "inner")
 OUTLINE_CHANNELS = ("light", "colour", "both")
+CURVE_MAX_POINTS = 16
+TONE_RANGE_STRENGTH = 1.5          # shadows / highlights at 100; above ~1.9 the tones would fold back
 
 
 @dataclass
@@ -61,6 +63,12 @@ class Params:
     pre_auto_levels: bool = False  # automatic levels stretch (luminance)
     pre_clahe: float = 0.0         # local contrast (CLAHE), 0..100
     pre_gamma: float = 1.0         # midtones: > 1 lightens, < 1 darkens
+    pre_contrast: float = 0.0      # global contrast (S curve around the midtones), -100..100
+    pre_shadows: float = 0.0       # dark tones: > 0 lightens, < 0 darkens, -100..100
+    pre_highlights: float = 0.0    # light tones: > 0 lightens, < 0 darkens, -100..100
+    pre_black: float = 0.0         # L* (0..100) that becomes black
+    pre_white: float = 100.0       # L* (0..100) that becomes white
+    pre_curve: str = ""            # tone curve, L* in -> out: "x,y;x,y;..." ("" = none)
     pre_saturation: float = 100.0  # colour saturation, % (100 = unchanged)
     pre_sharpen: float = 0.0       # sharpness (unsharp mask), 0..100
     pre_remove_bg: bool = False    # removed background ("subject" mask + GrabCut): left as bare support
@@ -270,6 +278,12 @@ class Params:
         p.outline_line_sens = float(np.clip(p.outline_line_sens, 0, 100))
         p.pre_clahe = float(np.clip(p.pre_clahe, 0, 100))
         p.pre_gamma = float(np.clip(p.pre_gamma, 0.3, 3.0))
+        p.pre_contrast = float(np.clip(p.pre_contrast, -100, 100))
+        p.pre_shadows = float(np.clip(p.pre_shadows, -100, 100))
+        p.pre_highlights = float(np.clip(p.pre_highlights, -100, 100))
+        p.pre_black = float(np.clip(p.pre_black, 0, 95))
+        p.pre_white = float(np.clip(p.pre_white, p.pre_black + 5, 100))
+        p.pre_curve = format_curve(parse_curve(p.pre_curve))
         p.pre_saturation = float(np.clip(p.pre_saturation, 0, 300))
         p.pre_sharpen = float(np.clip(p.pre_sharpen, 0, 100))
         p.outline_width_mm = float(np.clip(p.outline_width_mm, 0.2, 10))
@@ -512,14 +526,104 @@ class Prepared:
     flat_forced_zones: dict | None = None
 
 
+def parse_curve(txt: str) -> list[tuple[float, float]]:
+    """Points of a tone curve "x,y;x,y;..." (L* 0..100), sorted; [] when invalid or identity."""
+    pts = []
+    for part in str(txt or "").split(";")[:CURVE_MAX_POINTS]:
+        try:
+            x, y = (float(v) for v in part.split(","))
+        except ValueError:
+            return []
+        if not (math.isfinite(x) and math.isfinite(y)):
+            return []
+        pts.append((round(min(100.0, max(0.0, x)), 1), round(min(100.0, max(0.0, y)), 1)))
+    pts.sort()
+    out = []
+    for pt in pts:                     # two points need distinct inputs
+        if not out or pt[0] - out[-1][0] >= 0.5:
+            out.append(pt)
+    if len(out) < 2 or all(abs(x - y) < 0.05 for x, y in out) and out[0][0] == 0 and out[-1][0] == 100:
+        return []
+    return out
+
+
+def format_curve(pts: list) -> str:
+    return ";".join(f"{x:g},{y:g}" for x, y in pts)
+
+
+def curve_values(pts: list, v: np.ndarray) -> np.ndarray:
+    """Tone curve at `v` (0..1): monotone cubic through the points (no overshoot between them), flat
+    outside them. Same interpolation as `curveFn` in the browser, which draws it."""
+    x, y = np.array(pts, np.float64).T / 100.0
+    h, d = np.diff(x), np.diff(y) / np.diff(x)
+    m = np.empty(len(x))
+    m[0], m[-1] = d[0], d[-1]
+    for i in range(1, len(x) - 1):
+        if d[i - 1] * d[i] <= 0:
+            m[i] = 0.0
+        else:
+            w1, w2 = 2 * h[i] + h[i - 1], h[i] + 2 * h[i - 1]
+            m[i] = (w1 + w2) / (w1 / d[i - 1] + w2 / d[i])
+    u = np.clip(v, x[0], x[-1])
+    i = np.clip(np.searchsorted(x, u, side="right") - 1, 0, len(h) - 1)
+    t = (u - x[i]) / h[i]
+    return ((2 * t ** 3 - 3 * t ** 2 + 1) * y[i] + (t ** 3 - 2 * t ** 2 + t) * h[i] * m[i]
+            + (-2 * t ** 3 + 3 * t ** 2) * y[i + 1] + (t ** 3 - t ** 2) * h[i] * m[i + 1])
+
+
+def tone_active(p: Params) -> bool:
+    return bool(abs(p.pre_gamma - 1) > 1e-3 or p.pre_contrast or p.pre_shadows or p.pre_highlights
+                or p.pre_black > 0 or p.pre_white < 100 or p.pre_curve)
+
+
+def tone_lut(p: Params) -> np.ndarray:
+    """Luminance table (uint8 -> uint8) of the tone settings, in this order: black and white points,
+    shadows, highlights, global contrast, gamma, curve. Computed as a whole, so that several
+    settings do not add up rounding steps."""
+    v = np.arange(256, dtype=np.float64) / 255.0
+    if p.pre_black > 0 or p.pre_white < 100:
+        b, w = p.pre_black / 100.0, p.pre_white / 100.0
+        v = np.clip((v - b) / (w - b), 0, 1)
+    if p.pre_shadows:                  # at most about 16 L* around L* 25; black can only be reached
+        v = np.clip(v + p.pre_shadows / 100.0 * TONE_RANGE_STRENGTH * v * (1 - v) ** 3, 0, 1)
+    if p.pre_highlights:               # same around L* 75
+        v = np.clip(v + p.pre_highlights / 100.0 * TONE_RANGE_STRENGTH * v ** 3 * (1 - v), 0, 1)
+    if p.pre_contrast:                 # slope 1 +- c at the middle: stays monotone
+        v = np.clip(v - p.pre_contrast / 100.0 * np.sin(2 * np.pi * v) / (2 * np.pi), 0, 1)
+    if abs(p.pre_gamma - 1) > 1e-3:
+        v = v ** (1.0 / p.pre_gamma)
+    pts = parse_curve(p.pre_curve)
+    if pts:
+        v = curve_values(pts, v)
+    return np.clip(v * 255 + 0.5, 0, 255).astype(np.uint8)
+
+
 def preprocess_active(p: Params) -> bool:
-    return bool(p.pre_auto_levels or p.pre_clahe > 0 or abs(p.pre_gamma - 1) > 1e-3
+    return bool(p.pre_auto_levels or p.pre_clahe > 0 or tone_active(p)
                 or abs(p.pre_saturation - 100) > 1e-3 or p.pre_sharpen > 0)
 
 
+def tone_histogram(img: np.ndarray, p: Params, fg: np.ndarray | None = None) -> list:
+    """L* histogram (100 bins, highest = 1) of the image as it enters the tone curve: what the curve
+    editor shows behind the curve. Measured on a reduced copy (`fg`: subject only)."""
+    h, w = img.shape[:2]
+    s = min(1.0, 400 / max(h, w))
+    if s < 1:
+        size = (max(1, round(w * s)), max(1, round(h * s)))
+        img = cv2.resize(img, size, interpolation=cv2.INTER_AREA)
+        if fg is not None:
+            fg = cv2.resize(fg.astype(np.uint8), size, interpolation=cv2.INTER_NEAREST) > 0
+    im = preprocess_image(img, replace(p, pre_curve="", pre_sharpen=0.0))
+    L = cv2.cvtColor(im, cv2.COLOR_BGR2LAB)[..., 0].astype(np.float32) * (100.0 / 255.0)
+    L = L[fg] if fg is not None and fg.any() else L.ravel()
+    hist = np.bincount(np.clip(L, 0, 99.999).astype(np.int32), minlength=100).astype(np.float64)
+    return (hist / max(1.0, hist.max())).round(4).tolist()
+
+
 def preprocess_image(img: np.ndarray, p: Params, px_per_mm: float | None = None) -> np.ndarray:
-    """Auto levels, local contrast (CLAHE), gamma and sharpening on the luminance (Lab);
-    saturation on the a, b colour channels. `px_per_mm`: image scale (sharpening radius)."""
+    """Auto levels, local contrast (CLAHE), tone settings (`tone_lut`) and sharpening on the
+    luminance (Lab); saturation on the a, b colour channels. `px_per_mm`: image scale (sharpening
+    radius)."""
     if not preprocess_active(p):
         return img
     lab = cv2.cvtColor(img, cv2.COLOR_BGR2LAB)
@@ -531,9 +635,8 @@ def preprocess_image(img: np.ndarray, p: Params, px_per_mm: float | None = None)
     if p.pre_clahe > 0:
         clahe = cv2.createCLAHE(clipLimit=1.0 + p.pre_clahe / 100.0 * 4.0, tileGridSize=(8, 8))
         L = clahe.apply(L)
-    if abs(p.pre_gamma - 1) > 1e-3:
-        lut = np.clip(((np.arange(256) / 255.0) ** (1.0 / p.pre_gamma)) * 255 + 0.5, 0, 255).astype(np.uint8)
-        L = lut[L]
+    if tone_active(p):
+        L = tone_lut(p)[L]
     if p.pre_sharpen > 0:
         # unsharp mask: radius ~0.3 mm at stencil scale (1.5 px on the source image)
         sig = max(0.8, 0.3 * px_per_mm) if px_per_mm else 1.5
