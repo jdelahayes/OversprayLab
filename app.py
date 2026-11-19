@@ -987,7 +987,7 @@ def project_state(d, snap) -> dict:
     """Project folder of the session for the browser: snapshots, current one, next number."""
     if d is None:
         return {"dir": None, "snapshots": [], "current": snap, "next": "v0"}
-    return {"dir": d.name, "name": projects.project_info(d).get("nom") or d.name,
+    return {"dir": d.name, "path": str(d.resolve()), "name": projects.project_info(d).get("nom") or d.name,
             "snapshots": projects.snapshots(d), "current": snap, "next": projects.next_id(d)}
 
 
@@ -1030,6 +1030,8 @@ def open_snapshot(d, snap):
     if isinstance(out, tuple):
         return out
     sess = SESSIONS[out["id"]]
+    # the name belongs to the project (projet.json, renamed without a new snapshot), not to the snapshot
+    out["project_name"] = project_name(pinfo.get("nom"), out["project_name"])
     sess["proj_dir"], sess["snap"] = d, snap
     projects.touch(d)
     out["computed"] = sess.get("last_out") if dump is not None and sess.get("result") is not None else None
@@ -1138,6 +1140,20 @@ def api_snapshot_label(name, snap):
         return jsonify(error=str(e)), 404
     label = re.sub(r"[\x00-\x1f]+", " ", str(request.get_json(force=True).get("label") or "")).strip()[:80]
     projects.set_label(d, snap, label)
+    return jsonify(project_state(d, None))
+
+
+@app.post("/api/projects/<name>/rename")
+def api_project_rename(name):
+    """Project renamed in the interface: saved at once in projet.json (not a new version)."""
+    try:
+        d = projects.project_dir(name)
+    except projects.ProjectError as e:
+        return jsonify(error=str(e)), 404
+    pname = project_name(request.get_json(force=True).get("name"), "")
+    if not pname:
+        return jsonify(error="Nom de projet vide"), 400
+    projects.rename_project(d, pname)
     return jsonify(project_state(d, None))
 
 
