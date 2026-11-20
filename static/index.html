@@ -3844,7 +3844,7 @@ async function init() {
   $("lgLost").onclick = () => { setOverlay("lgLost", "no-lost", $("lgLost").getAttribute("aria-pressed") !== "true"); saveOverlays(); };
   $("lgMerged").onclick = () => { setOverlay("lgMerged", "no-merged", $("lgMerged").getAttribute("aria-pressed") !== "true"); saveOverlays(); };
   $("lgFlat").onclick = () => { setOverlay("lgFlat", "no-flat", $("lgFlat").getAttribute("aria-pressed") !== "true"); saveOverlays(); };
-  $("lgSupport").onclick = () => { setOverlay("lgSupport", "no-support", $("lgSupport").getAttribute("aria-pressed") !== "true"); saveOverlays(); };
+  $("lgSupport").onclick = () => { setOverlay("lgSupport", "no-support", $("lgSupport").getAttribute("aria-pressed") !== "true"); saveOverlays(); loadSupportMaps(); };
   $("optPre").onclick = () => { SHOW_PRE = !SHOW_PRE; render(); };
   $("show_reg").addEventListener("change", () => { render(); rememberSettings(); });
   const setViewBg = () => {                        // display preference, not part of the project
@@ -6232,6 +6232,7 @@ function render() {
     if (e.target.closest(".lcreset")) { setLayerColor(+e.target.closest(".lcreset").dataset.idx, null); return; }
     const i = +c.dataset.i; SEL = (SEL === i) ? null : i; BR.sel = null; BR.autoSeg = null; BR.draft = null; render();
   });
+  loadSupportMaps();
 }
 // Tones offered for the outline stroke: black, white and the colours of the computed palette
 const fmtMM = v => `${(Math.round(v * 10) / 10).toString().replace(".", ",")} mm`;
@@ -6261,6 +6262,25 @@ function layerStack(L, attrs = "") {
     (L.img_bridges ? `<img class="ov ov-bridges" src="${L.img_bridges}" alt="">` : "") +
     (LAST && L.weak_points && L.weak_points.length ? weakSVG(L.weak_points) : "") +
     (LAST && L.reg ? regSVG(L.reg, [0, 0, LAST.sheet_mm[0], LAST.sheet_mm[1]]) : "") + `</div>`;
+}
+// Support maps (how well the material is held): made by the server only when shown, then kept in
+// LAST (img_support: PNG, or null for a layer without material)
+let SUPPORT_REQ = null;
+async function loadSupportMaps() {
+  const last = LAST;
+  if (!last || !SID || document.body.classList.contains("no-support") || SUPPORT_REQ === last) return;
+  const want = last.layers.filter(L => L.img_support === undefined).map(L => L.index);
+  if (!want.length) return;
+  SUPPORT_REQ = last;
+  try {
+    const r = await fetch("/api/support_map", { method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ id: SID, layers: want }) });
+    if (!r.ok) return;
+    const j = await r.json();
+    for (const L of last.layers) if (want.includes(L.index)) L.img_support = (j.maps || {})[L.index] ?? null;
+    if (LAST === last) render();
+  } catch (e) { /* server unreachable: tried again at the next display */ }
+  finally { if (SUPPORT_REQ === last) SUPPORT_REQ = null; }
 }
 // ---------------- Manual bridges (layer view) ----------------
 // Field manual_bridges: JSON list [{id, layer, kind, ref, pts: [u1, v1, u2, v2]}] (see

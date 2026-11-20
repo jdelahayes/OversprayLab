@@ -573,6 +573,12 @@ def api_process_cancel():
     return jsonify(ok=True)
 
 
+def support_png(res, L) -> str | None:
+    """Support map of a layer (how well its material is held) as a PNG, None without material."""
+    o = pl.support_map(res, L)
+    return png_b64(o, 900) if o is not None else None
+
+
 def compute(sess, data):
     p = pl.Params.from_dict(data.get("params", {}))
     lay, warnings = pl.resolve_layout(p, sess["img"].shape)
@@ -626,15 +632,16 @@ def compute(sess, data):
     # Images of the previous answer reused when only paints changed: overlays and blurred masks
     # do not depend on the colour, a layer view only on its own colour (kept: entries used now)
     old_cache = sess.get("png_cache", {}) if recolored else {}
-    cache = {}
+    # support maps: made on demand (/api/support_map), they depend on the cut only
+    cache = {k: v for k, v in old_cache.items() if k[1] == "support"}
 
     def cached(key, make):
         pl.check_cancel()
         cache[key] = old_cache[key] if key in old_cache else make()
         return cache[key]
 
-    layers = []
-    for L in res.layers:
+    def layer_out(L):
+        """Answer of one layer (the layers are made in parallel)."""
         hexc = pl.bgr_hex(L.color)
         mask = L.opening.astype(np.float32) / 255.0
         flat = cached((L.index, "flat"), lambda: to_preview(mask))
@@ -644,7 +651,7 @@ def compute(sess, data):
             nb = pl.opening_without_bridges(res, L).astype(np.float32) / 255.0
             flat_nb = cached((L.index, "flat_nb"), lambda: to_preview(nb))
             soft_nb = cached((L.index, "soft_nb"), lambda: to_preview(cv2.GaussianBlur(nb, (0, 0), sig) * 0.97))
-        layers.append({
+        return {
             "index": L.index,
             "color": pl.bgr_hex(L.color),
             "tone": L.tone,     # tone (index in `palette`) painted by this layer; None for the outline layer
@@ -665,15 +672,15 @@ def compute(sess, data):
             **cached((L.index, "overlays"), lambda: {
                 k: (png_b64(o, 900) if o is not None and (k != "img_merged" or L.n_merged) else None)
                 for k, o in zip(("img_bridges", "img_lost", "img_merged", "img_flat"), pl.layer_overlays(res, L))}),
-            # how well the material is held (structural bridges), shown on demand
-            "img_support": cached((L.index, "support"),
-                                  lambda: (lambda o: png_b64(o, 900) if o is not None else None)(pl.support_map(res, L))),
+            # how well the material is held (structural bridges): asked for when shown
+            # (/api/support_map), unless already made for this cut
+            **({"img_support": cache[(L.index, "support")]} if (L.index, "support") in cache else {}),
             "mask_flat": cached((L.index, "mflat", hexc), lambda: rgba_b64(L.color, flat)),
             "mask_sim": cached((L.index, "msim", hexc), lambda: rgba_b64(L.color, soft)),
             "mask_flat_nb": cached((L.index, "mflat_nb", hexc), lambda: rgba_b64(L.color, flat_nb)) if L.bridges else None,
             "mask_sim_nb": cached((L.index, "msim_nb", hexc), lambda: rgba_b64(L.color, soft_nb)) if L.bridges else None,
             **pl.layer_stats(L),
-        })
+        }
     reg_shapes, reg_warn = pl.registration_shapes(res)
     # Original placed on the support, to compare at scale (raw and preprocessed)
     H, W = res.prepared.labels.shape
@@ -688,11 +695,16 @@ def compute(sess, data):
         return out
     ref = on_support(res.prepared.raw if res.prepared.raw is not None else res.prepared.resized)
     pre_on = pl.preprocess_active(p) or res.prepared.fg is not None
-    sheet_sim = pl.simulate_sheet(res)
+    # the layers and the other images of the answer are independent: made in parallel
+    *layers, ref_png, pre_png, de = pl.run_threads(
+        [(lambda L=L: layer_out(L)) for L in res.layers]
+        + [lambda: png_b64(ref),
+           lambda: png_b64(on_support(pre_view(res))) if pre_on else None,
+           lambda: round(pl.delta_e(res, pl.simulate_sheet(res)), 1)])
     mask_src = [lay.src_rect[0] / sess["img"].shape[1], lay.src_rect[1] / sess["img"].shape[0],
                 lay.src_rect[2] / sess["img"].shape[1], lay.src_rect[3] / sess["img"].shape[0]]
     out = dict(
-        reference=png_b64(ref),
+        reference=ref_png,
         # where the computed image area is in the preview images (fractions of the preview) and
         # which part of the source image it shows (fractions of the source): the Masks tab draws
         # the layers under a mask painted on the source image
@@ -706,7 +718,7 @@ def compute(sess, data):
                                                  (res.img_off_px[1] + H) / p.px_per_mm)],
                     "src": mask_src},
         manual_bridges=list(res.manual),
-        reference_pre=png_b64(on_support(pre_view(res))) if pre_on else None,
+        reference_pre=pre_png,
         subject_used=res.prepared.fg is not None,
         histogram=res.prepared.hist,
         curve_histogram=pl.tone_histogram(res.prepared.raw if res.prepared.raw is not None else res.prepared.resized,
@@ -729,7 +741,7 @@ def compute(sess, data):
         support_mm=[round(v, 1) for v in res.support_mm],
         image_mm=[round(v, 1) for v in lay.img_mm],
         visible_mm=[round(lay.vis_mm[2] - lay.vis_mm[0], 1), round(lay.vis_mm[3] - lay.vis_mm[1], 1)],
-        delta_e=round(pl.delta_e(res, sheet_sim), 1),
+        delta_e=de,
         lines_added=res.lines_added,
         zone_lines={k: list(v) for k, v in res.zone_lines.items()},   # whole lines: kept, detected, steps
         recolored=recolored,     # colours only: the cut of the previous computation was kept
@@ -744,6 +756,25 @@ def compute(sess, data):
     sess["ui"] = data.get("ui")  # full interface state, for the project file
     sess["last_out"] = out       # answer kept for the snapshots (shown again without computing)
     return jsonify(out)
+
+
+@app.post("/api/support_map")
+def api_support_map():
+    """Support maps of layers of the last computation (made only when the map is shown):
+    {"maps": {layer number: PNG or None (no material)}}."""
+    data = request.get_json(force=True)
+    sess = SESSIONS.get(data.get("id", ""))
+    if not sess:
+        return jsonify(error="Session inconnue, rechargez l'image"), 404
+    res = sess.get("result")
+    if res is None:
+        return jsonify(maps={})
+    cache = sess.setdefault("png_cache", {})
+    want = {int(i) for i in data.get("layers") or []}
+    todo = [L for L in res.layers if L.index in want and (L.index, "support") not in cache]
+    for L, png in zip(todo, pl.run_threads([(lambda L=L: support_png(res, L)) for L in todo])):
+        cache[(L.index, "support")] = png
+    return jsonify(maps={L.index: cache[(L.index, "support")] for L in res.layers if L.index in want})
 
 
 @app.post("/api/outline_preview")

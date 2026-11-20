@@ -1760,19 +1760,34 @@ _K4 = cv2.getStructuringElement(cv2.MORPH_CROSS, (3, 3))
 
 def _geodesic(src: np.ndarray, mat: np.ndarray, limit: float) -> np.ndarray:
     """Geodesic distance (px, octagonal approximation) from `src` through `mat`, up to `limit` px;
-    inf beyond it or where unreachable."""
-    D = np.full(mat.shape, np.inf, np.float32)
-    m = mat.astype(np.uint8)
-    cur = (src.astype(np.uint8) & m)
-    D[cur > 0] = 0
+    inf beyond it or where unreachable.
+    Grows the reached area one step at a time; instead of writing the distance of the new pixels
+    at each step (slow full-image numpy passes), counts in how many steps each pixel was reached
+    (saturating uint8 counter flushed every 255 steps): first step = steps - count."""
+    m = (np.asarray(mat) != 0).astype(np.uint8)
+    cur = cv2.bitwise_and((np.asarray(src) != 0).astype(np.uint8), m)
+    acc = np.zeros(m.shape, np.int32)
+    cnt = cur.copy()
+    last = cv2.countNonZero(cur)
+    nxt = np.empty_like(cur)
+    states, in_cnt = 1, 1
     for it in range(1, int(limit / 1.08) + 2):
-        nxt = cv2.dilate(cur, _K8 if it % 2 else _K4) & m
-        new = nxt > cur
-        if not new.any():
+        cv2.dilate(cur, _K8 if it % 2 else _K4, dst=nxt)
+        cv2.bitwise_and(nxt, m, dst=nxt)
+        c = cv2.countNonZero(nxt)
+        if c == last:                       # the area only grows: same count = nothing new
             break
-        D[new] = it * 1.08
-        cur = nxt
-    return D
+        cur, nxt, last = nxt, cur, c
+        if in_cnt == 255:
+            acc += cnt
+            cnt[:] = 0
+            in_cnt = 0
+        cv2.add(cnt, cur, dst=cnt)
+        states += 1
+        in_cnt += 1
+    acc += cnt
+    first = (states - acc).astype(np.float64) * 1.08
+    return np.where(acc > 0, first, np.inf).astype(np.float32)
 
 
 def _ray_bridge(work, xs, ys, maxlen, land_ok, hidden, bw, away=None, n_ang=48, avoid=None, focus=None,
@@ -2561,6 +2576,46 @@ def _pool():
     return _POOL
 
 
+_THREADS = None
+
+
+def _thread_pool():
+    global _THREADS
+    if _THREADS is None:
+        from concurrent.futures import ThreadPoolExecutor
+        _THREADS = ThreadPoolExecutor(max(2, min(8, (os.cpu_count() or 2) - 1)), thread_name_prefix="work")
+    return _THREADS
+
+
+def run_threads(funcs: list) -> list:
+    """Runs independent functions in threads (OpenCV, numpy, onnxruntime and the PNG encoding
+    release the GIL) and returns their results in order; serial with OVERSPRAYLAB_PARALLEL=none.
+    Each thread sees the cancellation of the current computation. The functions must not call
+    run_threads themselves (a full pool would wait on itself)."""
+    if PARALLEL == "none" or len(funcs) < 2:
+        return [f() for f in funcs]
+    futures = [_thread_pool().submit(contextvars.copy_context().run, f) for f in funcs]
+    return [f.result() for f in futures]
+
+
+def _prefetch_teed(prep: Prepared, entries: list) -> None:
+    """Starts the TEED network of the zones that use it in the background, as soon as the
+    computation starts: it runs while the layers are cleaned and rendered, and the detection then
+    finds its logits in the cache (teed.logits). Errors are left to the detection itself."""
+    if PARALLEL == "none":
+        return
+    for pe, *_ in entries:
+        if pe.outline and pe.outline_method == "teed":
+            ref = detail_image(prep, pe)
+
+            def run(ref=ref):
+                try:
+                    teed.logits(ref)
+                except Exception:
+                    pass
+            _thread_pool().submit(run)
+
+
 # Results of the last layer jobs, by content of their inputs: a change that leaves a layer as it
 # was (e.g. an effect of another layer) does not recompute its merges, bridges and paths.
 _JOB_CACHE: dict = {}
@@ -2655,6 +2710,11 @@ def build(prep: Prepared, p: Params, outline_region: np.ndarray | None = None,
         full[Y0:Y0 + H, X0:X0 + W] = mask
         return full
 
+    # Lines: key-detail zones (`outline`) and/or silhouette (`outline_subject`), each can be on
+    # without the other; each one goes to an outline layer or into the colour layers.
+    entries, groups = outline_entries(p, prep, zone_regions, outline_region)
+    _prefetch_teed(prep, entries)
+
     targets, cleaned_all = [], []
     if p.stencil_style == "line":
         color_ids = []
@@ -2692,9 +2752,6 @@ def build(prep: Prepared, p: Params, outline_region: np.ndarray | None = None,
                       support_px=(SW, SH), img_off_px=(X0, Y0), sup_off_px=(ox, oy),
                       sheet_rect_mm=(sx0, sy0, sx0 + sheet_shape[1] / ppm, sy0 + sheet_shape[0] / ppm), **kw)
 
-    # Lines: key-detail zones (`outline`) and/or silhouette (`outline_subject`), each can be on
-    # without the other; each one goes to an outline layer or into the colour layers.
-    entries, groups = outline_entries(p, prep, zone_regions, outline_region)
     if p.stencil_style == "line":
         layers = line_stencils(prep, p, entries, groups, support, place, fx_all, manual)
         return make_result(layers, zone_lines=_zone_lines(entries))
@@ -2724,9 +2781,12 @@ def build(prep: Prepared, p: Params, outline_region: np.ndarray | None = None,
         painted = np.full((H, W), -1, np.int32)      # last layer painting each pixel (-1 = support)
         for li, c in enumerate(cleaned_all):
             painted[c > 0] = li
-        for pe, reg, _, _ in into:
-            sim_e = ref_sim(pe, detect_sim, detect_sim_pre)
-            s, n_added = lines_into_layers(prep, sim_e, pe, reg, color_ids, painted)
+        # the zones are independent: searched in parallel, their strokes merged in their order
+        found = run_threads([
+            (lambda pe=pe, reg=reg: lines_into_layers(prep, ref_sim(pe, detect_sim, detect_sim_pre), pe, reg,
+                                                      color_ids, painted))
+            for pe, reg, _, _ in into])
+        for s, n_added in found:
             lines_added += n_added
             for li, stroke in s.items():
                 strokes[li] = stroke if li not in strokes else (strokes[li] | stroke)
@@ -2785,11 +2845,11 @@ def build(prep: Prepared, p: Params, outline_region: np.ndarray | None = None,
         color = outline_color(prep, support, group_params(p, groups[g]))
         dark = outline_is_dark(color, support)
         target, gap_zones, w_sil = None, None, 0.0
-        for pe, reg, dest, is_sil in entries:
-            if dest != g:
-                continue
+        in_group = [e for e in entries if e[2] == g]       # its zones: searched in parallel
+        found = run_threads([(lambda pe=pe, reg=reg: detect_key_details(prep, ref_sim(pe, sim, sim_pre), pe, reg, dark))
+                             for pe, reg, _, _ in in_group])
+        for (pe, reg, dest, is_sil), t in zip(in_group, found):
             sim_e = ref_sim(pe, sim, sim_pre)
-            t = detect_key_details(prep, sim_e, pe, reg, dark)
             target = t if target is None else (target | t)
             if is_sil:
                 _, gap_zones = subject_silhouette(prep, pe, sim_e, gaps=True)
@@ -3161,7 +3221,8 @@ def lines_into_layers(prep: Prepared, sim: np.ndarray, p: Params, region: np.nda
     k = disk(width * p.px_per_mm / 2)
     k_sil = disk(silhouette_width(p) * p.px_per_mm / 2)
     # The silhouette (one long closed line) is placed piece by piece below; the other lines whole
-    sil = subject_silhouette(prep, p, sim)
+    # (the one of the detection: same settings and render)
+    sil = st["sil"]
     if _LAYER_DEST.match(p.outline_target or ""):
         return _lines_into_layer(st, sil, k, min(int(p.outline_target[1:]), len(color_ids)) - 1,
                                  painted, stages, k_sil)
@@ -3689,6 +3750,30 @@ def detail_image(prep: Prepared, p: Params) -> np.ndarray:
     return cv2.cvtColor(lab, cv2.COLOR_LAB2BGR)
 
 
+_GRAD_CACHE: OrderedDict = OrderedDict()    # local contrast of the last images (see _image_grad)
+_GRAD_LOCK = threading.Lock()
+
+
+def _image_grad(img: np.ndarray, ppm: float, make) -> np.ndarray:
+    """Local contrast of an image (`make()`: gradient magnitude of its L*a*b*), cached by content:
+    the zones and the silhouette of one computation measure it on the same images (original,
+    render of the layers), each zone once otherwise. Read-only (shared)."""
+    h = blake2b(digest_size=16)
+    h.update(np.ascontiguousarray(img).tobytes())
+    key = (h.hexdigest(), img.shape, img.dtype.str, round(ppm, 3))
+    with _GRAD_LOCK:
+        if key in _GRAD_CACHE:
+            _GRAD_CACHE.move_to_end(key)
+            return _GRAD_CACHE[key]
+    g = make()
+    g.setflags(write=False)
+    with _GRAD_LOCK:
+        _GRAD_CACHE[key] = g
+        while len(_GRAD_CACHE) > 4:
+            _GRAD_CACHE.popitem(last=False)
+    return g
+
+
 def detect_key_details(prep: Prepared, sim: np.ndarray, p: Params,
                        region: np.ndarray | None = None, dark: bool = True,
                        stages: bool = False):
@@ -3724,14 +3809,14 @@ def detect_key_details(prep: Prepared, sim: np.ndarray, p: Params,
 
     check_cancel()
     lab_ref = lab(ref)
-    g_ref = grad(lab_ref)
+    g_ref = _image_grad(ref, ppm, lambda: grad(lab_ref))
     check_cancel()
-    g_sim = grad(lab(sim))
+    g_sim = _image_grad(sim, ppm, lambda: grad(lab(sim)))
     check_cancel()
     # the paints reproduce the original photo: the loss of contrast is measured against it
     # (lines are still detected on the preprocessed image, sharper and more contrasted)
     orig = prep.raw if prep.raw is not None else prep.resized
-    g_orig = g_ref if orig is ref else grad(lab(orig))
+    g_orig = g_ref if orig is ref else _image_grad(orig, ppm, lambda: grad(lab(orig)))
     check_cancel()
 
     # 1. Candidate lines (none when only the silhouette is drawn)
@@ -3784,7 +3869,7 @@ def detect_key_details(prep: Prepared, sim: np.ndarray, p: Params,
     def result(sel, kept, short, stroke):
         if not stages:
             return stroke
-        return dict(detected=edges, selected=sel, kept=kept, short=short, stroke=stroke > 0)
+        return dict(detected=edges, selected=sel, kept=kept, short=short, stroke=stroke > 0, sil=sil)
 
     # 2. Loss of sharpness: share of the original's local contrast missing from the simulated render
     loss = np.clip((g_orig - g_sim) / (g_orig + 1e-3), 0, 1)
@@ -4037,12 +4122,24 @@ def simulate_sheet(res: Result) -> np.ndarray:
     canvas = np.empty(shape + (3,), np.float32)
     canvas[:] = res.support_color
     sig = max(0.3, p.spray_mm * p.px_per_mm)
+    # Only around the openings of each layer: the blur is zero farther than its kernel radius
+    # (OpenCV: ksize = round(8 sigma + 1) | 1 for float images), and with a margin at least that
+    # wide the blur inside the window is the same as on the whole sheet. Same arithmetic as
+    # canvas * (1 - a) + colour * a, in place.
+    r = (int(round(sig * 8 + 1)) | 1) // 2 + 2
+    H, W = shape
     for L in res.layers:
         check_cancel()
-        mask = cv2.GaussianBlur(L.opening.astype(np.float32) / 255.0, (0, 0), sig)
+        x, y, w, h = cv2.boundingRect(L.opening)
+        if w == 0 or h == 0:
+            continue
+        x0, y0, x1, y1 = max(0, x - r), max(0, y - r), min(W, x + w + r), min(H, y + h + r)
+        mask = cv2.GaussianBlur(L.opening[y0:y1, x0:x1].astype(np.float32) / 255.0, (0, 0), sig)
         check_cancel()
         a = (0.97 * mask)[..., None]
-        canvas = canvas * (1 - a) + L.color.astype(np.float32) * a
+        sub = canvas[y0:y1, x0:x1]
+        np.multiply(sub, 1 - a, out=sub)
+        sub += L.color.astype(np.float32) * a
     return np.clip(canvas, 0, 255).astype(np.uint8)
 
 
