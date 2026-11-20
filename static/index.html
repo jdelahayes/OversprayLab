@@ -171,6 +171,15 @@
   .masktools [hidden] { display: none !important; }
   .mkind { position: relative; }
   .mkind .mdot { position: absolute; left: 50%; bottom: 1px; width: 12px; height: 3px; margin-left: -6px; border-radius: 2px; }
+  /* mask, zone or flat layer holding a painted (non-empty) mask: green dot, in the corner of the mask
+     icons, before the name on the zone and flat chips (same colour whether selected or not) */
+  .mkind.painted::after {
+    content: ""; position: absolute; top: 1px; right: 1px; width: 7px; height: 7px; border-radius: 50%;
+    background: #2fb35a; box-shadow: 0 0 0 1.5px #fff; pointer-events: none; }
+  .zchip.painted::before, .fchip.painted::before {
+    content: ""; display: inline-block; width: 7px; height: 7px; border-radius: 50%; margin-right: 5px;
+    vertical-align: 1px; background: #2fb35a; box-shadow: 0 0 0 1.5px #fff; flex: none; }
+  .fchip.painted::before { margin-right: 0; }
   .maskwrap.select { cursor: crosshair; }
   .maskwrap.select.wait { cursor: progress; }
   .seg { display: inline-flex; }
@@ -688,7 +697,6 @@
   .zchip.off { text-decoration: line-through; opacity: .6; }
   .fchip { display: inline-flex; align-items: center; gap: 4px; }
   .fchip .fsw { width: 10px; height: 10px; border-radius: 2px; border: 1px solid var(--line); flex: none; }
-  .fchip.painted { font-weight: 600; }
   .card .lflat { padding: 2px 5px; line-height: 0; border-radius: 999px; margin-left: 4px; color: var(--muted); }
   .card .lflat.on { color: var(--accent); }
   .zadd { min-width: 28px; font-weight: 700; }
@@ -3496,10 +3504,11 @@ function destOptions(s) {
 function renderZones() {
   if (!$("zoneBar")) return;
   const s = zState(), z = zCur(s);
-  const html = s.zones.map(x => `<button type="button" class="vt-opt zchip${x.on === false ? " off" : ""}" data-z="${x.id}" aria-pressed="${x.id === z.id}" title="${escH(I18N.t(destLabel(x.dest)))}" data-noi18n>${escH(x.name)}</button>`).join("") +
+  const html = s.zones.map(x => `<button type="button" class="vt-opt zchip${x.on === false ? " off" : ""}${maskPainted(zkey(x.id)) ? " painted" : ""}" data-z="${x.id}" aria-pressed="${x.id === z.id}" title="${escH(I18N.t(destLabel(x.dest)))}" data-noi18n>${escH(x.name)}</button>`).join("") +
     `<button type="button" class="vt-opt zadd" title="Ajouter une zone de contours (copie des réglages de la zone affichée)" aria-label="Ajouter une zone de contours">+</button>`;
   $("zoneBar").innerHTML = html; $("mZones").innerHTML = html;
   $("mZones").hidden = maskKind() !== "outline";
+  markPainted();
   $("zoneOn").checked = z.on !== false;
   $("zoneDel").disabled = s.zones.length < 2 || z.id === "z1";
   $("zoneDest").innerHTML = destOptions(s); $("zoneDest").value = z.dest;
@@ -4299,6 +4308,7 @@ function loadMaskImage(src, coverage, kind = "outline:z1") {
       else if (kind.startsWith("flat:")) { FLAT_COVS[kind.slice(5)] = coverage > 0 ? coverage : 0; flatInfo(); }
       else if (kind.slice(8) === ZONE_CUR) { MASK_EMPTY = !(coverage > 0); maskInfo(coverage); }
       MASKV[kind] = { png: coverage > 0 ? CV.toDataURL("image/png") : null, exact: false };
+      markPainted();
       done();
     };
     im.onerror = () => done();
@@ -4874,6 +4884,7 @@ function syncMaskKinds() {
     b.setAttribute("aria-pressed", String(b.dataset.kind === maskKind()));
     b.querySelector(".mdot").style.background = MASK_COLORS[b.dataset.kind];
   });
+  markPainted();
 }
 function recolorCanvas(CV, hex) {          // every painted pixel takes the colour (transparency kept)
   if (!CV) return;
@@ -4925,11 +4936,21 @@ const maskExact = k => k === "subject" ? SUBJ_EXACT : String(k).startsWith("outl
 function maskCommit(kind, png) {
   if (MASK_RESTORE) return;
   MASKV[kind] = { png, exact: !!maskExact(kind) };
+  markPainted();
   historySoon();
+}
+// painted (non-empty) masks: dot on the mask icons and on the zone chips (flat chips: FLAT_COVS)
+const maskPainted = k => !!(MASKV[k] && MASKV[k].png);
+function markPainted() {
+  const any = p => Object.keys(MASKV).some(k => k.startsWith(p) && maskPainted(k));
+  const on = { outline: any("outline:"), subject: maskPainted("subject"), silhouette: maskPainted("silhouette"), flat: any("flat:") };
+  document.querySelectorAll(".mkind").forEach(b => b.classList.toggle("painted", !!on[b.dataset.kind]));
+  document.querySelectorAll(".zchip").forEach(b => b.classList.toggle("painted", maskPainted(zkey(b.dataset.z))));
 }
 async function restoreMask(kind, st) {
   if (!maskCv(kind)) createFor(kind)();
   MASKV[kind] = st;
+  markPainted();
   const c = maskCv(kind), ctx = c.getContext("2d");
   ctx.clearRect(0, 0, c.width, c.height);
   if (st.png) {
@@ -4960,13 +4981,13 @@ function createMask() {          // new image: every zone mask starts empty
   MASK = zoneCanvas(ZONE_CUR);
   MASKV[zkey(ZONE_CUR)] = { png: null, exact: false };
   MASK_EMPTY = true; SEM_LAST = null;
-  maskInfo(0);
+  maskInfo(0); markPainted();
 }
 function createSil() {
   SIL = maskCanvas();
   MASKV.silhouette = { png: null, exact: false };
   SIL_EMPTY = true; SEM_LAST = null; MASK_OBJ.silhouette = false;
-  silInfo(0);
+  silInfo(0); markPainted();
 }
 function createFlat() {          // new image: every flat mask starts empty
   $("flat_tolerances").value = JSON.stringify(flatTols());
@@ -4975,7 +4996,7 @@ function createFlat() {          // new image: every flat mask starts empty
   for (const k of Object.keys(MASKV)) if (k.startsWith("flat:")) delete MASKV[k];
   MASKV[flatKey("auto")] = { png: null, exact: false };
   SEM_LAST = null; MASK_OBJ.flat = false;
-  flatInfo();
+  flatInfo(); markPainted();
 }
 // targets offered: auto, the colour layers (by tone), the bare support, and any painted target
 // whose tone no longer exists (to be able to clear it)
@@ -5195,7 +5216,7 @@ function createSubj() {
   SUBJ = maskCanvas();
   MASKV.subject = { png: null, exact: false };
   SUBJ_EMPTY = true; SUBJ_EXACT = false; FG_OVERLAY = null; SEM_LAST = null;
-  subjInfo(null);
+  subjInfo(null); markPainted();
 }
 function showMaskInfo() { $("mInfo").textContent = { subject: SUBJ_INFO, silhouette: SIL_INFO, flat: FLAT_INFO }[maskKind()] ?? OUT_INFO; }
 function maskInfo(coverage) {
