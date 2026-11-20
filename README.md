@@ -9,78 +9,37 @@
 
 **Turn any picture into a set of multi-layer airbrush stencils, ready to cut on a Silhouette Cameo.**
 
-OversprayLab is a small web application that runs on your own computer. You give it a photo or a
-drawing; it reduces the image to a few paint tones, builds one cuttable stencil per tone, adds
-the bridges that keep the stencils in one piece and the registration marks that let you line
-them up, and exports everything as **SVG files in millimetres**.
+OversprayLab is a small web application that runs on your own computer. Give it a photo or a
+drawing: it reduces the image to a few paint tones, builds one cuttable stencil per tone, adds the
+bridges that hold the stencils together and the marks that line them up, and exports everything as
+**SVG files in millimetres**, with a printable spraying sheet.
 
 ![OversprayLab main window: a dancer's leap turned into three stencils and an outline stencil](docs/screenshots/main.jpg)
 
-*The screenshots of this guide follow one example project: a photo of a dancer's leap turned into
-**3 stencils** in light grey, slate and navy on white paper (330 × 410 mm, portrait), plus a 4th
-**outline stencil** carrying the key-detail lines (learned edges, TEED) and the dancer's silhouette.*
+*Example project used in the screenshots: a dancer's leap turned into 3 stencils (light grey,
+slate, navy) on white paper 330 × 410 mm, plus an outline stencil for the key details.*
 
 ---
 
-## Contents
+## What it does
 
-1. [What is a multi-layer stencil?](#1-what-is-a-multi-layer-stencil)
-2. [Installation](#2-installation)
-3. [Quick start (5 minutes)](#3-quick-start-5-minutes)
-4. [The interface at a glance](#4-the-interface-at-a-glance)
-5. [Step-by-step guide](#5-step-by-step-guide)
-6. [Cutting and painting](#6-cutting-and-painting)
-7. [Projects and saved settings](#7-projects-and-saved-settings)
-8. [Tips and troubleshooting](#8-tips-and-troubleshooting)
-9. [How it works (for the curious)](#9-how-it-works-for-the-curious)
-
----
-
-## 1. What is a multi-layer stencil?
-
-With an airbrush you build an image **from the lightest tone to the darkest**, spraying through one
-stencil after another:
-
-```
- Support (bare)    Layer 1 (light)    Layer 2 (mid)     Layer 3 (dark)    Outline (optional)
- ┌──────────┐      ┌──────────┐       ┌──────────┐      ┌──────────┐      ┌──────────┐
- │          │  →   │  ░░░░░░  │   →   │  ░▒▒▒▒░  │  →   │  ░▒██▒░  │  →   │  ░▒██▒░  │
- │          │      │ ░░░░░░░░ │       │ ░▒▒▒▒▒▒░ │      │ ░▒████▒░ │      │ ░▒█──█▒░ │
- └──────────┘      └──────────┘       └──────────┘      └──────────┘      └──────────┘
-```
-
-OversprayLab does all the tedious work for you:
+With an airbrush you build an image from the lightest tone to the darkest, spraying through one
+stencil after another. OversprayLab takes care of the tedious part:
 
 | Problem | What OversprayLab does |
 |---|---|
-| A photo has millions of colours | Reduces it to **2 – 8 paint tones**, sorted from light to dark (spraying order). |
-| A hole inside a hole falls out of the stencil (the inside of an "O") | Detects these **islands** and adds thin **bridges** to hold them, preferably where a darker layer will paint over them. Badly held parts (held from one side only, long thin strips, large islands) get **structural bridges** too. |
-| Shapes too thin to cut or too fragile | Enforces the **material limits** (minimum opening, minimum material strip, minimum piece area). |
-| Layers must line up perfectly | Adds **registration marks** (corner brackets, crosses or pin holes) and **notches** showing the layer number. |
-| Fine details get lost in the blur of the airbrush | Optional **key-detail lines** (a separate outline stencil sprayed last, or cut into a colour layer), plus the **silhouette** of the subject if you want it to stand out. |
-| You need the colours and the measurements at hand while painting | A printable **spraying sheet (PDF)**: colours in spraying order, ruler measurements for the registration crosses. |
+| A photo has millions of colours | Reduces it to **1 – 8 paint tones**, sorted in spraying order, and recommends a number. |
+| The inside of an "O" falls out of the stencil | Detects these **islands** and holds them with **bridges**, preferably where a darker layer paints over them; or merges them away when the visible change is small. |
+| Shapes too thin to cut, parts that flap | Enforces the **material limits** and adds **structural bridges** to badly held parts. |
+| Layers must line up | **Registration marks** (corner brackets, crosses, pin holes), layer-number notches, ruler measurements. |
+| Fine details vanish in the airbrush blur | **Key-detail lines** and the subject's **silhouette**, on an outline stencil or cut into a colour layer. |
 
-**Vocabulary used in this guide**
+## Installation
 
-- **Support** – the surface you paint on (paper, canvas, wall…).
-- **Stencil sheet** – the piece of stencil material (Mylar, vinyl, card) for one layer.
-- **Layer / stencil** – one sheet = one paint tone.
-- **Island** – a piece of stencil material completely surrounded by an opening.
-- **Bridge** – a thin strip that connects an island to the rest of the sheet.
-- **Cutting mat** – the sticky mat that carries the sheet through the Cameo.
+Requirements: **Windows** with **Python 3.10+** (any recent browser).
 
----
-
-## 2. Installation
-
-Requirements: **Windows** with **Python 3.10 or newer** (tick "Add Python to PATH" when installing
-it). Any recent browser works.
-
-**The easy way:** double-click **`lancer.bat`**.
-The first launch creates a virtual environment and installs the dependencies (one or two minutes),
-then your browser opens on **http://127.0.0.1:5000**.
-
-**Manually** (any OS):
+Double-click **`lancer.bat`**: the first launch creates a virtual environment and installs the
+dependencies, then opens **http://127.0.0.1:5000**. Manually (any OS):
 
 ```
 python -m venv .venv
@@ -88,889 +47,166 @@ python -m venv .venv
 .venv\Scripts\python app.py
 ```
 
-then open http://127.0.0.1:5000. Keep the console window open while you work; close it to stop
-the application. Nothing leaves your computer.
+Everything runs locally; your images never leave your computer. The **Object** selection tool
+downloads its model once on first use (MobileSAM, ~45 MB, checked by SHA-256). The interface is in
+English or French (**⚙ Preferences**).
 
-The **Object** selection tool (Masks tab) downloads its model once, on first use: MobileSAM in
-ONNX format, about 45 MB, from Hugging Face, checked by its SHA-256 and kept in `models/`. The
-selection itself runs on your computer; your images are never sent anywhere. The **Learned edges (TEED)** detection method uses a 250 kB network that ships
-with OversprayLab (`overspraylab/edge_model/`): nothing to download.
+## Quick start
 
-The interface is in **English** by default; the **⚙ Preferences** button at the top right holds the
-language selector (**French** is available; the exported files follow the selected language). It also
-turns off the **hints** written below the settings (the states, such as "fits on the mat", stay) and
-the **tooltips** shown on hover, once you know the application.
+1. **Drop an image** on the image box (`samples/test_visage.png` is a good first test).
+2. **Surface to paint**: size (A4, 24 × 30 cm, 6F…) and colour of your support.
+3. **Simplification**: number of stencils (3 is a good start).
+4. **Cutting machine** and **Material & cutting**: your Cameo, mat and material (e.g. Mylar).
+5. Check the **Preview** and the stencil cards on the right, then **Export the project**.
 
----
-
-## 3. Quick start (5 minutes)
-
-1. **Drop an image** on the image box at the top left (or click it). `samples/test_visage.png`
-   is a good first test.
-2. In **Surface to paint**, pick the size of your support (e.g. *A4*, *24 × 30 cm* or *6F*) and
-   its colour.
-3. In **Simplification**, choose the **Number of stencils** (3 is a good start).
-4. In **Cutting machine**, pick your machine and **Cutting mat**, then in **Material & cutting** your
-   material (e.g. *Mylar*).
-5. Look at the **Preview** tab and the stencil cards on the right. Happy? Click
-   **Export the project** (right of the image box, under *Open a project…*).
-
-Open the SVG files of the zip in Silhouette Studio, cut, and spray layer 1, 2, 3… in order.
+Open the SVG files in Silhouette Studio, cut, and spray layer 1, 2, 3… in order.
 
 ---
 
-## 4. The interface at a glance
+## Main features
 
-```
-┌──────────────────────────────────────────────────────────────────────────────────────┐
-│ OversprayLab            status · Auto compute · Recompute · ⚙                           │  ← header
-├────────────────────┬────────────────────────────────────────────┬────────────────────┤
-│ Image box          │ Crop | Layout | Masks | Preview |          │ Stencils           │
-│ Open a project…    │ Compare | Original                  1 2 3  │ palette · Closest  │
-│ Default settings   │ Support  Mat  Sheet  Marks                 │ · Auto · legend    │
-│ Settings sections  │                                            │ one card per layer │
-│  (accordion)       │            main view                       │  (click = enlarge) │
-│ Export button      │ Snapshots | Warnings | Dimensions | Ruler  │                    │
-│                    │ (foldable panel with tabs)                 │                    │
-└────────────────────┴────────────────────────────────────────────┴────────────────────┘
-```
+### Layout on the support
 
-- **Left column – settings**, grouped in sections. Each closed section shows a summary of its
-  values. Hover any setting to get a tooltip explaining it.
-- **Centre – the views** (tabs) and, above the view, the layer buttons **1 2 3 …** to hide/show
-  layers, plus the **Support**, **Mat**, **Sheet** and **Marks** buttons to show the support, the
-  cutting mat, the material sheet and the registration marks in every view. The **Background** list
-  sets the colour behind the view (checkerboard, white, greys or black).
-  In every view the **mouse wheel zooms** around the cursor. To move the zoomed image, drag it in the
-  computed views (Preview, Compare, Original, a single layer); in Crop, Layout and Masks, where the
-  left button edits, drag with the **middle button** or hold **Space** while dragging. A
-  **double-click** (except in Masks) or the *%* button fits it back; the zoom is kept when you
-  switch views. Under the view, one foldable panel with tabs (only those with something to show):
-  **Snapshots** (see [§7](#7-projects-and-saved-settings)); **Warnings** gathers the current
-  warnings (image resolution, dark support, no key detail found…), and the panel opens on it by
-  itself when a new warning appears; **Dimensions and measures** gives the support, stencil sheet
-  and image sizes, the difference from the original (ΔE), the number of bridges and the total cut
-  length; **Ruler positioning** (see §5.7). Click the active tab (or the chevron on the right) to
-  fold the panel to its line of tabs: the view gets the room. The active tab and the folding are
-  remembered.
-- **Right column – the stencils**: one card per layer with its colour swatch (click it to change the
-  paint), statistics (paths, nodes, islands, bridges, merges, cut length) and warnings. Click a card
-  to see that layer alone in the main view.
-- Both side columns can be **resized** by dragging their inner edge (double-click = default width).
+Crop the image, then place and size it on the support (fit, fill, or **fit to stencil**: as large
+as the cutting mat allows). The **Support**, **Mat**, **Sheet** and **Marks** buttons show the
+support, the cutting mat, the material sheet and the registration marks in every view, so you see
+at once whether the stencil fits. A warning tells you when the image resolution is too low (or
+uselessly high) for its printed size.
 
-**Auto compute** (header): when ticked, every change recomputes the stencils. Untick it for big
-images: the header button turns into a pulsing orange **Recompute ●** as soon as a setting has
-changed; click it or press **Ctrl + Enter**. When ticked, the same button reads **Recompute ↻** and
-forces a computation with the current settings (for example to update a result restored when a
-project or snapshot was opened). While a computation runs, the header turns orange and striped.
+![Layout view with the cutting mat](docs/screenshots/layout.jpg)
 
----
+### Image preprocessing
 
-## 5. Step-by-step guide
-
-### 5.1 Load an image
-
-Drop a JPEG/PNG/WebP/AVIF file on the image box, or click it to browse. Colour and black & white images
-are both supported. **Open a project…**, right of the box, reloads a previous export (see
-[§7](#7-projects-and-saved-settings)).
-
-The **Project** section (first of the left panel) shows the **project name**: the image name by
-default (without extension). Click it to change it (Enter to confirm, Escape to cancel). The
-exported zip is named after it (spaces replaced by underscores) and it appears on the spraying
-sheet; the files inside the zip have no prefix. The section also shows the **original image file
-name**, stored in the project (the image box only shows its size and colour type).
-
-> Tip: an image with clear shapes and good contrast gives better stencils than a busy, low-contrast
-> photo. A portrait with a plain background is ideal.
-
-### 5.2 Surface to paint
-
-Choose what you will paint on:
-
-- **Format**: ISO paper (A6 → A2, US Letter), common canvases and frames (20 × 20 → 70 × 100 cm),
-  French stretcher sizes **Figure / Paysage / Marine** (0F → 120F, e.g. 6F = 41 × 33 cm), or a custom
-  size. Then the **orientation**. Your saved supports come first in the same list (★ *My supports*);
-  the icons next to *Format* save, save as, rename and delete them. A saved support keeps the format,
-  colour, margins, stencil sheet, mat and registration marks.
-- **Support colour**: the preview and the simulated render are computed on this colour. The image
-  tone closest to it can be left **bare** (no stencil needed).
-- **Inner margin**: blank space kept between the image and the edge of the support.
-
-### 5.3 Image position
-
-Two blocks: **Crop** (crop frame, size, fit icons, inner margin) and **Alignment**.
-
-**Crop** tab – drag the frame handles to keep only the part of the image you want. The aspect
-ratio can be free, the support's, or fixed (1:1, 4:3, 3:4, 16:9, 9:16).
-
-Cropping leaves the image at its scale and place on the support: the stencil sheet and the marks
-follow the frame, and **Fit to stencil** enlarges the cropped image again if needed.
-
-![Crop view, with the Image position section open](docs/screenshots/crop.jpg)
-
-**Layout** tab – place the image on the support:
-
-- drag the image to move it, the bottom-right handle to resize it
-  (hold **Shift** for free proportions);
-- icons beside **Size**: **Fit to support**, **Fill the support**, **Fit to stencil**; or type the size in mm or in % of "fitted to the support";
-- **alignment** on 9 positions (corners, edge middles, centre) at a chosen distance from the edge,
-  or centring along one axis only;
-- **Fit to stencil** (third icon) makes the image as large as possible for the chosen stencil sheet
-  and cutting mat, and picks the best orientation automatically.
-
-A warning (under the view) appears when the image resolution does not suit its size on the support: below the
-computation resolution (default 6 px/mm, e.g. 2 460 × 1 980 px for a 6F canvas filled), the
-image is enlarged and its edges are blurred; above 24 px/mm (twice the maximum computation
-resolution), the extra pixels are useless and only slow things down; its **Reduce the image**
-button then resamples the loaded image to 18 px/mm on the support (never under 1100 px), the
-painted masks follow, and the saved project contains the reduced image (the file on the disk is
-not changed).
-
-Anything outside the support is trimmed (full bleed). With the **Mat** button on, the cutting mat is
-drawn with its inch grid, so you immediately see whether the sheet fits.
-
-![Layout view with the cutting mat (Cutting machine section open)](docs/screenshots/layout.jpg)
-
-### 5.4 Image preprocessing (optional)
-
-These settings improve the image **before** it is split into tones. The **Original** tab shows the
-preprocessed image instantly (even in on-demand mode), with its luminance histogram.
-Preprocessing only guides the **cut**: the computed paint colours are always measured on the
-original photo, over the same zones, so a strong preprocessing does not dull or shift them.
-
-For a deeper preparation (clean-up, simplification in a given style, key lines), see the
+Levels, local contrast (CLAHE), shadows / highlights, gamma, an editable **tone curve** with
+presets, saturation, sharpening, background removal. The histogram shows where each tone ends; drag
+its lines for **manual thresholds**. Preprocessing only guides the cut: paint colours are always
+measured on the original photo. For a deeper preparation of the source image, see the
 [Qwen-Image-Edit prompts](docs/qwen_prompts.md).
 
-| Setting | Use it when… |
-|---|---|
-| **Auto levels** | the image is dull or does not use the full range from black to white. |
-| **Local contrast** (CLAHE) | volumes (face, folds) look flat; brings them out area by area. |
-| **Global contrast** | the large light and dark masses are not separated enough (S curve around the midtones). |
-| **Shadows** / **Highlights** | only the dark, or only the light, tones need lightening or darkening. |
-| **Black point** / **White point** | the darkest or lightest tones should merge into plain black or white. |
-| **Midtones (gamma)** | the middle tones are too dark (> 1 lightens) or too light (< 1 darkens). |
-| **Tone curve** | you want full control of the tones, or a quick result with one of its presets. |
-| **Saturation** | two different colours end up in the same tone (colour images). |
-| **Sharpness** | you use the outline stencil and want crisper edges (keep it light). |
-| **Manual thresholds between tones** | you want to decide yourself where one tone ends and the next begins. |
-| **Remove the background** | the background should stay bare support (see §5.6). |
+![Original tab and preprocessing: the histogram with the layer painting each tone range](docs/screenshots/preprocessing.jpg)
 
-**Tone curve**: click to add a point, drag to move it, double-click (or right-click) to remove it.
-Behind the curve, the histogram of the tones entering it. The presets above it (soft or strong
-contrast, lighten, darken, open shadows, hold highlights, plateaus) replace the curve in one click;
-it can then be adjusted by hand.
+### Simplification
 
-**Manual thresholds**: the histogram shows one line per boundary between two tones (dotted lines =
-automatic thresholds). Drag a line to switch to manual thresholds: each tone becomes a luminance
-range (controlled posterisation). **Automatic thresholds** goes back to automatic mode.
-Under the histogram, two strips show for each range its tone and the colour of the layer that paints
-it, with the layer number (**S** = tone left to the support).
+- **Stencil style**: flat colours (one layer per tone) or **lines only** (a line drawing / colouring book).
+- **Level of detail**, **hue weight** (split colours of similar lightness), **colour vividness**.
+- **Flat areas**: poster-like flat layers, automatic or painted zone by zone, optionally forced into a given layer.
+- **Stacking**: exclusive (each layer paints its own tone) or cumulative (layers overlap, forgiving registration).
+- **Merge instead of bridges**: close narrow channels or drop small islands when the visible change stays small.
 
-![Original tab and Image preprocessing: the histogram, with under it the layer painting each tone range](docs/screenshots/preprocessing.jpg)
+### Masks and object selection
 
-### 5.5 Simplification
+Paint masks with a brush, a **smart brush** that follows colour edges, or select objects with one
+click (**Object** tool, Segment Anything / MobileSAM). Four masks: **subject** (background removal),
+**key details** (where to look for lines, one per zone), **silhouette** and **flat areas**.
 
-Five blocks: **Stencils** (style, number, level of detail), **Colours** (colour mode, hue weight,
-vividness), **Flat areas**, **Layers** (stacking, bare support, thin strokes; *Flat colours* style
-only) and **Merging**.
+![Masks tab: the silhouette mask (blue) selected on the dancer](docs/screenshots/masks.jpg)
 
-- **Stencil style**:
-  - **Flat colours** (default) – one paint layer per tone, with optional key-detail lines;
-  - **Lines only (line drawing)** – no flat colour at all: only line stencils, one per line colour,
-    sprayed from the lightest to the darkest (see *Lines only* in 5.6). The number of stencils then
-    sets the number of tone zones of the colouring book; layer stacking does not apply.
-- **Number of stencils** (buttons 1 to 8): number of painted tones (the bare support and the
-  outline stencil are not counted). OversprayLab shows a recommendation for your image (outlined
-  button); hovering a button shows the difference from the original (ΔE) for that number. More
-  stencils = more faithful but more cutting and more painting.
-- **Level of detail**: low = simple smooth shapes; high = more small details (and more bridges).
-- **Hue weight (%)** (colour mode): how much the hue counts against the lightness when the tones
-  are computed. 0 % = lightness only; 40 % (default) = original behaviour, lightness dominates;
-  100 % = perceptual balance; higher = different colours are split even at the same lightness.
-  No effect in black and white or with manual thresholds.
-- **Colour vividness (%)**: computed colour of each tone (layer colours on *Auto*). 0 % (default) =
-  mean of its pixels, often duller than the image (neighbouring hues, shadows and highlights
-  average out); 100 % = same hue and lightness with the saturation of its most vivid pixels
-  (75th percentile), kept inside sRGB. It does not change the cut. No effect in black and white.
-- **Automatic flat areas** (0 = off): full flat layers, as on a screen-printed poster, instead of
-  islands of a neighbouring tone interleaved with them where the lightness varies gently around a
-  threshold (cheek, background gradient). An island of one tone is absorbed by the area around it
-  when the border between them has a low contrast and the island is smaller than that area; higher =
-  more contrast tolerated and larger islands absorbed. Eyes, dark strokes and sharp edges stay.
-- **Tolerance of the selected zone** and **Paint the flat zones…**: see the *Flat areas mask* (5.6). Each
-  painted zone takes its main tone wherever the image differs from it by less than the tolerance:
-  0 = nothing changes, 50 = the neighbouring tones join the main tone, 100 = the whole zone in a
-  single colour. Like the settings of the key-detail zones, each flat mask keeps its own tolerance:
-  the *Forced flat zone* buttons (General, 1, 2, 3… with the layer colour, Bare support, as for the key-detail zones) pick
-  the mask the slider edits (also the mask shown in the Masks tab); a layer without its own value
-  takes the general tolerance. The **Auto** toggle, in front of the slider, is pressed while
-  the mask follows the general tolerance; releasing it (click, or moving the slider) gives the mask
-  its own tolerance, the slider's; pressing it again brings the mask back to the general tolerance.
-  (The *General* flat mask is unrelated to the *Automatic flat areas* slider.)
-- **Layer stacking**:
-  - **Exclusive** (default) – each stencil opens only its own tone (useful for flat, poster-like colours). The material limits can leave small unpainted gaps between tones: **Fill the gaps left by the material limits** (off by default) gives them to the layers around, within those same limits; shapes change and more bridges may be needed.
-  - **Cumulative** – each stencil opens its own tone *and all darker ones*. Layers
-    overlap, so small registration errors do not leave gaps.
-- **Protect thin strokes from simplification**: thin dark or light strokes (eyes, eyebrows,
-  nostrils, strands) keep their own tone instead of being absorbed by the area around them.
-  Strokes thinner than the material's minimum opening still disappear: redraw them with the
-  key-detail lines (below).
-- **Merging** block – **Merge instead of bridges** (0 = off): many islands can be held without a bridge, by
-  - **closing a narrow channel** of opening (narrower than *Max channel width*) that separates the
-    island from the rest of the sheet: the island is welded along the whole narrow part (channels are
-    looked for at several widths up to the maximum, so a wider maximum only adds possible merges);
-  - **removing a small island**: it simply gets painted. Islands touching key-detail lines cut into
-    the layer are kept, unless *… including those enclosed by key-detail lines* is ticked (useful on
-    textures, where the lines enclose many small light areas; the lines themselves are never cut).
+### Key details and silhouette
 
-  A merge is used when the visible area it changes stays below the limit set by the slider
-  (progressive scale: about 5 mm² at 50, 90 mm² at 100, 1500 mm² at the maximum, 150). Areas repainted later by a darker layer do not count, and
-  a change counts less when the two tones involved are close. The **merge** button of the legend
-  highlights the merged zones (violet) on the stencil cards.
+Fine lines lost by the simplification are found again and sent to an **outline stencil** sprayed
+last, or cut into a colour layer. Five detection methods: sharp edges (Canny), drawn line (DoG),
+flowing drawn line (FDoG), thin lines (ridges) and **learned edges** (TEED, a small neural network
+shipped with the app). The search can be split into zones with their own settings. The
+**silhouette** option draws the outline of a mask, only where the subject does not stand out,
+with optional interruptions to hold it like bridges.
 
-  On **line stencils** (*Lines only* style, separate outline stencil) only small islands enclosed by
-  lines are merged: the area inside the loop is painted, and a line is never cut. High values paint
-  large enclosed areas; to hold big loops, prefer the interruptions (*Interrupt every … mm*).
+### Bridges and material
 
-### 5.6 Masks: background removal, key details and silhouette
+Material presets set the minimum opening, strip and piece area. Bridges are short, kept away from
+other edges and placed where possible under darker paint. **Structural bridges** hold long thin
+strips and large pieces; a **support map** on the cards shows how well each part is held. You can
+also **draw bridges by hand** or remove automatic ones.
 
-The **Masks** tab lets you paint on the image with a brush, or select objects with a click. Its bar
-has two lines: the mask edited, the tool and its settings first, then the display (show, colour,
-opacity) and the actions (*Clear all*, *Copy to…*). Choose which mask you edit with the four
-icons (key details, subject, silhouette, flat areas; the bar under each one is its display colour):
+### Layer effects
 
-- **Subject mask** (background removal) – roughly paint over the subject, overflowing a little.
-  OversprayLab finds the exact edge by itself (GrabCut): outside the painted area = background,
-  centre of the area = subject. The detected background is shown darkened; it stays bare support and
-  no longer influences the choice of tones. Painting the subject turns on *Remove the background*.
-  Or use the **Object** tool (below): the selected outline is then used as is, without GrabCut.
-- **Outline mask** (key details) – paint where the outline stencil should look for details
-  (eyes, mouth, lettering…). Each **key-detail zone** has its own outline mask: the chips next to
-  the mask icons (*Zone 1*, *Zone 2*… **+**) choose the zone painted. Without a painted area, a zone
-  searches the whole image. Painting turns on the outline stencil.
-- **Silhouette mask** – paint (or select with the Object tool) the area whose **outline** the
-  outline stencil draws (see *Silhouette* below). Painting turns this option on.
-- **Flat areas mask** – paint, or click with the Object tool, each zone to fill with a single tone
-  (face, background, clothing…). Each separate painted zone is processed on its own: it takes its
-  main tone wherever the image is close enough to it (*Tolerance of the selected zone*, Simplification
-  section); strong details inside it (eyes, dark lines) keep their tone below 100.
-  Chips under the mask bar choose the target: **General** (the main tone of each zone, as above) or a
-  layer (**Layer n**, or **Bare support** when the lightest tone is left to the support): what is
-  painted there is **forced into that layer** — the flattened part of each zone takes its colour,
-  sharp details stay. The paint bucket button on a colour layer card opens that layer's flat mask
-  directly. The layer colours are measured before these forced zones, so forcing a light area into a
-  dark layer does not change the paint computed for that layer.
+Each layer gets its own stack of effects, applied before the bridges: smoothing, polygonal or
+angular outlines, rough or wavy edges, drips, **halftone dots**, hatching, engraving, contour lines,
+patterns, outline only, drop shadow, halo, blends between layers, mosaic, decorative bridges,
+overlap…
 
-**Background under the mask** (*Background* list of the Masks bar, remembered): **image** (default),
-**preview** (every visible layer on the support colour, as computed) or **chosen layers** (chips with
-the layer colours, drawn on the dimmed image; opening a layer's flat mask shows that layer first).
-Outside the computed area (crop), the dimmed image is shown.
+![Layer effects: halftone dots on layer 2](docs/screenshots/effects.jpg)
 
-**Object** tool (semantic selection, Segment Anything / MobileSAM) – click an object to add it to the
-current mask; click other objects one after the other to add them too. Clicking again inside the
-object just added switches to another cut of it (a part, the object, the whole); **Alt + click**
-removes an object. The image is analysed once when the tool is chosen (well under a second), then
-each click takes a few hundredths of a second. The brush still touches the mask up afterwards
-(Shift + click erases). It works for every mask.
+### Paint colours and palettes
 
-Options of the Object tool (shown while it is selected, remembered):
-- **Sensitivity** – higher = wider selection (edges included more generously), lower = tighter.
-  Changing it redoes the last selection with the same cut.
-- **Include the dark outline** – each selected object automatically gets the dark line around it
-  (the black outline of a drawing, often left out by the selection): dark pixels (*threshold*,
-  L* 0 = black) reached from the object, *up to* the given width in pixels of the original image.
-- **Margin** – each selected object is also enlarged by this many pixels all around.
-- **Enlarge the mask** applies the dark outline and the margin to the whole mask shown (a mask
-  painted with the brush, or made before).
-
-**Smart mode** (*Smart* button, **M**) – the brush then only paints (or, with Shift, erases) the
-colour area under the brush centre and stop at its limits. The colour is compared continuously
-with the one around the brush centre, so the stroke follows the zone it is moved over. Its
-**Sensitivity** sets how small a change of colour stops it (higher = tighter). The *Follows* list
-(remembered) chooses what it compares: the **image** (default) or the **shown background** (the
-preview or the chosen layers of the *Background* list), to paint exactly along the zones of the
-layers; with the image as background, both are the same. A subject mask
-painted in smart mode is used as is, without GrabCut, like an object selection.
-
-**Shift + left click** with the brush erases (smart or not, as the brush): there is no separate
-eraser. Holding Shift turns the brush circle into the eraser one (red, dashed); a dot in its centre
-marks the smart mode. **Ctrl + mouse wheel** over the view changes the brush size (instead of zooming).
-
-Keyboard shortcuts: **B** brush, **M** smart mode, **S** object, **[** and **]** brush size. *Clear all*
-erases the mask. **Copy to…** copies the shown mask into another one (its content is replaced), for
-example the outline mask into the subject mask; a subject roughly painted gives its cut-out.
-The colour list sets the display colour of the mask shown (each mask keeps its own) and
-**Opacity** how much it covers the image; both are remembered and change only the display.
-
-![Masks tab: the silhouette mask (blue) selected on the dancer; on the left, the Silhouette option uses it](docs/screenshots/masks.jpg)
-
-**Key-detail outlines** section: *Faded key details* compares the original image with
-the simulated render of the layers, and keeps the lines whose contrast has been lost.
-
-**Key-detail zones** – the search can be split into zones, each with its own painted area (outline
-mask of the zone, Masks tab), its own settings (method, sensitivity, whole lines, line width, minimum length,
-what it compares with) and its own **destination**. The chips at the top of the section (*Zone 1*, *Zone 2*… **+**) choose the
-zone whose settings are shown; **+** adds a zone with a copy of the settings of the zone shown;
-*Zone enabled*, *Rename…* and *Delete* act on the zone shown (the first zone cannot be deleted).
-For example: the eyes in thin black lines, the clothes in a thicker brown line on their own
-stencil, the rest of the image with a low sensitivity into the darkest layer.
-
-**Destination of the zone**:
-
-- **Outline A, B…** – an outline stencil, painted after the colours, in the line colour of that
-  outline layer. Zones sent to the same outline layer are **merged** into one stencil; a zone alone
-  on its outline layer gets a **dedicated** stencil. *+ new outline layer* creates the next one;
-- **Into the darkest layer** – no extra stencil: the lines are cut into the last layer;
-- **Into the layer of the nearest tone** – no extra stencil: each line goes into the layer whose tone
-  is closest to its own, among those darker than the area it crosses;
-- **Into layer 1, 2…** – no extra stencil: the lines are cut into that colour layer (by its
-  position, the colour layers of the last computation are listed), except where a layer painted
-  after it would cover them. Beyond the last layer (fewer tones since), the last one is used.
-
-The **line colour belongs to the outline layer** (zones merged together are painted together): the
-section shows the colour of the outline layer of the zone shown, and the card of each outline
-stencil (*Layer 4 — outline A ✎*) has the same colour picker. Projects of earlier versions open with
-one zone made of their settings and their outline mask.
-
-In a layer, a line is always darker than the area it crosses (otherwise its paint would not show),
-and that layer gets more islands and bridges. **Detection method**:
-
-| Method | Finds | Best for |
-|---|---|---|
-| **Sharp edges (Canny)** | the edges of shapes, in luminance and colour | general use; a thin line gives two parallel edges |
-| **Drawn line (DoG)** | one line along each contour, on its dark side, like a pen drawing | graphic, clean line art |
-| **Flowing drawn line (FDoG)** | the same line, averaged along the curves of the contours: more continuous, fewer crumbs; slower (a few seconds on a large image, then cached) | curls, letters, rounded shapes; photos with texture |
-| **Thin lines (ridges)** | the centre line of thin strokes | lashes, eyebrows, wrinkles, hair strands |
-| **Learned edges (TEED)** | the edges a small neural network draws, like a line drawing; the sensitivity keeps the surest ones first | clean shapes: logos, lettering, clothes, objects |
-
-**Detect on** (each zone): **lightness** (default; the edge of a shadow is a line too),
-**colour** – the colourfulness (chroma), where a shadow over a colour hardly shows while a black or
-grey line stays sharp: useful when a shadow covers the drawing – or **both**.
-
-**Local contrast** (each zone, 0 = off): local contrast (CLAHE, same scale as the preprocessing
-one) added only to the image the zone's lines are looked for in. It brings out lines in shadows and
-low-contrast areas without changing the colour layers; too strong, grain and textures give stray
-lines. The loss of sharpness is still measured against the original photo.
-
-**Compare with** (each zone): what the image is compared with to find the lines –
-the **render of the layers before their effects** (default: the lines do not move when a layer
-effect is added or changed), the **render after their effects** (the lines make up for what the
-effects remove), or the **image alone, before the layers are computed** (all the lines of the image,
-chosen by the sensitivity only, whatever the layers).
-
-**Keep whole lines** (each zone): each detected line is kept or left out as a whole, instead of
-keeping the most marked points – which can cut a line into pieces where it gets weaker (frequent
-with *image alone*). The sensitivity is then replaced by a **Detection sensitivity** of its own:
-the contrast from which a line counts as detected, measured against the most marked lines of the
-zone, on a logarithmic scale (low = only very marked lines, high = faint lines too). Each line
-detected is kept whole. Marks on the slider show the sensitivities where a line of the zone
-appears, and the label gives the lines kept / detected and the next step (e.g. *21 · 4 / 8 · 52 ▸*).
-Lines shorter than the minimum length do not count.
-
-**Sensitivity** controls how many details are kept, on a progressive scale (1 % of the candidate
-lines at 0, about 10 % at 50, 95 % at 100: fine control when you want only a few lines). A line
-whose strongest points are kept is followed along itself while it stays nearly as marked, so that
-it comes out in one piece rather than in dashes that the minimum length would remove. The drawn
-line (DoG) also averages its strength along the contours, which fades the scattered responses of
-textures (hair, grain), and it lowers its noise floor on a low-contrast image, whose faint lines
-would otherwise never be found. **Line following (mm)** (each zone, drawn lines and learned edges only, 12 mm by
-default; advised 12 mm with DoG, 4 mm with the flowing drawn line, 8 mm with TEED, set when the method is chosen) sets how far a kept line is followed: longer gives lines in one piece with fewer gaps, but
-also extends faint lines from a marked start; 0 selects point by point; **Width** sets the thickness of the line
-(never less than the material's minimum opening). The line colour is automatic (the most
-contrasting tone) or chosen; with a line lighter than the support, DoG and ridges look for light
-lines.
-
-**Silhouette (outline of a mask)** draws the outline of a mask, whatever its contrast, with
-or without the key details, to its own **destination** (an outline layer or a colour layer) (it works on its own when *Faded key details* is unticked):
-useful when the subject does not stand out from the background, since the detection mostly reinforces details inside it. **Silhouette mask** chooses
-which one: the subject mask (selected object or cut-out area), the dedicated silhouette mask, or the
-key-detail mask (all the zones together); **Paint…** opens it in the Masks tab. The image's own edge is not drawn.
-**Position** puts the stroke across the outline, just outside or just inside it, and **Silhouette width**
-sets its width (0 = the width of the key-detail lines; never below the minimum opening).
-A closed silhouette would cut the whole subject out as one big island, held by a few bridges only.
-Two options open it:
-- **Only where the edge stands out poorly**: the line is drawn only where the simulated render of
-  the layers shows the edge poorly (colour difference across it below *Max colour difference (ΔE)*);
-  elsewhere the layers already draw the edge;
-- **Interrupt every … mm**: the line is cut at regular intervals along its length, leaving
-  *Length of an interruption* of material each time, like bridges spread all around. Small
-  interruptions are almost invisible once sprayed. 0 = continuous line.
-
-**Lines only** (*Stencil style* in Simplification): the stencils hold lines only, from up to three
-sources, which can be combined:
-- the **key details** (*Retrace the faded key details*), searched against the bare support: the
-  strongest edges of the image, as many as the sensitivity allows;
-- the **silhouette** (*Silhouette*), with **Own colour for the silhouette** if wanted;
-- the **colouring book** (*Draw the limits between the tone zones*): the limits between the computed
-  tones, like a colouring book. **Colour of the limits**: same as the key details, a chosen colour,
-  or the **tone of the darker zone** – one stencil per tone, for a coloured line drawing.
-
-Lines of the same colour share one stencil; each colour gets its own. The colour swatch of a line
-stencil's card changes the colour of its sources. *Interrupt every … mm* then applies to all the
-lines, since a line drawing is full of closed loops.
-
-**Show detection…** opens the Masks tab with the **detection preview** over the image: red = line of
-the stencil, orange = too short, blue = detected but not kept (already visible in the render, or
-below the sensitivity); with the lines in a layer, purple = already cut in the layers (only blurred
-by the airbrush, nothing to add). It follows the outline settings live, using the layers of the last
-computation.
-
-### 5.7 Stencil sheet & registration
-
-These settings are the *Stencil sheet* and *Registration marks* blocks of the **Material & cutting**
-section. Choose how the stencil sheet relates to the support:
-
-| Mode | When to use it | Registration |
-|---|---|---|
-| **Around the support** (support + margin) | Small supports (paper, small canvas): the sheet is larger than the support. | **Corner brackets** cut around the corners of the support – lay each corner of the support into its bracket. Or crosses / holes in the margin. |
-| **Inside the support, fitted to the design** (+ border) – default | Large surfaces (big canvas, wall, furniture): the sheet only covers the design. | **Crosses** in the border, with **ruler measurements** telling where to pencil each cross on the support. |
-
-- **Registration marks** on **3 corners** (the empty bottom-right corner prevents putting a sheet
-  upside down) or **4 corners**; shape: brackets, crosses or round holes (for registration pins).
-- Small square **notches** at the top of each sheet give the layer number.
-- For "inside the support" modes, the ruler measurements are shown under the view (*Ruler
-  positioning* tab of the panel) and in the Layout view, and are exported in the files.
-- The marks follow the crop and the layout in the views. They turn **red** when the rules can no
-  longer be met. Sheet inside the support: the sheet falls off the support on the side of the mark
-  (that part is also shown in red, with the **Support** button on), the mark leaves the support, or
-  the border is too narrow for it. Sheet around the support: a mark moved into a support corner
-  (margin too small) touches the visible image.
-
-### 5.8 Cutting machine
-
-- **Machine**: Cameo 4 / Cameo 5 (305 mm wide), Cameo Pro (610 mm) or another machine.
-- **Cutting mat**: standard 12 × 12″, long 12 × 24″, Cameo Pro 24 × 24″, custom, or **No mat**
-  (roll material). **Mat orientation**: portrait (feed direction) or landscape. OversprayLab warns you
-  when the stencil sheet does not fit on the mat or exceeds the machine width.
-
-### 5.9 Material & cutting
-
-The section is split into blocks, each marked by a vertical bar: *Material*, *Material sheet*,
-*Bridges*, *Stencil sheet* and *Registration marks* (the last two are described in 5.7). Merging
-islands instead of bridging them is set in *Simplification* (5.5).
-
-- **Material**: presets for thick paper, vinyl and Mylar. They set the cutting constraints:
-  - **Minimum opening** – narrower openings are removed;
-  - **Minimum material strip** – thinner strips of material are removed (they would tear);
-  - **Minimum piece area** – tiny openings or pieces are removed.
-- **Material sheet**: the format of the sheet of material you cut the stencil from (A5 to A2, US
-  Letter / Legal / Tabloid, 12 × 12″, 12 × 24″, 24 × 24″, custom, or *Not specified*), with its
-  orientation. It is **only a check**: the stencil is never changed. The hint tells you whether the
-  stencil fits on it (or only once the sheet is turned) and warns when the sheet is larger than the
-  mat; these two problems also appear in the *Warnings* tab under the view. Your own sizes are kept with the icons next to *Material sheet* (★ *My formats*, first in the list).
-  The **Sheet** button above the views shows its outline (orange and dashed when the stencil
-  overflows), laid in the same corner as the stencil sheet.
-- **Bridges**: **Automatic bridges (islands)**, **Bridge width** and **Minimum bridges per island**.
-  Bridges are placed short, away from other edges, and preferably where a darker layer will paint
-  over them (invisible bridges).
-  **Max spacing between supports** (mm, at least the bridge width, 0 = off; 80 for Mylar, 60 for
-  card, off for adhesive vinyl) adds **structural bridges** to material that is attached but badly
-  held. Only the sheet joined to the frame by paths at least 6 mm wide counts as held; along every
-  other edge of material (a large piece hanging from a narrow strip, an island held by its bridges,
-  a thin strip), two successive supports (measured along the material; the solid sheet and every
-  bridge already cut, island or manual, are supports) are never farther apart than
-  the spacing: a bridge goes where the edge is farthest from a support, plus one on the opposite
-  edge of a thin strip so it cannot pivot. It is a maximum, the actual gaps are often smaller. Without them, a
-  sheet stored rolled lifts these parts and the stencil is hard to lay and position. The layer card
-  counts them and warns about parts that found no room for one.
-- **Manual bridges**: click a stencil card to open the layer in the view, then **Manual bridges**
-  (key **P**) and drag across an opening, from one edge of material to the other. The bridge is
-  cut at the bridge width before the merges and the automatic bridges, which adapt to it (an island
-  it holds needs no other bridge); it applies even with the automatic bridges off. Manual bridges
-  are drawn in blue on the layer view; click one to select it, **Delete** removes it. They are
-  saved with the settings and the project (undo / redo included) and follow the crop, scale and
-  position of the image. Each one belongs to the layer it was drawn on, recognised by the tone it
-  paints: when the layers change (number of stencils, palette…), it goes to the layer whose tone is
-  closest (ΔE 15 at most). It is **ignored** (dashed orange, counted on the card) when no layer
-  paints that tone any more (it can then be attached to the layer shown), when an end is no longer
-  on material (an end within the bridge width, 1 mm at least, of the material is moved onto it) or
-  is off the sheet; a bridge that crosses no opening is shown in grey (no effect). Ignored bridges
-  are kept: undoing the change brings them back.
-  **Keep the automatic bridges** (button of the tool, remembered): the new manual bridges, or the
-  selected one, are cut **after** the merges and the automatic bridges, which then stay exactly
-  where they were, even when the manual bridge already holds an island (shown in teal instead of
-  blue). Off, the automatic bridges are placed again taking the manual bridge into account.
-  A click selects a bridge, a drag always draws a new one, even when it starts on a bridge.
-  With the same tool, click an **automatic bridge** and press **Delete** to remove it: no
-  automatic bridge of that layer may then pass there (the bridge and 2 mm on each side, at least
-  twice the bridge width), so the bridges are placed elsewhere; an island with no other place is
-  left without a bridge (counted on the card). The removed bridge stays drawn in dashed red: select
-  it and **Restore the bridge** to allow it again. The card counts the bridges removed by hand.
-  With **Keep the automatic bridges** on, a removed automatic bridge is simply taken off once the
-  automatic bridges are computed (the opening is reopened there, nothing is placed instead) and
-  the others stay where they are (dashed teal); if a later change moves the automatic bridges so
-  that none is there any more, it has no effect (grey). The button, or the **K** key, also switches the
-  selected manual or removed bridge from one mode to the other.
-
-### 5.10 Layer effects
-
-The **Layer effects** section changes the shape of the computed layers (not the image): each
-layer has its own stack of effects, all visible at once, one block per layer.
-
-Line stencils – the outline layers that receive the key details and the silhouette, and every
-stencil of the lines-only style – have effects too (listed as *Layer n (outline)* once computed).
-Painted over the colour layers, they are processed alone: their effects see the other layers but
-change only their own stencil (a halo or shadow given to another layer is left out). Lines added
-into a colour layer (destination *darkest* / *nearest* / a given layer) are not changed by that layer's
-effects.
-
-The effects are grouped by category in the **+ Add…** list.
-
-| Category | Effect | What it does |
-|---|---|---|
-| Outline | **Smoothing** | Rounds the corners and softens the outlines (radius in mm). |
-| | **Polygonal outline** | Simplifies the outlines into straight lines: faceted, low-poly look. |
-| | **Angular outline** | Segments at set angles only (90° steps, 45° or 30°): geometric, Art Deco look. |
-| | **Rough edges** | Distorts the outlines with random noise (amplitude, scale, seed). The same seed on several layers keeps them registered. |
-| | **Wavy edges** | Regular waves, saw teeth or scallops along the outlines (amplitude, period). |
-| | **Drips** | Paint drips hanging from the edges facing down: strokes ending in a drop (length, width, spacing, variation, seed). |
-| | **Grow / shrink** | Moves the whole outline outwards (thicker) or inwards (thinner). |
-| Fill | **Halftone dots** | Round holes on a grid (pitch, min / max diameter, angle); dot size constant, growing with the distance to the edge, or following the tones of the original image (halftone gradient). Dots at the edge of the layer are either cut by it, removed (whole dots only) or shrunk to fit (never below the min diameter, otherwise removed). |
-| | **Hatching** | Parallel bands, single or crossed (pitch, width, angle). Crossed hatching leaves squares of material held by bridges. |
-| | **Engraving** | Lines whose width follows the tones of the original image (min / max width, pitch); straight, wavy or following the outline: intaglio look. |
-| | **Contour lines** | Bands following the outline, further and further inside (topographic / op art). |
-| | **Pattern** | Repeated diamonds, hexagons, bricks or stars, cut by the shape (size, joint). |
-| Structure | **Outline only** | Keeps a band along the edge of each shape: a flat area becomes an outlined stroke. |
-| | **Drop shadow** | Adds a shifted copy of the layer to another layer (0 = the darkest). |
-| | **Halo / border** | Band around the shapes, at a given distance: left as bare support (layer 0, white sticker border) or painted by another layer. *Breaks every* (0 = continuous) alternates cuts in the halo and tabs joining it to the shape across the distance, so the halo isolates no material and needs no bridges. |
-| | **Blend between layers** | Halftone transition (dots, bands along the border or interlocking comb) in a band across the border with the neighbouring layers and/or the bare support. What the layer takes is removed from the other layer, what it gives up goes to it. |
-| | **Mosaic / stained glass** | Cuts the openings into irregular shards separated by material joints; a large stencil gets stiffer. |
-| | **Decorative bridges** | Strips of material forming parallel lines, a grid or rays: the bridges become part of the style. |
-| Practical | **Overlap** | Extends the layer under the following (darker) layers, so a slight registration offset leaves no thin line of bare support. |
-| | **Merge small openings** | Joins openings closer than a distance and removes the smallest ones: fewer tiny cuts. |
-
-Patterns (halftone, hatching, pattern, decorative bridges, mosaic) are anchored to the support, so
-the same settings line up from one layer to the next.
-
-- **+ Add…** adds an effect at the end of the layer's stack; click its name to show its settings.
-- Effects are applied **from top to bottom**: drag the **≡** handle to change the order, or onto
-  another layer to move the effect there (**Ctrl** while dropping: copy). With the keyboard, focus
-  the handle and use the up / down arrows.
-- One checkbox per effect, one per layer and **Apply the effects** for all of them: compare with
-  and without them, the settings are kept. **⧉ Copy to…** replaces another layer's stack with this one.
-- Layers are processed in spraying order: an effect sees the final shape of the lighter layers and
-  the raw shape of the darker ones (drop shadow and halo also change another layer). After the
-  effects, every changed layer is checked again against the material limits (minimum opening and
-  strip), then gets its merges and bridges as usual.
-- **Exclusive stacking** (each layer only paints its own tone) – two options at the top of the
-  section pass the changes made by the effects on to the other layers:
-  - *What an effect adds goes in front of the darker layers* (on by default): what an effect adds
-    to a layer (grow, drop shadow, painted halo…) is removed from the darker layers, which would
-    otherwise paint over it. Unticked, the darker layers keep their areas and the addition is only
-    cut where they do not paint. Overlap is not concerned, it goes under on purpose.
-  - In any case, what an effect adds to a layer is removed from the lighter layers (painted before
-    and hidden by it): each spot of the support stays painted by a single layer.
-  - *Areas removed by an effect*: **bare support** (default), **layer surrounding the area** (each
-    area of the layer gives what was freed in it to the tone found most along its border, or
-    leaves it bare when the support surrounds it) or
-    **previous (lighter) layer** (e.g. orange halftone dots on the lighter tone, as in cumulative
-    stacking but only where the effect removed material).
-  Both have no effect in cumulative stacking, where the layers already overlap.
-- A layer card shows **✦ n** when the layer has active effects; click it to reach its settings.
-- The effects are saved with the settings and in the project. If the number of stencils drops,
-  the effects of the missing layers are kept (marked *absent*) and come back with the layer; the
-  **×** of an absent layer deletes its effects.
-
-### 5.11 Check the result
-
-- **Preview** – the real stencils (with cutting constraints and bridges) stacked on the support
-  colour in spraying order. Tick **Simulated render** to add the soft airbrush blur, and **Without
-  bridges** to see the result once the bridge traces are retouched (bridges painted over). Use the layer
-  buttons **1 2 3…** to hide layers.
-- **Compare** – before/after view with a line to drag on the image, between two versions chosen above the view for each side
-  (**Left** / **Right**): the source image, the preprocessed image (updated live while the
-  preprocessing settings change), the current version or any snapshot of the project
-  that holds its computed result (shown as it was saved, in the frame of the current version at the
-  same mm scale, with the *Support*, *Simulated render* and *Without bridges* options of the view;
-  the layer buttons next to each side's version choose the layers shown on that side, independently
-  of the other side and of the Preview tab).
-  By default the original is on the left and the current version on the right. **⇄ Left / right**
-  shows the whole left version, then the whole right one, at each click, to switch quickly between
-  both (moving the slider takes over again); **Side by side** shows them next to each other instead
-  (one above the other when that shows them larger, e.g. landscape images), each in its own support
-  frame at the same scale (the zoom moves both). The summary line gives the **mean colour difference (ΔE)**: lower = more faithful.
-
-  ![Compare with the original: photo on the left, simulated airbrush render on the right](docs/screenshots/compare.jpg)
-
-- **Stencil cards** (right column): each card shows the cut layer; in the legend, **bridge** and
-  **removed detail** are buttons that highlight bridges (red) and details removed by the material
-  limits; **merge** highlights the zones merged instead of a bridge (violet); **flat area** shows
-  the painted flat zones of the layer (teal: zones of the General flat mask where they ended in this layer, and zones
-  forced into it); **support** (off by default) maps how well the material is held: the solid sheet
-  stays uncoloured, the rest goes from green (next to a support: solid sheet or bridge) through
-  yellow to orange (at the limit of the *Max spacing between supports*, still accepted); red means
-  beyond the limit, where a bridge is missing (no room was found for one), strongly along the edges and lightly inside wide pieces. A card warns you about remaining problems (for example an island that could not be
-  bridged). The parts held from one side only that found no room for a structural bridge are
-  circled in dashed red on the support map (the dot marks the edge farthest from a support, the
-  circle the area left without a bridge); click the card's warning to open the layer with the
-  support map shown.
-
-If many details are removed, increase the size of the image, lower the level of detail or choose a
-finer material; if there are too many bridges, lower the level of detail or the number of stencils.
-
-### 5.12 Paint colours and palettes
-
-By default each layer gets the tone computed from the image. To paint with your own colours:
-
-- click the **colour swatch** of a layer card: choose a colour of the current palette, one of the
-  image tones, one of the 6 recently used colours, or any colour with the built-in picker: saturation /
-  value square, **H S V sliders** (each one previews the colours along it) with their fields – hue
-  0-360°, saturation and value 0-100 % –, a **hex code** `#rrggbb` / `#rgb`, or the **eyedropper ⌖**:
-  click a pixel of any image of the page (stage, preview, layer cards), with a loupe showing the
-  image's own pixels around the cursor (Escape cancels). Every other colour field (support, line,
-  silhouette, palette editor) opens the same picker. **Auto (computed tone)** goes back to the image
-  tone. The card of an outline stencil has the same picker (it sets the line colour of its outline layer, A, B…). Choosing a colour of the
-  current palette keeps that palette shown in the menu;
-- or use the **Colour palette…** menu at the top of the stencil column: 99 harmonious palettes in 11
-  families (Classics, Vivid, Modern vivid, Soft, Modern soft, Trending, Cold, Warm, Nature,
-  Monochromes, of 8 colours each, and Posters). Each layer gets the palette colour closest to the tone it really
-  paints in the image (CIEDE2000 difference, optimal assignment so that two layers never share a
-  colour; blended in-between tones are added when there are more layers than colours); the status
-  bar shows the mean ΔE. The **Posters (Fairey style)** palettes (3 to 5 flat colours measured on
-  propaganda-style screen prints: cream, sky blue or ochre, red, navy or black) are meant to be used
-  with **By values** (below) and 3 to 5 stencils. Your own palettes (*My palettes*) are made in the **palette editor**:
-  **＋ New palette…** (empty), **＋ Save the current colours…** (starts from the layer colours),
-  **＋ Import a palette…** (paste a JSON list such as `["#006ba6","#0496ff","#ffbc42","#d81159","#8f2d56"]`,
-  `#rrggbb` codes separated by commas or spaces, or a coolors.co link), or **✎** next to a palette
-  (edit one of yours; for a built-in palette, edit a copy). In the editor: change a colour by
-  clicking it, **×** removes it, drag to reorder, **＋ Colour**, **＋ Layer colours**, **Sort light →
-  dark**, paste more colours; **Save** saves (renames when the name was changed), **Save as…** keeps
-  the original and saves a new palette (up to 16 colours);
-- or click **Closest** (target icon ◎): same closest-colour assignment with the chosen palette (useful after editing
-  colours by hand); with no palette chosen, every palette (yours included) is tried and the one that
-  best matches the image is applied;
-- or click **By values** (three bars from light to dark, next to *Closest*): the palette colours are
-  given by lightness rank instead of hue, as on a screen-printed poster: the lightest layer gets the
-  lightest chosen colour, the darkest layer the darkest one, whatever their hue in the image (among
-  the light → dark ordered choices, the one closest to the image); with no palette chosen, every
-  palette is tried in this way;
-- or click **Other colours** (shuffle icon ⤨): each click gives another combination of the chosen palette's colours
-  on the layers (never twice the same colour), from the closest to the image to the farthest, each
-  one changing at least half of the layers; *Closest* goes back to the best one. The toggle next to
-  it (**Keep the light → dark order**, remembered) limits the combinations to those where the
-  lightest layer gets the lightest chosen colour, the next one the next lighter, and so on.
-- or open the **✦ Palette assistant…** (first entry of the *Colour palette…* menu): it builds proposals for
-  the current layers, shown as thumbnails of the real stencils and computed in the browser. The first card always
-  shows the colours the layers had when the window opened, and applying it brings them back. Pick a **style** (Faithful,
-  Pop, Poster, Pastel, Vintage, Neon, Natural, Duotone, Monochrome) or set the **fidelity to the image** and what is taken
-  from it (hue, hue and vividness, exact colour), the **base hues** (main hues of the image, or up to 3 on the perceptual HSV wheel, in the H S V fields or
-  with the eyedropper; the value makes the layers of that hue lighter or darker; the saturation of a chosen colour is used, as it is at vividness 60), the **harmony** (free, monochrome, analogous, analogous + accent, complementary, split complementary, triad, rectangle or square tetrad, double analogous, warm / cool) with its **hue spread**, **number of hues**, **hue shift along values** and **lights and shadows**, then **vividness**, **lightness**, **contrast** and **diversity**; each slider takes a value or, after a click elsewhere on its track, a range that the proposals explore (double-click: back to the default). *Advanced* adds
-  temperature, an accent colour, the hue distribution over the painted area, the value order, neutral anchors, the minimum
-  legibility, a proposed support colour and **My paints** (only the colours of one of *My palettes*). Layer lightnesses
-  are kept apart from each other and from the support, so that the image stays readable. **Lock** a layer to keep its
-  colour, use **More like this** for close variations, then **Apply to the layers** or double-click a card (this closes the window; Ctrl + Z undoes it) or **Save to My
-  palettes**. With options where the colour affects the cut (key details, merges, lines only), thumbnails are approximate.
-
-The chosen colours are used in the preview, the simulated render, the export and the file names.
-The **Auto** button (circular arrow ↺, next to *Other colours*) puts every layer back on its computed
-colour; the same arrow on a stencil card does it for that layer, and the eye icon shows / hides the
-layer in the preview.
-
-Changing only paints is fast: when the colours cannot change the cut (flat colours, *Merge instead of
-bridges* at 0, no key-detail lines, no silhouette limited to weak edges), the cut of the previous
-computation is kept and only the colours, previews and simulated render are updated.
+Click a layer's swatch to pick a colour (palette, image tones, HSV picker, eyedropper). Or apply one
+of **99 built-in palettes** (or your own): *Closest* assigns the colours by perceptual distance, *By
+values* by lightness as on a screen-printed poster, *Other colours* shuffles the combinations. The
+**palette assistant** proposes complete colour schemes (styles, harmonies, vividness…) previewed
+on the real stencils.
 
 ![Layer 2 shown alone, with its colour picker open](docs/screenshots/colors.jpg)
 
-### 5.13 Export
+### Check the result
 
-Click **Export the project**, right of the image box, under *Open a project…*. The zip is named
-after the project (*Project* section) and contains (file names without prefix; French names when the
-interface is in French):
+**Preview** stacks the real stencils (bridges included) on the support colour, optionally with a
+**simulated airbrush render**. **Compare** puts the original, the preprocessed image, the current
+version or any snapshot on either side of a slider (or side by side), with the mean colour
+difference (ΔE).
 
-| File | Content |
-|---|---|
-| `layer01_of03_<colour>.svg`, `layer02_of03_…` | **One cutting file per layer**, in mm, red 0.1 mm lines, with registration marks and number notches. |
-| `layerNN_of03_outline_<colour>.svg` | The outline stencil, if enabled. |
-| `overview.svg` | All layers stacked, to check the result. |
-| `simulated_render.png` | The simulated airbrush result. |
-| `spray_sheet.pdf` | **Spraying sheet** to print (A4): formats, layer colours in spraying order (swatch, hex, RGB, cut length), support colour, ruler registration dimensions and the simulated render. |
-| `inkscape.svg` | An **Inkscape document** with one layer per element (see below). |
-| `silhouette.svg` | **For Silhouette Studio**: only the stencils, one layer each, every layer being a **single compound path** (openings + marks, plus the sheet outline when *Cut the sheet outline* is ticked). |
-| `original.<ext>` | Your original image, untouched. |
-| `outline_mask.png`, `subject_mask.png`, `silhouette_mask.png`, `flat_mask.png`… | The painted masks, if any. |
-| `infos.json` | Sizes, colours, ruler measurements, and **all the settings** of the project. |
-| `projet/` | The **project folder** with all its snapshots (see [§7](#7-projects-and-saved-settings)). |
+![Compare: photo on the left, simulated airbrush render on the right](docs/screenshots/compare.jpg)
 
-A current version that is not saved yet first becomes a snapshot: the first export of a project
-creates its folder and its snapshot `v0`.
+### Export
 
-The **spraying sheet** sums up what you need next to the airbrush: the colour of each layer in
-spraying order and the ruler measurements of the registration crosses.
+**Export the project** produces a zip with:
+
+- one **SVG cutting file per layer** (mm, registration marks, number notches), plus the outline stencil;
+- `silhouette.svg` for Silhouette Studio (one compound path per layer) and an `inkscape.svg` document;
+- an overview SVG, the simulated render (PNG) and the **spraying sheet** (PDF): colours in spraying
+  order, ruler measurements for the registration crosses;
+- the original image, the masks and `infos.json` with every setting, so the project can be reopened.
 
 ![Spraying sheet (PDF) of the example project](docs/screenshots/spray_sheet.jpg)
 
-The **Inkscape file** contains, from bottom to top: *Support*, *Original image (layout)*, *Preview
-(flat colours)* and *Preview (simulated render)* (hidden), *Registration dimensions (do not cut)*,
-one layer per stencil *Layer NN/NN (#colour)*, and *Layer colours (do not cut)*: a column of colour
-squares with their hex codes, placed left of the page, to prepare your paints.
+### Projects, snapshots and presets
+
+- **Snapshots** keep versions of a project (image, masks, settings and computed result) in the
+  `projets/` folder; click a thumbnail to go back to it instantly.
+- **Open a project…** reopens recent projects, a project folder or an exported zip.
+- **Undo / redo** (Ctrl + Z / Ctrl + Y) covers settings and painted masks.
+- Your own supports, materials, mats, machines and palettes are saved as presets.
 
 ---
 
-## 6. Cutting and painting
+## Cutting and painting
 
-**Cutting (Silhouette Studio)**
+1. In Silhouette Studio (Designer Edition or higher for SVG import), open `silhouette.svg` or one
+   layer file. Sizes are in mm: do not rescale. Do a test cut, then cut each layer.
+2. Fix the support; for stencils inside the support, pencil the registration crosses using the ruler
+   measurements of the spraying sheet.
+3. Spray layer 1 (lightest), then 2, 3… aligning the marks each time; finish with the outline
+   stencil. Light, short passes with the stencil held flat give the sharpest edges.
 
-1. Open (or drag in) `silhouette.svg` (all the stencils, one layer each) or one
-   `layerNN_of…svg` file. *SVG import requires Silhouette Studio Designer Edition or higher.*
-   The sizes are in mm: do not rescale the design. Silhouette Studio may skip part of the shapes
-   of a layer made of many separate polygons: in `silhouette.svg` each layer is a single compound
-   path, cut entirely.
-2. Check the page / mat size and the orientation (if you chose *landscape* for the mat in
-   OversprayLab, rotate the design the same way).
-3. Select the material, blade and force in Silhouette Studio.
-   Do a test cut first.
-4. Cut each layer, and write its number on the sheet (the notches at the top also give it).
-
-**Painting**
-
-1. Fix the support. For the "inside the support" modes, pencil the registration crosses using the
-   ruler measurements (printed on the spraying sheet).
-2. Lay **layer 1** on its registration marks, spray the lightest colour, remove the stencil.
-3. Repeat with layer 2, 3… in order, each time aligning the marks precisely.
-4. Finish with the outline stencil, if any.
-
-> Light and short passes, with the stencil held flat (repositionable spray adhesive helps), give the
-> sharpest edges.
-
----
-
-## 7. Projects and saved settings
-
-- **Undo / redo**: the ↶ ↷ buttons above the view (left of the layer buttons), or **Ctrl + Z** /
-  **Ctrl + Y** (**Ctrl + Shift + Z**), undo and redo the settings changes – fields, crop, layer
-  colours, palette – and the **painted masks** (each stroke, object selection, copy or clear is one
-  step), then recompute. Up to 100 steps; the history starts again with each new image. Display
-  options are not part of it, and in a text or number field Ctrl + Z stays the field's own undo.
-- **Side panels**: the **Tab** key (or the ▯▯▯ button above the view, left of full screen) folds the
-  settings panel and the stencil column so the view takes the whole width; Tab again unfolds them.
-  In a text field, a list or a dialog, Tab keeps moving the focus (Shift + Tab always does).
-- **Snapshots**: the *Snapshots* tab of the panel under the view (its title shows the number of
-  snapshots and the current one) keeps versions of the project. **Take a snapshot** (with an
-  optional name) saves the current version – image, masks, settings and the computed result – into
-  the project folder; a snapshot never changes afterwards. Click a thumbnail to go back to that
-  version: it opens instantly, without computing. As soon as you change anything, the current
-  version becomes a new one (*v3 · not saved*), saved by the next snapshot or export; leaving it
-  unsaved (other snapshot, project or image) asks whether to save it, discard it or cancel.
-  A snapshot is named after its number (`v0`, `v1`…) unless you give it a name; **click the name**
-  under the thumbnail to change it (Enter saves, Escape gives up, an empty name goes back to the
-  number). Hovering the thumbnail shows its number and creation date. Its two icons: **export** (a
-  zip of that snapshot alone: its stencils and a reloadable project holding only it, made from its
-  saved result) and **delete** (click twice; its folder is erased, and its number is never given
-  again).
-- **Projects folder**: projects are stored in `projets/` next to the application (another place:
-  environment variable `OVERSPRAYLAB_PROJECTS`), one folder per project:
-  `original.<ext>` (the source image, never reduced, stored once) and `snapshots/v0`, `v1`… (settings,
-  masks, the reduced image when the snapshot works on one, a thumbnail and the computed result).
-  The folder is created by the first snapshot or the first export.
-- **Re-open a project**: *Open a project…* lists the **5 most recent projects** (opened at their last
-  snapshot); *All projects…* opens a window with every project of the projects folder as thumbnails,
-  with a search on the project and folder names and a sort by date or by name (Enter in the search
-  opens the first one); *Open a folder…* opens any project folder (the one holding `projet.json`, wherever it
-  is: it is copied into the projects folder if it is not there yet, or only its missing snapshots);
-  *Open an export…* (or drop the file on the image box) reads an export:
-  - the **.zip** restores everything: image, masks, settings, crop, colours – then recomputes; a zip
-    that holds its project folder is added to the projects folder (the snapshots it lacks are added
-    to a project already there) and opens at the snapshot it was exported from, without computing;
-  - the **colour palette** applied to the layers comes back too; if it is not in *My palettes* on
-    this computer (or differs from the one of the same name), it is added there.
-- **New project** (above *Open a project…*) starts again with the default settings and no image
-  (the remembered last settings are dropped; an unsaved current version of a project can be saved
-  first); the image box then invites you to load an image.
-- **Apply the settings of a project…** (under *Default settings*) applies every setting of a project
-  – support, material, layers, colours, crop… – to the loaded image, which keeps its masks (or to the
-  next image loaded): choose its export **.zip** or an **infos.json** (of an export, of a snapshot
-  folder, or the `…_infos.json` of an earlier export). Dropping an infos.json on the image box does
-  the same.
-- **Presets**: the support format (*Surface to paint*), the material and the material sheet format
-  (*Material & cutting*), the machine and the cutting mat (*Cutting machine*) each have one list, with
-  your saved entries first (★), and **Save / Save as… / Rename… / Delete** icons next to its title
-  (delete: click twice). A saved machine keeps its cutting width, a saved mat its size. A "● modified" marker shows unsaved changes. Your presets and palettes
-  are stored in `presets_utilisateur.json` (created on first save, editable by hand). The built-in
-  materials are in `overspraylab/materials.json`.
-- The **last settings used** are remembered by the browser and restored at the next start.
-  **Default settings** (right of the image box, under *Export the project*) starts again from scratch.
-
----
-
-## 8. Tips and troubleshooting
+## Tips
 
 | Symptom | What to try |
 |---|---|
-| Details disappear | Make the image larger on the support, choose a material with a smaller minimum opening, add the outline stencil. |
-| Too many bridges / islands | Raise *Merge instead of bridges*; lower the level of detail or the number of stencils; use *Cumulative* mode. |
-| Two colours merge into one tone | Increase the saturation, add a stencil, or set manual thresholds. |
-| Flat-looking face | Increase the local contrast (CLAHE) or adjust the midtones. |
-| The background gets painted | Use *Remove the background* with the subject mask. |
-| The subject does not stand out from the background | Tick *Silhouette* (Key-detail outlines) and select the subject, or paint the silhouette mask. |
-| The computed colours look dull | Raise *Colour vividness*, or pick a palette (*Closest* finds the best one). |
-| Two colours of similar lightness end up in one layer | Raise the *Hue weight*. |
-| The image is noisy, textured or too busy to cut cleanly | Prepare it beforehand with an image-edit model: see the [Qwen-Image-Edit prompts](docs/qwen_prompts.md) (clean-up and several stencil styles). |
-| Computing is slow | Untick *Auto compute* and use **Ctrl + Enter**. |
-| "The sheet does not fit on the mat" | Use *Fit to stencil*, turn the mat to landscape, or use a larger mat. |
-| In Silhouette Studio, all the cut lines end up in one layer of the Inkscape file | Grouping objects of several layers moves them into a single layer (ungrouping does not put them back). To move everything, select all (Ctrl + A) and drag without grouping, or re-import the file. |
-| In Silhouette Studio, the hidden render image of the Inkscape file shows black areas when zooming | Display glitch of Silhouette Studio; the cutting files are not affected. Use the PNG render instead. |
+| Details disappear | Make the image larger, choose a finer material, add key-detail lines. |
+| Too many bridges | Raise *Merge instead of bridges*, lower the level of detail, or use cumulative stacking. |
+| Two colours end up in one tone | Raise the hue weight or the saturation, add a stencil, or set manual thresholds. |
+| The subject does not stand out | Select it with the Object tool and tick *Silhouette*. |
+| Dull colours | Raise *Colour vividness*, or pick a palette with *Closest*. |
+| Computing is slow | Untick *Auto compute* and recompute with **Ctrl + Enter**. |
 
-Advanced: the layers are computed in parallel. The environment variable `OVERSPRAYLAB_PARALLEL`
-selects `thread` (default), `process` or `none`.
+Hover any setting for a tooltip explaining it.
 
----
+## How it works
 
-## 9. How it works (for the curious)
-
-The engine lives in `overspraylab/pipeline.py`; the exports in `overspraylab/svg_export.py`; the web server
-in `app.py` (Flask) and the interface in `static/index.html` (+ `static/i18n.js` for translations).
-
-1. **Scaling** – the image is cropped, placed and resampled at its real size (mm → pixels).
-2. **Preprocessing** – levels, CLAHE, gamma, saturation, sharpening, background removal (GrabCut
-   around a painted area, or objects selected with MobileSAM, see `overspraylab/semantic.py`).
-3. **Simplification** – k-means clustering in the Lab colour space, chroma weighted by the hue
-   weight (or on luminance, or with manual thresholds) plus a majority filter; tones sorted from light to dark = spraying order.
-   Optional flat areas: connected areas of each tone absorbed by a larger neighbour across a
-   low-contrast border (automatic), or painted zones filled with their main tone (tolerance).
-   Tone colours = mean of each zone measured on the original (non-preprocessed) image, optionally
-   made more vivid (colour vividness).
-4. **Layers** – cumulative or exclusive masks, one per tone, plus the optional outline layer
-   (Canny edges, difference of Gaussians or Hessian ridges, kept where their contrast is lost in
-   the simulated render), or the same lines merged into a colour layer, plus optionally the
-   outline of a mask (silhouette). Optionally, thin strokes found by a Hessian ridge filter escape
-   the majority filter of the simplification.
-5. **Material constraints** – morphological opening and closing, removal of tiny pieces.
-   Then the optional **layer effects** (`overspraylab/effects.py`) reshape each layer mask, in
-   spraying order, before the material limits are checked again.
-6. **Merges and bridges** – the manual bridges of the layer are cut first; then, optionally, islands are held by merging zones (morphological
-   closing of narrow channels, removal of small islands), cheapest visible change first; each
-   remaining island is linked to the frame (or to a neighbouring island, in a chain) by short
-   bridges that stay clear of other edges, processed in passes from the nearest islands.
-7. **Vectorisation** – smoothed, simplified outlines turned into Bézier curves.
-8. **Export** – one SVG per layer with registration marks, overview, simulated render, Inkscape
-   and Silhouette Studio documents, spraying sheet (PDF, written by the small dependency-free
-   `overspraylab/pdf_sheet.py`) and JSON project.
+The image is cropped and resampled at its real size, preprocessed, then clustered into tones
+(k-means in Lab). Each tone becomes a layer mask, cleaned up to the material limits, reshaped by the
+layer effects, then held by merges and bridges before being vectorised into Bézier curves.
 
 ```
-OversprayLab/
-├── app.py                 web server (Flask) and API
-├── lancer.bat             one-click launcher (Windows)
-├── requirements.txt
-├── overspraylab/
-│   ├── pipeline.py        image → layers → bridges → paths
-│   ├── effects.py         layer effects (outline, fill, structure, practical)
-│   ├── svg_export.py      SVG / Inkscape / PDF sheet / zip export
-│   ├── pdf_sheet.py       minimal PDF writer (spraying sheet)
-│   ├── semantic.py        object selection (MobileSAM, ONNX)
-│   ├── teed.py            learned edges (TEED, ONNX: onnxruntime, else OpenCV)
-│   ├── edge_model/        the TEED network (ONNX, 250 kB) and its MIT licence
-│   └── materials.json     built-in material presets
-├── static/
-│   ├── index.html         the interface
-│   └── i18n.js            English / French translations
-├── models/                object selection model (downloaded on first use, not in git)
-├── samples/               test images
-├── docs/screenshots/      images of this README
-└── tools/                 maintenance scripts (string and comment inventories, TEED export)
+overspraylab/
+├── pipeline.py      image → layers → bridges → paths
+├── effects.py       layer effects
+├── svg_export.py    SVG / Inkscape / zip export
+├── pdf_sheet.py     spraying sheet (minimal PDF writer)
+├── semantic.py      object selection (MobileSAM, ONNX)
+├── teed.py          learned edges (TEED, ONNX)
+└── projects.py      projects folder and snapshots
+app.py               web server (Flask)
+static/index.html    the interface (+ i18n.js: English / French)
 ```
-
----
 
 ## License
 
@@ -978,5 +214,5 @@ OversprayLab is released under the [MIT License](LICENSE).
 
 The learned edges method uses TEED (*Tiny and Efficient Edge Detector*, X. Soria, Y. Li, M. Rouhani,
 A. D. Sappa, 2023, [github.com/xavysp/TEED](https://github.com/xavysp/TEED)), MIT License,
-Copyright (c) 2022 Xavier Soria Poma: see `overspraylab/edge_model/LICENSE_TEED.txt`. The ONNX file was
-exported from its BIPED checkpoint by `tools/export_teed_onnx.py`.
+Copyright (c) 2022 Xavier Soria Poma: see `overspraylab/edge_model/LICENSE_TEED.txt`. The ONNX file
+was exported from its BIPED checkpoint by `tools/export_teed_onnx.py`.
