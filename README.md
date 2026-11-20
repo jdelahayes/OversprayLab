@@ -1,5 +1,12 @@
 # OversprayLab
 
+<p align="center">
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="docs/logo-dark.png">
+    <img src="docs/logo-light.png" alt="OversprayLab" width="440">
+  </picture>
+</p>
+
 **Turn any picture into a set of multi-layer airbrush stencils, ready to cut on a Silhouette Cameo.**
 
 OversprayLab is a small web application that runs on your own computer. You give it a photo or a
