@@ -345,6 +345,8 @@ try {
       "Background shown under the mask: the image, the preview (every visible layer, on the support) or the chosen layers (on the dimmed image)",
     "Fond : image": "Background: image", "Fond : prévisualisation": "Background: preview", "Fond : couches choisies": "Background: chosen layers",
     "Couches affichées sous le masque": "Layers shown under the mask",
+    "Affiche l'image source atténuée sous les couches (désactivée : les couches seules, plus faciles à suivre avec le pinceau intelligent)":
+      "Shows the dimmed source image under the layers (off: the layers alone, easier to follow with the smart brush)",
     "Couche de l'aplat à peindre": "Layer of the flat area to paint",
     "Aplat général : chaque zone prend sa teinte principale": "General flat area: each zone takes its main tone",
     "Support nu": "Bare support",

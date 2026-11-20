@@ -1632,6 +1632,7 @@
           <option value="preview">Fond : prévisualisation</option>
           <option value="layers">Fond : couches choisies</option>
         </select>
+        <button type="button" class="vt-opt fchip" id="mBgSrc" hidden aria-pressed="true" title="Affiche l'image source atténuée sous les couches (désactivée : les couches seules, plus faciles à suivre avec le pinceau intelligent)">Image source</button>
         <span class="mzones" id="mBgLayers" hidden role="group" aria-label="Couches affichées sous le masque"></span>
       </span>
       <span class="mgroup">
@@ -5033,10 +5034,11 @@ function flatChipsHtml(short = false) {
     (t.color ? `<i class="fsw" style="background:${t.color}"></i>` : "") + `${escH(short && t.num ? String(t.num) : t.label)}</button>`).join("");
 }
 // ---- Background under the mask being painted: the image (default), the preview (every visible
-// layer on the support) or chosen layers (on the dimmed image). The layer images of the preview are
+// layer on the support) or chosen layers (on the dimmed image, which can be hidden). The layer images of the preview are
 // in support coordinates: `mask_map` gives where the computed image area is in them and which part
 // of the source image (the mask canvas) it shows.
 let MBG_MODE = "image";
+let MBG_SRC = true;                 // dimmed source image under the layers (preview / chosen layers)
 const MBG_SEL = new Set();          // layer indices shown in "chosen layers" mode
 const MBG_IMGS = new Map();         // data URL -> loaded Image
 function mbgImage(url) {
@@ -5054,6 +5056,12 @@ function setupMaskBg() {
   const p = prefs();
   MBG_MODE = ["image", "preview", "layers"].includes(p.mask_bg) ? p.mask_bg : "image";
   $("mBg").value = MBG_MODE;
+  MBG_SRC = p.mask_bg_src !== false;
+  $("mBgSrc").setAttribute("aria-pressed", MBG_SRC);
+  $("mBgSrc").addEventListener("click", () => {
+    MBG_SRC = !MBG_SRC; $("mBgSrc").setAttribute("aria-pressed", MBG_SRC); savePref("mask_bg_src", MBG_SRC);
+    if (VIEW === "mask") render();
+  });
   $("mBg").addEventListener("change", () => {
     MBG_MODE = $("mBg").value; savePref("mask_bg", MBG_MODE);
     if (MBG_MODE === "layers" && !MBG_SEL.size) mbgDefaultSel();
@@ -5073,6 +5081,7 @@ function mbgDefaultSel() {           // the layer of the flat mask shown, else e
 }
 function renderMaskBgChips() {
   const box = $("mBgLayers");
+  $("mBgSrc").hidden = MBG_MODE === "image";
   box.hidden = MBG_MODE !== "layers" || !LAST;
   if (box.hidden) return;
   box.innerHTML = LAST.layers.map(L => `<button type="button" class="vt-opt fchip bchip" data-l="${L.index}" aria-pressed="${MBG_SEL.has(L.index)}" title="${L.kind === "outline" ? `Couche ${L.index} (contours)` : `Couche ${L.index}`}">` +
@@ -5093,7 +5102,7 @@ async function drawMaskBg(wrap, CV) {
   const g = c.getContext("2d");
   g.fillStyle = "#ffffff"; g.fillRect(0, 0, W, H);   // opaque: hides the image element under it
   // the whole source image, dimmed: what lies outside the computed area (and under chosen layers)
-  if (src) { g.globalAlpha = MBG_MODE === "preview" ? 0.3 : 0.45; g.drawImage(src, 0, 0, W, H); g.globalAlpha = 1; }
+  if (src && MBG_SRC) { g.globalAlpha = MBG_MODE === "preview" ? 0.3 : 0.45; g.drawImage(src, 0, 0, W, H); g.globalAlpha = 1; }
   const [sx0, sy0, sx1, sy1] = map.src, [ix0, iy0, ix1, iy1] = map.img;
   const dx = sx0 * W, dy = sy0 * H, dw = (sx1 - sx0) * W, dh = (sy1 - sy0) * H;
   if (MBG_MODE === "preview") { g.fillStyle = LAST.base || "#ffffff"; g.fillRect(dx, dy, dw, dh); }
