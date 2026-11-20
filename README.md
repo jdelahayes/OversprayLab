@@ -832,6 +832,9 @@ squares with their hex codes, placed left of the page, to prepare your paints.
   colours, palette – and the **painted masks** (each stroke, object selection, copy or clear is one
   step), then recompute. Up to 100 steps; the history starts again with each new image. Display
   options are not part of it, and in a text or number field Ctrl + Z stays the field's own undo.
+- **Side panels**: the **Tab** key (or the ▯▯▯ button above the view, left of full screen) folds the
+  settings panel and the stencil column so the view takes the whole width; Tab again unfolds them.
+  In a text field, a list or a dialog, Tab keeps moving the focus (Shift + Tab always does).
 - **Snapshots**: the *Snapshots* tab of the panel under the view (its title shows the number of
   snapshots and the current one) keeps versions of the project. **Take a snapshot** (with an
   optional name) saves the current version – image, masks, settings and the computed result – into
