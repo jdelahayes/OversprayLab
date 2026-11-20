@@ -651,6 +651,9 @@ def compute(sess, data):
             "sources": list(L.sources),   # line style: where the lines of this stencil come from
             "group": L.group,             # outline stencil: its outline layer (A, B...)
             # automatic bridges (sheet mm), so that the manual bridge tool can pick one to remove
+            # parts held from one side only that got no bridge: (x, y, radius) in sheet mm, marked
+            # on the support map
+            "weak_points": [list(w) for w in getattr(L, "weak_points", ())],
             "auto_bridges": [[round(v / p.px_per_mm, 2) for v in b]
                              for b in L.bridges[getattr(L, "manual_bridges", 0):]],
             # layer view without highlights + bridges and removed details as separate overlays

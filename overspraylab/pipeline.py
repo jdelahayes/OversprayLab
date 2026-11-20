@@ -1886,6 +1886,7 @@ def support_map(res: "Result", L: "Layer") -> np.ndarray | None:
     bwl = max(1, int(round(p.bridge_width_mm * ppm * s)))
     for (x1, y1, x2, y2) in L.bridges:              # a bridge is a support (as in add_struct_bridges)
         cv2.line(src, (int(x1 * s), int(y1 * s)), (int(x2 * s), int(y2 * s)), 1, thickness=bwl)
+    mat = mat | (src > 0)                           # a thin bridge may vanish from the reduced copy
     D = _geodesic(src > 0, mat, 1.5 * half)
     r = np.clip(np.where(np.isfinite(D), D / half, 1.5), 0, 1.5)
     weak = mat & ~solid
@@ -1906,12 +1907,15 @@ def support_map(res: "Result", L: "Layer") -> np.ndarray | None:
 
 
 def add_struct_bridges(opening: np.ndarray, p: Params, hidden: np.ndarray | None = None,
-                       forbid: np.ndarray | None = None) -> tuple[list, int]:
+                       forbid: np.ndarray | None = None, supports: list | None = None) -> tuple[list, list]:
     """Structural bridges (see above), after the island bridges. Modifies `opening` in place.
-    `forbid`: mask no bridge may touch (bridges removed by hand).
-    Returns (bridges [(x1, y1, x2, y2)] in pixels, number of weak spots that got no bridge)."""
+    `forbid`: mask no bridge may touch (bridges removed by hand). `supports`: bridges already cut
+    [(x1, y1, x2, y2)] (island and manual bridges): supports like the solid sheet, as on the
+    support map (otherwise the edges next to them are taken as badly held).
+    Returns (bridges [(x1, y1, x2, y2)] in pixels, weak spots that got no bridge [(x, y, radius)]
+    in pixels: the farthest edge from a support and the size of the area left without a bridge)."""
     if not p.bridges or p.bridge_spacing_mm <= 0:
-        return [], 0
+        return [], []
     ppm = p.px_per_mm
     bw = max(1, int(round(p.bridge_width_mm * ppm)))
     s = min(1.0, SPAN_PPM / ppm)          # full resolution -> analysis
@@ -1924,18 +1928,26 @@ def add_struct_bridges(opening: np.ndarray, p: Params, hidden: np.ndarray | None
     work = (opening == 0).astype(np.uint8)
     mat, solid, wide = _solid_sheet(work, ppm, s)
     if solid is None:
-        return [], 0
+        return [], []
     # thin strips (narrower than SPAN_RIGID_MM), and those long enough to need a bridge on each edge
     tn, tlab, tst, _c = cv2.connectedComponentsWithStats((mat & ~wide).astype(np.uint8), connectivity=8)
     long_strip = np.hypot(tst[:, cv2.CC_STAT_WIDTH], tst[:, cv2.CC_STAT_HEIGHT]) >= span
     long_strip[0] = False
-    mat0 = mat.copy()                      # without the structural bridges (see _prune_struct)
     m8 = mat.astype(np.uint8)
     edge = mat & (cv2.erode(m8, _K8, borderType=cv2.BORDER_REPLICATE) == 0)
     measured = edge & ~solid               # edges of the material not part of the solid sheet
+    # bridges already cut: material (a thin bridge may vanish from the reduced copy) and supports
+    sup = np.zeros((h, w), np.uint8)
+    for (x1, y1, x2, y2) in supports or ():
+        cv2.line(sup, (int(x1 * s), int(y1 * s)), (int(x2 * s), int(y2 * s)), 1, thickness=bwl)
+    sup = sup > 0
+    mat |= sup
+    measured &= ~sup
+    seeds = solid | sup
+    mat0 = mat.copy()                      # without the structural bridges (see _prune_struct)
     cap = 3 * span
-    D = np.minimum(_geodesic(solid, mat, cap), cap)
-    bridges, weak = [], 0
+    D = np.minimum(_geodesic(seeds, mat, cap), cap)
+    bridges, weak = [], []
     groups, reach = [], []                 # bridges placed together, and where they hold
     given = np.zeros((h, w), bool)
     yy, xx = np.mgrid[0:h, 0:w]
@@ -1986,7 +1998,7 @@ def add_struct_bridges(opening: np.ndarray, p: Params, hidden: np.ndarray | None
                         forbid=forbid)
         if b is None:
             given |= cv2.dilate(reg.astype(np.uint8), _K8, iterations=max(1, int(span / 4))) > 0
-            weak += 1
+            weak.append((float(fx / s), float(fy / s), float(span / 2 / s)))
             continue
         new = [b]
         groups.append(new)
@@ -2019,7 +2031,7 @@ def add_struct_bridges(opening: np.ndarray, p: Params, hidden: np.ndarray | None
         D[y0:y1, x0:x1] = np.minimum(D[y0:y1, x0:x1], np.minimum(_geodesic(nb > 0, mat[y0:y1, x0:x1], cap), cap))
         reach.append(((y0, y1, x0, x1), nb))
     if len(groups) > 1:
-        keep = _prune_struct(reach, solid, mat0, measured & ~given, span, cap, [
+        keep = _prune_struct(reach, seeds, mat0, measured & ~given, span, cap, [
             sum(math.hypot(q[0] - a[0], q[1] - a[1]) for a, q in g) for g in groups])
         if len(keep) < len(groups):
             opening[:] = orig
@@ -2034,7 +2046,8 @@ def _prune_struct(reach: list, solid, mat0, measured, span: float, cap: float, l
     """Indices of the structural bridges to keep: the greedy placement (farthest edge first) never
     revisits a bridge that later ones made useless (e.g. one at the tip of a piece, then one nearer
     that also covers the tip). Removes them one at a time, the longest first, as long as every
-    measured edge stays within `span` of a support. One entry per group of bridges placed together
+    measured edge stays within `span` of a support (`solid`: the solid sheet and the bridges already
+    cut, which stay). One entry per group of bridges placed together
     (a bridge and the one on the opposite edge of its strip): `reach` = (window, its bridges drawn in
     it), `length` = their length. Distances go through the material without the structural bridges
     (`mat0`), each group adding only its own: a removed bridge is no longer a path either."""
@@ -2073,15 +2086,23 @@ def _prune_struct(reach: list, solid, mat0, measured, span: float, cap: float, l
     return alive
 
 
+def _weak_mm(weak: list, p: Params) -> tuple:
+    """Weak spots [(x, y, radius)] from pixels to sheet mm, rounded (for the interface)."""
+    return tuple(tuple(round(v / p.px_per_mm, 2) for v in w) for w in weak)
+
+
 def hold_material(opening: np.ndarray, p: Params, hidden: np.ndarray | None = None,
-                  forbid: np.ndarray | None = None) -> tuple:
+                  forbid: np.ndarray | None = None, supports: list | None = None) -> tuple:
     """Island bridges, then structural bridges. Modifies `opening` in place. `forbid`: mask no
-    bridge may touch (automatic bridges removed by hand).
-    Returns (bridges, islands, short islands, structural bridges, weak spots without a bridge)."""
+    bridge may touch (automatic bridges removed by hand). `supports`: manual bridges already cut.
+    Returns (bridges, islands, short islands, structural bridges, weak spots without a bridge
+    [(x, y, radius)] in pixels)."""
     if not p.bridges:
-        return [], 0, 0, 0, 0
+        return [], 0, 0, 0, []
     bridges, n_isl, n_short = add_bridges(opening, p, hidden, forbid)
-    sb, weak = add_struct_bridges(opening, p, hidden, forbid)
+    sb, weak = add_struct_bridges(opening, p, hidden, forbid, list(supports or []) + bridges)
+    if weak:      # a weak spot a structural bridge placed afterwards now holds: as the support map
+        weak = _still_weak(opening, list(supports or []) + bridges + sb, weak, p)
     return bridges + sb, n_isl, n_short, len(sb), weak
 
 
@@ -2302,7 +2323,28 @@ def late_manual(opening: np.ndarray, pre: np.ndarray | None, held: tuple, segs: 
             n_struct -= sum(1 for k in gone if k >= first_struct)
             bridges = kept
     drawn, st2, _ = apply_manual_bridges(opening, segs, p, late=True)
+    if drawn and n_weak:                 # weak spots a late manual bridge now holds
+        n_weak = _still_weak(opening, bridges + drawn, n_weak, p)
     return (bridges, n_isl, n_short, n_struct, n_weak), drawn, states + st2
+
+
+def _still_weak(opening: np.ndarray, bridges: list, weak: list, p: Params) -> list:
+    """Weak spots [(x, y, radius)] still farther than half the spacing from a support (solid sheet
+    or bridge, through the material, as on the support map) once `bridges` are cut."""
+    ppm = p.px_per_mm
+    s = min(1.0, SPAN_PPM / ppm)
+    mat, solid, _wide = _solid_sheet((opening == 0).astype(np.uint8), ppm, s)
+    if solid is None:
+        return weak
+    src = solid.astype(np.uint8)
+    bwl = max(1, int(round(p.bridge_width_mm * ppm * s)))
+    for (x1, y1, x2, y2) in bridges:
+        cv2.line(src, (int(x1 * s), int(y1 * s)), (int(x2 * s), int(y2 * s)), 1, thickness=bwl)
+    span = max(1.0, p.bridge_spacing_mm / 2 * ppm * s)
+    D = _geodesic(src > 0, mat | (src > 0), 1.5 * span)
+    h, w = D.shape
+    return [wk for wk in weak
+            if D[min(h - 1, max(0, int(wk[1] * s))), min(w - 1, max(0, int(wk[0] * s)))] > span]
 
 
 def needs_pre(segs: list[tuple]) -> bool:
@@ -2421,6 +2463,7 @@ class Layer:
     short_islands: int = 0   # islands that could not get the requested minimum of bridges
     struct_bridges: int = 0  # structural bridges (included in `bridges`), see add_struct_bridges
     weak_spots: int = 0      # parts held from one side only that got no structural bridge
+    weak_points: tuple = ()  # where they are: (x, y, radius) in sheet mm
     kind: str = "color"      # "color" (flat colour) or "outline" (key-detail outlines)
     merged: np.ndarray | None = None   # areas changed by merges instead of bridges (whole sheet)
     n_merged: int = 0        # number of merges (closed channels + removed islands)
@@ -2499,7 +2542,7 @@ def layer_job(job):
     m_drawn, m_states, forbid = apply_manual_bridges(opening, manual, p)
     merged, n_merged = merge_zones(opening, p, hidden, weight, protect)
     pre = opening.copy() if needs_pre(manual) else None
-    held = hold_material(opening, p, hidden, forbid)
+    held = hold_material(opening, p, hidden, forbid, m_drawn)
     held, l_drawn, l_states = late_manual(opening, pre, held, manual, p)   # automatic bridges kept
     return opening, held, vectorize(opening, p), merged, n_merged, (m_drawn + l_drawn, m_states + l_states)
 
@@ -2722,7 +2765,7 @@ def build(prep: Prepared, p: Params, outline_region: np.ndarray | None = None,
         layers.append(Layer(index=li + 1, color=colors[li], target=target,
                             opening=opening, lost=cv2.bitwise_xor(pre_fx[li] if li + 1 in fx else cleaned, target),
                             bridges=list(m_drawn) + bridges, paths=paths,
-                            islands=n_isl, short_islands=n_short, struct_bridges=n_struct, weak_spots=n_weak,
+                            islands=n_isl, short_islands=n_short, struct_bridges=n_struct, weak_spots=len(n_weak), weak_points=_weak_mm(n_weak, p),
                             merged=merged, n_merged=n_merged, tone=ci, manual_bridges=len(m_drawn)))
     res = make_result(layers, detect_sim=detect_sim, detect_painted=detect_painted, lines_added=lines_added,
                       detect_sim_pre=detect_sim_pre, zone_lines=_zone_lines(entries))
@@ -2766,13 +2809,13 @@ def build(prep: Prepared, p: Params, outline_region: np.ndarray | None = None,
             m_drawn, forbid = manual.apply(opening, n_out, mine)
             merged, n_merged = merge_line_islands(opening, p, color, support)
             pre = opening.copy() if needs_pre(manual.segments(mine)) else None
-            held = hold_material(opening, p, None, forbid)
+            held = hold_material(opening, p, None, forbid, m_drawn)
             held, l_drawn = manual.late(opening, pre, n_out, mine, held)
             bridges, n_isl, n_short, n_struct, n_weak = held
             m_drawn = m_drawn + l_drawn
             layers.append(Layer(index=n_out, color=color, target=target, opening=opening,
                                 lost=lost, bridges=m_drawn + bridges, paths=vectorize(opening, p),
-                                islands=n_isl, short_islands=n_short, struct_bridges=n_struct, weak_spots=n_weak,
+                                islands=n_isl, short_islands=n_short, struct_bridges=n_struct, weak_spots=len(n_weak), weak_points=_weak_mm(n_weak, p),
                                 merged=merged, n_merged=n_merged,
                                 kind="outline", group=g, manual_bridges=len(m_drawn)))
     res.zone_lines = _zone_lines(entries)       # counted once every zone has been searched
@@ -3369,7 +3412,7 @@ def line_stencils(prep: Prepared, p: Params, entries: list, groups: dict, suppor
         m_drawn, forbid = manual.apply(opening, i + 1, mine) if manual else ([], None)
         merged, n_merged = merge_line_islands(opening, p, c, support)
         pre = opening.copy() if manual and needs_pre(manual.segments(mine)) else None
-        held = hold_material(opening, p, None, forbid)
+        held = hold_material(opening, p, None, forbid, m_drawn)
         if manual:
             held, l_drawn = manual.late(opening, pre, i + 1, mine, held)
             m_drawn = m_drawn + l_drawn
@@ -3377,7 +3420,7 @@ def line_stencils(prep: Prepared, p: Params, entries: list, groups: dict, suppor
         layers.append(Layer(index=i + 1, color=c, target=target, opening=opening,
                             lost=lost, bridges=m_drawn + bridges,
                             paths=vectorize(opening, p), islands=n_isl, short_islands=n_short,
-                            struct_bridges=n_struct, weak_spots=n_weak,
+                            struct_bridges=n_struct, weak_spots=len(n_weak), weak_points=_weak_mm(n_weak, p),
                             merged=merged, n_merged=n_merged, kind="outline", sources=tuple(srcs),
                             manual_bridges=len(m_drawn)))
     return layers

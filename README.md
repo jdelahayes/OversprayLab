@@ -557,7 +557,8 @@ islands instead of bridging them is set in *Simplification* (5.5).
   card, off for adhesive vinyl) adds **structural bridges** to material that is attached but badly
   held. Only the sheet joined to the frame by paths at least 6 mm wide counts as held; along every
   other edge of material (a large piece hanging from a narrow strip, an island held by its bridges,
-  a thin strip), two successive supports (measured along the material) are never farther apart than
+  a thin strip), two successive supports (measured along the material; the solid sheet and every
+  bridge already cut, island or manual, are supports) are never farther apart than
   the spacing: a bridge goes where the edge is farthest from a support, plus one on the opposite
   edge of a thin strip so it cannot pivot. It is a maximum, the actual gaps are often smaller. Without them, a
   sheet stored rolled lifts these parts and the stencil is hard to lay and position. The layer card
@@ -689,7 +690,10 @@ the same settings line up from one layer to the next.
   stays uncoloured, the rest goes from green (next to a support: solid sheet or bridge) through
   yellow to orange (at the limit of the *Max spacing between supports*, still accepted); red means
   beyond the limit, where a bridge is missing (no room was found for one), strongly along the edges and lightly inside wide pieces. A card warns you about remaining problems (for example an island that could not be
-  bridged).
+  bridged). The parts held from one side only that found no room for a structural bridge are
+  circled in dashed red on the support map (the dot marks the edge farthest from a support, the
+  circle the area left without a bridge); click the card's warning to open the layer with the
+  support map shown.
 
 If many details are removed, increase the size of the image, lower the level of detail or choose a
 finer material; if there are too many bridges, lower the level of detail or the number of stencils.

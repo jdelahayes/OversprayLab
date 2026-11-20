@@ -461,6 +461,11 @@
   .stage .lv { max-width: 100%; }
   .stage[data-bg] .lv { background: var(--view-bg); }
   .stage .lv img { max-width: none; max-height: none; width: 100%; height: 100%; }
+  .weakov { position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none; overflow: visible; z-index: 5; }
+  .weakov circle { fill: none; stroke: #e11d48; stroke-width: 2.5px; stroke-dasharray: 5 3; vector-effect: non-scaling-stroke; }
+  .weakov circle.c { fill: #e11d48; stroke: #fff; stroke-width: 1.5px; stroke-dasharray: none; }
+  body.no-support .lv .weakov { display: none; }
+  .card .weaklink { color: #d97706; cursor: pointer; text-decoration: underline dotted; }
   body.no-bridges .lv .ov-bridges, body.no-lost .lv .ov-lost, body.no-merged .lv .ov-merged, body.no-flat .lv .ov-flat, body.no-support .lv .ov-support { display: none; }
   /* manual bridges on the layer view (sheet mm): blue = drawn, grey = no effect, dashed orange = ignored */
   .mbov { position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none; overflow: visible; z-index: 6; }
@@ -473,6 +478,10 @@
   .mbov .mb-block.mb-after { stroke: #0891b2; }   /* removed without changing the other bridges */
   .mbov .mb.sel { stroke: #facc15; opacity: 1; }
   .lv.brdraw { cursor: crosshair; touch-action: none; }
+  /* bridge tool on a zoomed view: the left button draws, so the cross stays (the hand only for
+     Space + drag or a middle-button pan) */
+  .stage.dragpan:not(.spacepan):not(.panning) .lv.brdraw,
+  .stage.dragpan:not(.spacepan):not(.panning) .lv.brdraw * { cursor: crosshair !important; }
   .lv.brdraw img { -webkit-user-drag: none; user-select: none; }
   .bridgetools .hint { margin: 0; }
   /* registration marks (vector overlay, "Marks" button) */
@@ -1685,7 +1694,7 @@
     <button type="button" class="lgbtn" id="lgLost" aria-pressed="true" title="Afficher / masquer les détails supprimés par les contraintes du matériau"><i style="background:#ff8c00"></i>détail supprimé</button>
     <button type="button" class="lgbtn" id="lgMerged" aria-pressed="true" title="Afficher / masquer les zones fusionnées au lieu d'un pont (chenal fermé ou petit îlot supprimé)"><i style="background:#963cc8"></i>fusion</button>
     <button type="button" class="lgbtn" id="lgFlat" aria-pressed="true" title="Afficher / masquer les zones d'aplat peintes sur les vues des couches : zones de l'aplat Générale là où elles ont abouti dans la couche, et zones forcées dans la couche"><i style="background:#14b8a6"></i>aplat</button>
-    <button type="button" class="lgbtn" id="lgSupport" aria-pressed="false" title="Afficher / masquer la carte du maintien de la matière : vert = près d'un appui (feuille solide ou pont), jaune, puis orange = à la limite de l'espacement entre appuis (encore accepté), rouge = au-delà : il manque un pont (aucune place n'a été trouvée). Fort le long des bords (ce que tiennent les ponts structurels), léger à l'intérieur des pièces larges ; la feuille solide reste sans couleur."><i style="background:linear-gradient(90deg,#28b43c,#f0d200,#ff8c00 75%,#e61e1e 75%)"></i>maintien</button>
+    <button type="button" class="lgbtn" id="lgSupport" aria-pressed="false" title="Afficher / masquer la carte du maintien de la matière : vert = près d'un appui (feuille solide ou pont), jaune, puis orange = à la limite de l'espacement entre appuis (encore accepté), rouge = au-delà : il manque un pont (aucune place n'a été trouvée). Fort le long des bords (ce que tiennent les ponts structurels), léger à l'intérieur des pièces larges ; la feuille solide reste sans couleur. Les parties tenues d'un seul côté restées sans pont sont cerclées en pointillés rouges."><i style="background:linear-gradient(90deg,#28b43c,#f0d200,#ff8c00 75%,#e61e1e 75%)"></i>maintien</button>
   </div>
   <div class="layers" id="layers"><p class="hint">Les pochoirs apparaîtront ici, dans l'ordre de pulvérisation.</p></div>
 </div>
@@ -6195,7 +6204,7 @@ function render() {
         ${L.manual_bridges ? `dont ${L.manual_bridges} pont(s) manuel(s)<br>` : ""}
         ${(n => n ? `${n} pont(s) automatique(s) supprimé(s) à la main<br>` : "")(manualBlocked(L))}
         ${(n => n ? `<span style="color:#d97706">⚠ ${n} pont(s) manuel(s) ignoré(s) : extrémité hors de la matière ou de la feuille</span><br>` : "")(manualIgnored(L))}
-        ${L.weak_spots ? `<span style="color:#d97706">⚠ ${L.weak_spots} partie(s) tenue(s) d'un seul côté, sans place pour un pont</span><br>` : ""}
+        ${L.weak_spots ? `<span class="weaklink" title="Afficher ces parties sur la couche (cerclées en rouge sur la carte du maintien)">⚠ ${L.weak_spots} partie(s) tenue(s) d'un seul côté, sans place pour un pont</span><br>` : ""}
         Coupe : ${L.cut_length_m} m · détails supprimés : ${L.lost_pct} %
       </div>
     </div>`).join("");
@@ -6212,6 +6221,14 @@ function render() {
     if (e.target.closest(".fxbadge")) { showFxLayer(+e.target.closest(".fxbadge").dataset.idx); return; }
     if (e.target.closest(".lflat")) { flatOpen("t" + e.target.closest(".lflat").dataset.tone); return; }
     if (e.target.closest(".lcolor")) return;                       // colour picker: no selection
+    if (e.target.closest(".weaklink")) {                          // weak parts: the layer with its support map
+      SEL = +c.dataset.i; BR.sel = null; BR.autoSeg = null;
+      if ($("lgSupport").getAttribute("aria-pressed") !== "true") $("lgSupport").click();   // shown (remembered)
+      render();
+      // result saved before the positions were kept (snapshot opened without computing): computed
+      if (!LAST.layers[SEL].weak_points) { status("Calcul en cours…"); process(); }
+      return;
+    }
     if (e.target.closest(".lcreset")) { setLayerColor(+e.target.closest(".lcreset").dataset.idx, null); return; }
     const i = +c.dataset.i; SEL = (SEL === i) ? null : i; BR.sel = null; BR.autoSeg = null; BR.draft = null; render();
   });
@@ -6242,6 +6259,7 @@ function layerStack(L, attrs = "") {
     (L.img_flat ? `<img class="ov ov-flat" src="${L.img_flat}" alt="">` : "") +
     (L.img_support ? `<img class="ov ov-support" src="${L.img_support}" alt="">` : "") +
     (L.img_bridges ? `<img class="ov ov-bridges" src="${L.img_bridges}" alt="">` : "") +
+    (LAST && L.weak_points && L.weak_points.length ? weakSVG(L.weak_points) : "") +
     (LAST && L.reg ? regSVG(L.reg, [0, 0, LAST.sheet_mm[0], LAST.sheet_mm[1]]) : "") + `</div>`;
 }
 // ---------------- Manual bridges (layer view) ----------------
@@ -6471,7 +6489,8 @@ function setupManualBridges() {
     const [x, y] = toMm(e);
     e.preventDefault();
     drag = { x, y, id: e.pointerId, cx: e.clientX, cy: e.clientY, h: hit(x, y) };
-    st.setPointerCapture(e.pointerId);
+    // captured by the layer view (not the whole view area): its cross cursor stays while drawing
+    e.target.closest(".lv").setPointerCapture(e.pointerId);
   });
   st.addEventListener("pointermove", e => {
     if (!drag || e.pointerId !== drag.id) return;
@@ -6511,6 +6530,13 @@ function setupManualBridges() {
     // K: "keep the automatic bridges" of the selected bridge (or of the next ones, nothing selected)
     else if ((e.key === "k" || e.key === "K") && !$("bridgetools").hidden && !$("brKeep").hidden) { e.preventDefault(); $("brKeep").click(); }
   });
+}
+// Parts held from one side only that found no room for a structural bridge ((x, y, radius) in
+// sheet mm): circled on the support map, so that they can be found on the layer
+function weakSVG(pts) {
+  const f = v => Math.round(v * 100) / 100, [w, h] = LAST.sheet_mm;
+  const body = pts.map(([x, y, r]) => `<circle cx="${f(x)}" cy="${f(y)}" r="${f(Math.max(3, r))}"/><circle class="c" cx="${f(x)}" cy="${f(y)}" r="1.5"/>`).join("");
+  return `<svg class="weakov" viewBox="0 0 ${f(w)} ${f(h)}" preserveAspectRatio="none" aria-hidden="true">${body}</svg>`;
 }
 function setOverlay(btn, cls, on) {
   $(btn).setAttribute("aria-pressed", String(on));
