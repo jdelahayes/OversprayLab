@@ -1218,6 +1218,58 @@ def clean_mask(mask: np.ndarray, p: Params, extra_area_mm2: float = 0.0) -> np.n
     return m
 
 
+def _grow_layers(grown: list, gained: list, todo: np.ndarray, refused: list, tone: np.ndarray,
+                 dist: np.ndarray) -> np.ndarray:
+    """Grows the layers together into the `todo` pixels, one pixel (4-neighbours) per step, until
+    none can grow: a pixel reached by several layers in the same step goes to the one whose tone is
+    the closest to its own (lowest layer index on a tie); a layer never takes the pixels `refused`
+    to it. Updates `grown` (uint8 masks) and `gained` (bool) in place, returns what is left to fill.
+    Only the front of each layer is followed (the gaps are a small part of the image): the steps
+    work on pixel indices in a copy padded by one pixel, so that neighbours never wrap."""
+    h, w = todo.shape
+    W = w + 2
+    pad = lambda a: np.pad(a, 1).ravel()                # noqa: E731
+    todo_f, tone_f = pad(todo), pad(tone)
+    refused_f = [pad(r) for r in refused]
+    steps = np.array([-W, -1, 1, W])
+    kernel = cv2.getStructuringElement(cv2.MORPH_CROSS, (3, 3))
+    # first step from the whole masks, then from the pixels each layer just received
+    fronts = [np.flatnonzero(pad((cv2.dilate(m, kernel) > 0) & todo)) for m in grown]
+    first = True
+    won = [[] for _ in grown]
+    while True:
+        idx, dd, kk = [], [], []
+        for k, f in enumerate(fronts):
+            if not len(f):
+                continue
+            c = f if first else np.unique((f[:, None] + steps).ravel())
+            c = c[todo_f[c] & ~refused_f[k][c]]
+            if len(c):
+                idx.append(c)
+                dd.append(dist[tone_f[c], k])
+                kk.append(np.full(len(c), k, np.int32))
+        first = False
+        if not idx:
+            break
+        idx, dd, kk = np.concatenate(idx), np.concatenate(dd), np.concatenate(kk)
+        o = np.lexsort((kk, dd, idx))       # by pixel, then closest tone, then lowest layer
+        idx, kk = idx[o], kk[o]
+        keep = np.ones(len(idx), bool)
+        keep[1:] = idx[1:] != idx[:-1]
+        idx, kk = idx[keep], kk[keep]
+        todo_f[idx] = False
+        fronts = [idx[kk == k] for k in range(len(grown))]
+        for k, f in enumerate(fronts):
+            won[k].append(f)
+    for k, parts in enumerate(won):
+        if parts:
+            f = np.concatenate(parts)
+            r, c = f // W - 1, f % W - 1
+            grown[k][r, c] = 255
+            gained[k][r, c] = True
+    return todo_f.reshape(h + 2, W)[1:-1, 1:-1].copy()
+
+
 def fill_gaps(masks: list, targets: list, labels: np.ndarray, palette: np.ndarray,
               tones: list, p: Params) -> tuple[list, list]:
     """Exclusive layers: gives what the cleaning removed to the layers around it, so that the support
@@ -1241,30 +1293,11 @@ def fill_gaps(masks: list, targets: list, labels: np.ndarray, palette: np.ndarra
     tone = labels[y0:y1, x0:x1]
     lab = _lab(palette)
     dist = np.linalg.norm(lab[:, None] - lab[tones][None], axis=2)      # tone x layer
-    kernel = cv2.getStructuringElement(cv2.MORPH_CROSS, (3, 3))
     grown = [m[y0:y1, x0:x1].copy() for m in masks]
     gained = [np.zeros_like(todo) for _ in masks]
     refused = [np.zeros_like(todo) for _ in masks]      # too thin for this layer
     for _ in range(4):
-        front = grown
-        while True:
-            best = np.full(todo.shape, np.inf)
-            owner = np.full(todo.shape, -1, np.int32)
-            for k, m in enumerate(front):
-                r, c = np.nonzero((cv2.dilate(m, kernel) > 0) & todo & ~refused[k])
-                d = dist[tone[r, c], k]
-                closer = d < best[r, c]
-                r, c = r[closer], c[closer]
-                best[r, c] = d[closer]
-                owner[r, c] = k
-            reached = owner >= 0
-            if not reached.any():
-                break
-            todo = todo & ~reached
-            front = [np.where(owner == k, 255, 0).astype(np.uint8) for k in range(len(grown))]
-            for k, new in enumerate(front):
-                grown[k] = grown[k] | new
-                gained[k] |= new > 0
+        todo = _grow_layers(grown, gained, todo, refused, tone, dist)
         again = False
         for k, m in enumerate(grown):
             if r_open < .5 or not gained[k].any():
