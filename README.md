@@ -238,6 +238,9 @@ preprocessed image instantly (even in on-demand mode), with its luminance histog
 Preprocessing only guides the **cut**: the computed paint colours are always measured on the
 original photo, over the same zones, so a strong preprocessing does not dull or shift them.
 
+For a deeper preparation (clean-up, simplification in a given style, key lines), see the
+[Qwen-Image-Edit prompts](docs/qwen_prompts.md).
+
 | Setting | Use it when… |
 |---|---|
 | **Auto levels** | the image is dull or does not use the full range from black to white. |
@@ -902,6 +905,7 @@ squares with their hex codes, placed left of the page, to prepare your paints.
 | The subject does not stand out from the background | Tick *Silhouette* (Key-detail outlines) and select the subject, or paint the silhouette mask. |
 | The computed colours look dull | Raise *Colour vividness*, or pick a palette (*Closest* finds the best one). |
 | Two colours of similar lightness end up in one layer | Raise the *Hue weight*. |
+| The image is noisy, textured or too busy to cut cleanly | Prepare it beforehand with an image-edit model: see the [Qwen-Image-Edit prompts](docs/qwen_prompts.md) (clean-up and several stencil styles). |
 | Computing is slow | Untick *Auto compute* and use **Ctrl + Enter**. |
 | "The sheet does not fit on the mat" | Use *Fit to stencil*, turn the mat to landscape, or use a larger mat. |
 | In Silhouette Studio, all the cut lines end up in one layer of the Inkscape file | Grouping objects of several layers moves them into a single layer (ungrouping does not put them back). To move everything, select all (Ctrl + A) and drag without grouping, or re-import the file. |
