@@ -462,6 +462,19 @@
   .stage[data-bg] .lv { background: var(--view-bg); }
   .stage .lv img { max-width: none; max-height: none; width: 100%; height: 100%; }
   body.no-bridges .lv .ov-bridges, body.no-lost .lv .ov-lost, body.no-merged .lv .ov-merged, body.no-flat .lv .ov-flat, body.no-support .lv .ov-support { display: none; }
+  /* manual bridges on the layer view (sheet mm): blue = drawn, grey = no effect, dashed orange = ignored */
+  .mbov { position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none; overflow: visible; z-index: 6; }
+  .mbov .mb { stroke: #2563eb; stroke-linecap: butt; opacity: .85; }
+  .mbov .mb-useless { stroke: #6b7280; opacity: .7; }
+  .mbov .mb-pending, .mbov .mb-draft { stroke: #2563eb; opacity: .55; }
+  .mbov .mb-void, .mbov .mb-outside, .mbov .mb-layer { stroke: #ea580c; stroke-dasharray: 1.2 0.8; opacity: .9; }
+  .mbov .mb-ok.mb-after, .mbov .mb-pending.mb-after { stroke: #0891b2; }   /* cut after the automatic bridges */
+  .mbov .mb-block { stroke: #dc2626; stroke-dasharray: 0.6 0.6; opacity: .9; }
+  .mbov .mb-block.mb-after { stroke: #0891b2; }   /* removed without changing the other bridges */
+  .mbov .mb.sel { stroke: #facc15; opacity: 1; }
+  .lv.brdraw { cursor: crosshair; touch-action: none; }
+  .lv.brdraw img { -webkit-user-drag: none; user-select: none; }
+  .bridgetools .hint { margin: 0; }
   /* registration marks (vector overlay, "Marks" button) */
   .regov { position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none; overflow: visible; z-index: 5; }
   .regov polygon, .regov circle { fill: rgba(255,255,255,.9); stroke: #222; stroke-width: 1; vector-effect: non-scaling-stroke; }
@@ -1522,6 +1535,17 @@
       <button type="button" class="vt-opt" id="cmpSbs" aria-pressed="false" title="Affiche les deux versions l'une à côté de l'autre, au lieu de les superposer avec le curseur">Côte à côte</button>
     </div>
   </div>
+  <div class="viewtools bridgetools" id="bridgetools" hidden>
+    <button type="button" class="vt-opt" id="brTool" aria-pressed="false"
+      title="Tracer des ponts à la main sur cette couche (P) : glissez à travers une ouverture, d'un bord de matière à l'autre. Les ponts automatiques s'adaptent ensuite. Cliquez sur un pont pour le sélectionner : Suppr efface un pont manuel, ou supprime un pont automatique (il se place ailleurs s'il le peut). Molette pour zoomer, Espace + glisser pour déplacer la vue.">Ponts manuels</button>
+    <button type="button" class="vt-opt" id="brKeep" aria-pressed="false"
+      title="Activé : les autres ponts automatiques restent exactement où ils sont. Un pont manuel est découpé après leur calcul (même s'il tient déjà un îlot) ; un pont automatique supprimé est simplement retiré, sans être remplacé. Désactivé : les ponts automatiques se replacent en tenant compte du pont manuel, ou du pont supprimé (qui se place ailleurs s'il le peut). S'applique aux nouveaux ponts et suppressions, et au pont sélectionné (touche K).">Sans toucher aux ponts automatiques</button>
+    <span class="hint" id="brHint"></span>
+    <button type="button" class="vt-small" id="brAttach" hidden
+      title="Ce pont n'appartient plus à aucune couche (aucune couche ne peint plus sa teinte) : le rattacher à la couche affichée">Rattacher à cette couche</button>
+    <button type="button" class="vt-small" id="brDelete" hidden title="Supprimer le pont manuel sélectionné (Suppr)">Supprimer</button>
+    <button type="button" class="vt-small" id="brClear" hidden title="Supprimer tous les ponts manuels de cette couche">Supprimer ceux de la couche</button>
+  </div>
   <div class="viewtools masktools" id="masktools" hidden>
     <div class="mrow">
       <span class="mgroup" role="group" aria-label="Masque à peindre">
@@ -1653,6 +1677,7 @@
       title="Autres couleurs : garder l'ordre clair → foncé (la couche la plus claire reçoit la couleur la plus claire choisie, et ainsi de suite)"><svg class="ico" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="3" width="6" height="5" rx="1" fill="currentColor" fill-opacity=".15"/><rect x="3" y="10" width="6" height="5" rx="1" fill="currentColor" fill-opacity=".5"/><rect x="3" y="17" width="6" height="5" rx="1" fill="currentColor"/><path d="M16 4v16"/><path d="m12.5 16.5 3.5 3.5 3.5-3.5"/></svg></button>
     <button type="button" class="ibtn" id="colorsAuto" aria-label="Auto" title="Auto : revenir aux teintes calculées pour toutes les couches"><svg class="ico" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 12a9 9 0 1 0 3-6.7L3 8"/><path d="M3 3v5h5"/></svg></button>
     <input type="hidden" id="layer_colors" value="">
+    <input type="hidden" id="manual_bridges" value="">
   </div>
   <div class="legend">
     <span><i style="background:#dcd3c3"></i>matière</span>
@@ -1677,7 +1702,7 @@ const PARAMS = ["support_w_mm", "support_h_mm", "support_color", "inner_margin_m
   "image_scale", "image_height_factor", "image_pos_x", "image_pos_y", "margin_mm", "sheet_mode", "sheet_border_mm", "reg_dims", "machine_max_mm", "mat_w_mm", "mat_h_mm", "mat_orient", "reg_corners", "reg_shape", "reg_size_mm", "layer_notches", "sheet_outline",
   "pre_auto_levels", "pre_clahe", "pre_contrast", "pre_shadows", "pre_highlights", "pre_black", "pre_white", "pre_gamma", "pre_curve",
   "manual_thresholds", "thresholds", "pre_saturation", "pre_sharpen", "pre_remove_bg",
-  "layer_colors", "layer_effects",
+  "layer_colors", "layer_effects", "manual_bridges",
   "n_layers", "detail", "hue_weight", "color_vividness", "flat_auto", "flat_tolerance", "flat_tolerances", "color_mode", "layering", "skip_support", "fill_gaps", "protect_lines",
   "outline", "outline_target", "outline_method", "outline_sensitivity", "outline_width_mm", "outline_min_length_mm", "outline_subject", "outline_subject_mask", "outline_subject_pos", "outline_subject_width_mm", "outline_subject_weak", "outline_subject_de", "outline_subject_gap_every_mm", "outline_subject_gap_mm", "stencil_style", "line_zones", "line_zones_color", "line_sil_color", "outline_auto_color", "outline_color", "outline_zones", "outline_ref", "outline_whole_lines", "outline_line_sens", "outline_close_lines", "outline_channel", "outline_follow_mm", "outline_clahe",
   ...MAT_FIELDS, "merge_amount", "merge_channel_mm", "merge_channels", "merge_islands", "merge_line_islands",
@@ -2720,7 +2745,7 @@ function makePresetBar(cfg) {
 
 // ---------------- Automatic memory of the last settings (browser) ----------------
 const LS_KEY = "overspraylab.derniers_reglages";
-const NOT_REMEMBERED = new Set(["image_scale", "image_height_factor", "image_pos_x", "image_pos_y"]); // specific to each image
+const NOT_REMEMBERED = new Set(["image_scale", "image_height_factor", "image_pos_x", "image_pos_y", "manual_bridges"]); // specific to each image
 let NO_REMEMBER = false;
 let DEFAULTS = null;   // interface state before the last settings are restored ("Default settings")
 function collectSettings(all) {
@@ -2754,6 +2779,7 @@ async function resetSettings() {
   $("material").value = d.material; applyMaterial(d.material); delete d.material;
   setVals(d);
   $("layer_colors").value = ""; showPaletteChoice(""); PAL_LAST = "";
+  $("manual_bridges").value = "";
   HIDDEN.clear();                                    // every layer shown again in the preview
   CROP = { x: 0, y: 0, w: 1, h: 1 }; $("crop_ratio").value = "free";
   $("image_scale").value = 100; $("image_pos_x").value = 50; $("image_pos_y").value = 50;
@@ -3865,6 +3891,7 @@ async function init() {
   window.addEventListener("resize", () => { if (VIEW === "layout" || VIEW === "crop" || showSup()) render(); else { fitStage(); applyZoom(); } });
   DOCK.init();
   setupZoom();
+  setupManualBridges();
   $("reg_shape").addEventListener("change", () => { $("reg_size_mm").value = REG_DEFAULT[val("reg_shape")]; regHint(); schedule(); });
   $("reg_corners").addEventListener("change", regHint);
   ["reg_corners", "reg_shape", "reg_size_mm"].forEach(k => $(k).addEventListener("input", () => { if (editorFollowsLayout()) render(); }));
@@ -4131,6 +4158,7 @@ function setSession(j, name) {
   DIRTY = false; updateCalcBtn();
   IMG = { w: j.width, h: j.height, src: j.original, name, gray: j.gray };
   CROP = { x: 0, y: 0, w: 1, h: 1 };
+  $("manual_bridges").value = ""; BR.sel = null; BR.autoSeg = null; BR.draft = null;   // drawn on the former image
   createMask(); createSubj(); createSil(); createFlat();
   $("crop_ratio").value = "free";
   $("image_scale").value = 100; $("image_pos_x").value = 50; $("image_pos_y").value = 50;
@@ -4258,7 +4286,9 @@ async function applySettingsFile(file) {
   }
   if (!info || (!info.projet && !info.parametres)) return status("Ce JSON n'est pas un fichier infos.json de OversprayLab", true);
   if (SID) {
+    const manual = $("manual_bridges").value;   // drawn on the loaded image: kept, like its masks
     applyProjectSettings(info);
+    $("manual_bridges").value = manual;
     status("Réglages du projet appliqués à l'image chargée");
     render(); recommend(false); process();
   } else {
@@ -5968,7 +5998,8 @@ function setupZoom() {
   st.addEventListener("pointerdown", e => {
     if (ZOOM.z <= 1 || !zoomTarget()) return;
     if (e.button === 0 && !space && e.target.closest(".splitgrip")) return;   // the comparison line is dragged
-    const ok = e.button === 1 || (e.button === 0 && (space || !editorView()));
+    // manual bridge tool: the left button draws (middle button or Space + drag still move the view)
+    const ok = e.button === 1 || (e.button === 0 && (space || (!editorView() && !bridgeTool())));
     if (!ok) return;
     pan = { x: e.clientX - ZOOM.tx, y: e.clientY - ZOOM.ty, id: e.pointerId };
     st.setPointerCapture(e.pointerId); st.classList.add("panning");
@@ -6108,7 +6139,7 @@ function render() {
   } else if (SEL !== null) {
     const L = LAST.layers[SEL];
     st.innerHTML = layerStack(L, `data-mm="${LAST.sheet_mm.join(",")}" data-at="sheet"`);
-    fitStage(); applyZoom();
+    fitStage(); applyZoom(); renderManualBridges();
   } else if (VIEW === "reference") {
     const pre = SHOW_PRE && LAST.reference_pre;
     st.innerHTML = `<img src="${pre || LAST.reference}" alt="${pre ? "Image prétraitée" : "Image d'origine"} sur le support" data-mm="${LAST.support_mm.join(",")}" draggable="false">`;
@@ -6116,7 +6147,7 @@ function render() {
   } else {
     renderPreview(st);   // "preview" and "compare": layers composed in the browser
   }
-  renderToolbar();
+  renderToolbar(); renderBridgeTools();
 
   const warns = [...(LAST.warnings || [])];   // the resolution warning is added by updateWarnings
   if (LAST.support_tone && lum(LAST.base) < 90 && LAST.layers.length)
@@ -6126,6 +6157,9 @@ function render() {
     warns.push(`Traits dans les couches : aucun détail clé ajouté${MASK_EMPTY ? "" : " dans les zones peintes du masque"}. Augmentez la sensibilité (actuellement ${val("outline_sensitivity")}) ou réduisez la longueur mini d'un trait.`);
   if (fill && val("outline") && val("outline_target") === "stencil" && !LAST.layers.some(L => L.kind === "outline"))
     warns.push(`Pochoir de contours : aucun détail clé trouvé${MASK_EMPTY ? "" : " dans les zones peintes du masque"}. Augmentez la sensibilité (actuellement ${val("outline_sensitivity")}) ou réduisez la longueur mini d'un trait.`);
+  const orphans = (LAST.manual_bridges || []).filter(s => s.state === "layer").length;
+  if (orphans)
+    warns.push(`${orphans} pont(s) manuel(s) ignoré(s) : aucune couche ne peint plus leur teinte. Ils reviennent si vous annulez le changement ; sinon, ouvrez une couche pour les y rattacher ou les supprimer (outil Ponts manuels).`);
   RENDER_WARNS = warns;
   updateWarnings();
 
@@ -6158,6 +6192,9 @@ function render() {
         ${L.paths} tracés · ${L.nodes} nœuds · ${L.islands} îlot${L.islands > 1 ? "s" : ""} · ${L.bridges} ponts${L.merged ? ` · ${L.merged} fusion${L.merged > 1 ? "s" : ""}` : ""}<br>
         ${L.short_islands ? `<span style="color:#d97706">⚠ ${L.short_islands} îlot(s) sans place pour ${val("min_bridges")} ponts</span><br>` : ""}
         ${L.struct_bridges ? `dont ${L.struct_bridges} pont(s) structurel(s)<br>` : ""}
+        ${L.manual_bridges ? `dont ${L.manual_bridges} pont(s) manuel(s)<br>` : ""}
+        ${(n => n ? `${n} pont(s) automatique(s) supprimé(s) à la main<br>` : "")(manualBlocked(L))}
+        ${(n => n ? `<span style="color:#d97706">⚠ ${n} pont(s) manuel(s) ignoré(s) : extrémité hors de la matière ou de la feuille</span><br>` : "")(manualIgnored(L))}
         ${L.weak_spots ? `<span style="color:#d97706">⚠ ${L.weak_spots} partie(s) tenue(s) d'un seul côté, sans place pour un pont</span><br>` : ""}
         Coupe : ${L.cut_length_m} m · détails supprimés : ${L.lost_pct} %
       </div>
@@ -6176,7 +6213,7 @@ function render() {
     if (e.target.closest(".lflat")) { flatOpen("t" + e.target.closest(".lflat").dataset.tone); return; }
     if (e.target.closest(".lcolor")) return;                       // colour picker: no selection
     if (e.target.closest(".lcreset")) { setLayerColor(+e.target.closest(".lcreset").dataset.idx, null); return; }
-    const i = +c.dataset.i; SEL = (SEL === i) ? null : i; render();
+    const i = +c.dataset.i; SEL = (SEL === i) ? null : i; BR.sel = null; BR.autoSeg = null; BR.draft = null; render();
   });
 }
 // Tones offered for the outline stroke: black, white and the colours of the computed palette
@@ -6206,6 +6243,274 @@ function layerStack(L, attrs = "") {
     (L.img_support ? `<img class="ov ov-support" src="${L.img_support}" alt="">` : "") +
     (L.img_bridges ? `<img class="ov ov-bridges" src="${L.img_bridges}" alt="">` : "") +
     (LAST && L.reg ? regSVG(L.reg, [0, 0, LAST.sheet_mm[0], LAST.sheet_mm[1]]) : "") + `</div>`;
+}
+// ---------------- Manual bridges (layer view) ----------------
+// Field manual_bridges: JSON list [{id, layer, kind, ref, pts: [u1, v1, u2, v2]}] (see
+// pipeline.parse_manual_bridges), ends in fractions of the source image: the bridges follow the
+// crop and the layout. The layer is identified by its number and by what it paints (ref: computed
+// tone, outline layer key or stroke colour); the server reports the state of each bridge
+// (LAST.manual_bridges): ok, useless (crosses no opening), or obsolete (layer: no layer paints that
+// tone any more; void: an end is no longer on material; outside: off the sheet).
+// Tool on ("Manual bridge", key P): drag across an opening to draw a bridge; a click on a manual
+// bridge selects it (Delete: remove it).
+const BR = { on: false, sel: null, autoSeg: null, draft: null, keep: false };   // autoSeg: selected automatic bridge (mm)
+function manualList() {
+  try { const a = JSON.parse($("manual_bridges").value || "[]"); return Array.isArray(a) ? a : []; } catch (e) { return []; }
+}
+function setManualList(list) {
+  $("manual_bridges").value = list.length ? JSON.stringify(list) : "";
+  renderManualBridges(); renderBridgeTools(); schedule();
+}
+// Computed image area in sheet mm and the part of the source it shows (fractions). A result saved
+// before the manual bridges (snapshot opened without computing) has no bridge_map: derived from
+// mask_map (image area in fractions of the support preview) when it has one, otherwise null (the
+// tool then asks for a computation)
+function bridgeMap() {
+  if (!LAST) return null;
+  if (LAST.bridge_map) return LAST.bridge_map;
+  const mm = LAST.mask_map, r = LAST.sheet_rect_mm, s = LAST.support_mm;
+  if (!mm || !mm.img || !mm.src || !r || !s) return null;
+  const i = mm.img;
+  return { mm: [i[0] * s[0] - r[0], i[1] * s[1] - r[1], i[2] * s[0] - r[0], i[3] * s[1] - r[1]], src: mm.src };
+}
+const bridgeTool = () => BR.on && SEL !== null && !!bridgeMap();
+// sheet mm <-> source fractions, through the computed image area of the last computation
+function mmToSrc(x, y) {
+  const { mm: m, src: s } = bridgeMap();
+  return [s[0] + (x - m[0]) / (m[2] - m[0]) * (s[2] - s[0]), s[1] + (y - m[1]) / (m[3] - m[1]) * (s[3] - s[1])];
+}
+function srcToMm(u, v) {
+  const { mm: m, src: s } = bridgeMap();
+  return [m[0] + (u - s[0]) / (s[2] - s[0]) * (m[2] - m[0]), m[1] + (v - s[1]) / (s[3] - s[1]) * (m[3] - m[1])];
+}
+// What a layer paints, as stored with a bridge drawn on it
+function layerRef(L) {
+  if (L.kind !== "outline") return { kind: "color", ref: LAST.palette[L.tone] };
+  return L.sources && L.sources.length ? { kind: "line", ref: L.color } : { kind: "outline", ref: L.group || "A" };
+}
+// automatic bridges removed by hand on a layer (in force)
+const manualBlocked = L => ((LAST && LAST.manual_bridges) || [])
+  .filter(s => s.type === "block" && s.layer === L.index && s.state === "ok").length;
+// obsolete manual bridges of a layer (an end off the material or off the sheet)
+const manualIgnored = L => ((LAST && LAST.manual_bridges) || [])
+  .filter(s => s.layer === L.index && (s.state === "void" || s.state === "outside")).length;
+const manualStates = () => Object.fromEntries(((LAST && LAST.manual_bridges) || []).map(s => [s.id, s]));
+// Bridges shown on the layer view: those of this layer (whatever their state) and those of no
+// layer (obsolete "layer": they can be attached to this one); a bridge not computed yet belongs
+// to the layer it was drawn on
+function viewBridges(L) {
+  const st = manualStates();
+  return manualList().map(b => ({ b, s: st[b.id] })).filter(({ b, s }) =>
+    s ? (s.layer === L.index || s.layer === null) : b.layer === L.index);
+}
+function bridgeSeg(b, s) {
+  if (s && s.seg) return s.seg;
+  return [...srcToMm(b.pts[0], b.pts[1]), ...srcToMm(b.pts[2], b.pts[3])];
+}
+function renderManualBridges() {
+  const lv = $("stage").querySelector(".lv");
+  if (!lv || SEL === null || !bridgeMap()) return;
+  const L = LAST.layers[SEL];
+  lv.querySelectorAll(".mbov").forEach(e => e.remove());
+  lv.classList.toggle("brdraw", bridgeTool());
+  const bw = Math.max(0.3, val("bridge_width_mm")), f = v => Math.round(v * 100) / 100;
+  const line = (seg, cls, extra = "") => `<line class="${cls}" x1="${f(seg[0])}" y1="${f(seg[1])}" x2="${f(seg[2])}" y2="${f(seg[3])}"${extra}/>`;
+  const sw = ` style="stroke-width:${f(bw)}px"`;
+  const body = viewBridges(L).map(({ b, s }) => {
+    const state = s ? s.state : "pending", seg = bridgeSeg(b, s);
+    // removed automatic bridge: dashed red while in force, as an ignored bridge otherwise
+    const cls = b.type === "block" && (state === "ok" || state === "pending") ? "mb-block" : `mb-${state}`;
+    return line(seg, `mb ${cls}${b.after ? " mb-after" : ""}${BR.sel === b.id ? " sel" : ""}`, ` data-id="${b.id}"${sw}`);
+  }).join("") + (BR.autoSeg ? line(BR.autoSeg, "mb mb-auto sel", sw) : "")
+    + (BR.draft ? line(BR.draft, "mb mb-draft", sw) : "");
+  const [w, h] = LAST.sheet_mm;
+  lv.insertAdjacentHTML("beforeend", `<svg class="mbov" viewBox="0 0 ${f(w)} ${f(h)}" preserveAspectRatio="none" aria-hidden="true">${body}</svg>`);
+}
+const BR_STATE = {
+  ok: "pont appliqué", useless: "sans effet : il ne traverse aucune ouverture", pending: "en attente du calcul",
+  void: "ignoré : une extrémité n'est plus sur de la matière", outside: "ignoré : hors de la feuille",
+  layer: "ignoré : aucune couche ne peint plus sa teinte",
+};
+function renderBridgeTools() {
+  const bar = $("bridgetools"), show = SEL !== null && !!LAST && !!LAST.layers[SEL];
+  bar.hidden = !show;
+  if (!show) return;
+  if (!bridgeMap()) {                 // result saved before the manual bridges: computed on demand
+    $("brTool").setAttribute("aria-pressed", "false");
+    $("brHint").textContent = BR.on ? "Calcul en cours…" : "";
+    ["brDelete", "brAttach", "brClear", "brKeep"].forEach(id => $(id).hidden = true);
+    return;
+  }
+  const L = LAST.layers[SEL], mine = viewBridges(L);
+  if (BR.sel && !mine.some(({ b }) => b.id === BR.sel)) BR.sel = null;
+  // selected automatic bridge: still one of this layer's (same segment) after a computation
+  if (BR.autoSeg && !(L.auto_bridges || []).some(a => a.every((v, k) => v === BR.autoSeg[k]))) BR.autoSeg = null;
+  $("brTool").setAttribute("aria-pressed", String(BR.on));
+  const sel = BR.sel && mine.find(({ b }) => b.id === BR.sel);
+  const ofLayer = ({ s, b }) => (s ? s.layer === L.index : b.layer === L.index);
+  const n = mine.filter(e => ofLayer(e) && e.b.type !== "block").length;
+  const nb = mine.filter(e => ofLayer(e) && e.b.type === "block").length;
+  const block = sel && sel.b.type === "block";
+  $("brHint").textContent = BR.autoSeg
+    ? (BR.keep ? "Pont automatique sélectionné : Supprimer le retire sans toucher aux autres ponts automatiques."
+      : "Pont automatique sélectionné : Supprimer l'interdit à cet endroit, les ponts automatiques se placent ailleurs.")
+    : block ? (sel.s && sel.s.state === "useless" ? "Pont automatique supprimé, sans effet : plus aucun pont automatique à cet endroit"
+      : sel.s && sel.s.state !== "ok" ? `Pont automatique supprimé, ${BR_STATE[sel.s.state]}`
+      : sel.b.after ? "Pont automatique retiré sans toucher aux autres : « Rétablir le pont » le remet."
+      : "Pont automatique supprimé : « Rétablir le pont » l'autorise de nouveau à cet endroit.")
+    : sel ? `Pont manuel sélectionné : ${BR_STATE[sel.s ? sel.s.state : "pending"]}`
+    : BR.on ? "Glissez à travers une ouverture pour ajouter un pont. Cliquez sur un pont, manuel ou automatique, pour le sélectionner."
+    : [n ? `${n} pont(s) manuel(s) sur cette couche` : "", nb ? `${nb} pont(s) automatique(s) supprimé(s)` : ""].filter(Boolean).join(" · ");
+  // "keep the automatic bridges": the selected manual bridge's own setting, else the one for new bridges
+  $("brKeep").hidden = !(BR.on || sel);
+  $("brKeep").setAttribute("aria-pressed", String(sel ? !!sel.b.after : BR.keep));
+  $("brDelete").hidden = !sel && !BR.autoSeg;
+  $("brDelete").textContent = block ? "Rétablir le pont" : "Supprimer";
+  $("brDelete").title = block ? "Autoriser de nouveau un pont automatique à cet endroit (Suppr)" : "Supprimer le pont sélectionné (Suppr)";
+  $("brAttach").hidden = !(sel && sel.s && sel.s.state === "layer");
+  $("brClear").hidden = !n || !!sel || !!BR.autoSeg;
+}
+function setBridgeTool(on) {
+  BR.on = on; BR.draft = null;
+  if (!on) { BR.sel = null; BR.autoSeg = null; }
+  renderManualBridges(); renderBridgeTools();
+}
+const nextBridgeId = list => "m" + (list.reduce((a, b) => Math.max(a, parseInt(String(b.id).slice(1)) || 0), 0) + 1);
+// Delete key / button: a manual bridge is deleted; an automatic bridge is removed (a "block" entry:
+// no automatic bridge there any more); a removed automatic bridge is restored
+function deleteSelectedBridge() {
+  const L = LAST && SEL !== null && LAST.layers[SEL];
+  if (BR.autoSeg && L) {
+    const list = manualList(), [x1, y1, x2, y2] = BR.autoSeg, r6 = v => Math.round(v * 1e6) / 1e6;
+    list.push({ id: nextBridgeId(list), type: "block", ...(BR.keep ? { after: true } : {}), layer: L.index, ...layerRef(L),
+                pts: [...mmToSrc(x1, y1), ...mmToSrc(x2, y2)].map(r6) });
+    BR.autoSeg = null;
+    setManualList(list);
+    status(BR.keep ? "Pont automatique retiré sans toucher aux autres" : "Pont automatique supprimé : les ponts automatiques se placent ailleurs");
+    return;
+  }
+  if (!BR.sel) return;
+  const id = BR.sel, block = (manualList().find(b => b.id === id) || {}).type === "block";
+  BR.sel = null;
+  setManualList(manualList().filter(b => b.id !== id));
+  status(block ? "Pont automatique rétabli" : "Pont manuel supprimé");
+}
+function setupManualBridges() {
+  $("brTool").onclick = () => {
+    if (!bridgeMap()) {               // result of an older version: recomputed, then the tool is on
+      BR.on = true; renderBridgeTools(); process();
+      return;
+    }
+    setBridgeTool(!BR.on);
+  };
+  $("brDelete").onclick = deleteSelectedBridge;
+  BR.keep = !!prefs().bridge_keep_auto;
+  $("brKeep").onclick = () => {
+    const b = BR.sel && manualList().find(e => e.id === BR.sel);
+    if (b) {                          // the selected manual bridge or removed automatic bridge
+      const on = !b.after;
+      setManualList(manualList().map(e => {
+        if (e.id !== b.id) return e;
+        const { after, ...rest } = e;
+        return on ? { ...rest, after: true } : rest;
+      }));
+      status(b.type === "block"
+        ? (on ? "Pont automatique retiré sans toucher aux autres" : "Les ponts automatiques se replacent sans ce pont")
+        : (on ? "Pont manuel découpé sans toucher aux ponts automatiques" : "Les ponts automatiques tiennent compte de ce pont manuel"));
+      return;
+    }
+    BR.keep = !BR.keep; savePref("bridge_keep_auto", BR.keep);   // new bridges (remembered)
+    renderBridgeTools();
+  };
+  $("brAttach").onclick = () => {
+    const L = LAST && SEL !== null && LAST.layers[SEL];
+    if (!L || !BR.sel) return;
+    setManualList(manualList().map(b => b.id === BR.sel ? { ...b, layer: L.index, ...layerRef(L) } : b));
+    status(`Pont manuel rattaché à la couche ${L.index}`);
+  };
+  $("brClear").onclick = () => {
+    const L = LAST && SEL !== null && LAST.layers[SEL];
+    if (!L) return;
+    const gone = new Set(viewBridges(L).filter(({ b, s }) => b.type !== "block" && (s ? s.layer === L.index : b.layer === L.index)).map(({ b }) => b.id));
+    BR.sel = null;
+    setManualList(manualList().filter(b => !gone.has(b.id)));
+    status(`${gone.size} pont(s) manuel(s) supprimé(s) de la couche ${L.index}`);
+  };
+  const st = $("stage");
+  const toMm = e => {
+    const lv = st.querySelector(".lv"), r = lv.getBoundingClientRect();
+    return [(e.clientX - r.left) / r.width * LAST.sheet_mm[0], (e.clientY - r.top) / r.height * LAST.sheet_mm[1]];
+  };
+  // bridge under the pointer (within 8 screen pixels, at least the bridge width): an entry of the
+  // list (manual bridge, removed automatic bridge) first, else an automatic bridge; or null
+  const hit = (x, y) => {
+    const lv = st.querySelector(".lv"), mmPerPx = LAST.sheet_mm[0] / lv.getBoundingClientRect().width;
+    const L = LAST.layers[SEL], tol = Math.max(8 * mmPerPx, val("bridge_width_mm"));
+    const dist = ([x1, y1, x2, y2]) => {
+      const dx = x2 - x1, dy = y2 - y1, l2 = dx * dx + dy * dy;
+      const t = l2 ? clamp(((x - x1) * dx + (y - y1) * dy) / l2, 0, 1) : 0;
+      return Math.hypot(x - x1 - t * dx, y - y1 - t * dy);
+    };
+    let best = null, bd = Infinity;
+    for (const { b, s } of viewBridges(L)) {
+      const d = dist(bridgeSeg(b, s));
+      if (d < bd) { bd = d; best = { id: b.id }; }
+    }
+    if (bd <= tol) return best;
+    for (const seg of L.auto_bridges || []) {
+      const d = dist(seg);
+      if (d < bd) { bd = d; best = { seg }; }
+    }
+    return bd <= tol ? best : null;
+  };
+  let drag = null;
+  st.addEventListener("pointerdown", e => {
+    if (!bridgeTool() || e.button !== 0 || !e.target.closest(".lv")) return;
+    // a click (no move) selects the bridge under the pointer; a drag draws a new one, even when it
+    // starts on an existing bridge
+    const [x, y] = toMm(e);
+    e.preventDefault();
+    drag = { x, y, id: e.pointerId, cx: e.clientX, cy: e.clientY, h: hit(x, y) };
+    st.setPointerCapture(e.pointerId);
+  });
+  st.addEventListener("pointermove", e => {
+    if (!drag || e.pointerId !== drag.id) return;
+    const [x, y] = toMm(e);
+    BR.draft = [drag.x, drag.y, x, y];
+    renderManualBridges();
+  });
+  const end = e => {
+    if (!drag || e.pointerId !== drag.id) return;
+    const [x, y] = toMm(e), d = drag;
+    drag = null; BR.draft = null;
+    if (e.type === "pointercancel") { renderManualBridges(); renderBridgeTools(); return; }
+    if (Math.hypot(e.clientX - d.cx, e.clientY - d.cy) < 4 || Math.hypot(x - d.x, y - d.y) < 0.5) {
+      BR.sel = d.h && d.h.id || null; BR.autoSeg = d.h && d.h.seg || null;   // a click: selection
+      renderManualBridges(); renderBridgeTools(); return;
+    }
+    const L = LAST.layers[SEL], list = manualList();
+    const r6 = v => Math.round(v * 1e6) / 1e6;
+    list.push({ id: nextBridgeId(list), ...(BR.keep ? { after: true } : {}), layer: L.index, ...layerRef(L),
+                pts: [...mmToSrc(d.x, d.y), ...mmToSrc(x, y)].map(r6) });
+    BR.sel = null; BR.autoSeg = null;
+    setManualList(list);
+    status(`Pont manuel ajouté à la couche ${L.index}`);
+  };
+  st.addEventListener("pointerup", end); st.addEventListener("pointercancel", end);
+  // no native drag of the layer image while drawing (it would cancel the pointer: pointercancel)
+  st.addEventListener("dragstart", e => { if (bridgeTool()) e.preventDefault(); });
+  document.addEventListener("keydown", e => {
+    if (SEL === null || !LAST || e.ctrlKey || e.metaKey || e.altKey) return;
+    const a = document.activeElement;
+    if (a && (a.isContentEditable || /^(INPUT|TEXTAREA|SELECT)$/.test(a.tagName))) return;
+    if ((e.key === "Delete" || e.key === "Backspace") && (BR.sel || BR.autoSeg)) { e.preventDefault(); deleteSelectedBridge(); }
+    else if (e.key === "Escape" && (BR.sel || BR.autoSeg || BR.on)) {
+      if (BR.sel || BR.autoSeg) { BR.sel = null; BR.autoSeg = null; renderManualBridges(); renderBridgeTools(); } else setBridgeTool(false);
+    }
+    else if ((e.key === "p" || e.key === "P") && !$("bridgetools").hidden) $("brTool").click();
+    // K: "keep the automatic bridges" of the selected bridge (or of the next ones, nothing selected)
+    else if ((e.key === "k" || e.key === "K") && !$("bridgetools").hidden && !$("brKeep").hidden) { e.preventDefault(); $("brKeep").click(); }
+  });
 }
 function setOverlay(btn, cls, on) {
   $(btn).setAttribute("aria-pressed", String(on));

@@ -562,6 +562,34 @@ islands instead of bridging them is set in *Simplification* (5.5).
   edge of a thin strip so it cannot pivot. It is a maximum, the actual gaps are often smaller. Without them, a
   sheet stored rolled lifts these parts and the stencil is hard to lay and position. The layer card
   counts them and warns about parts that found no room for one.
+- **Manual bridges**: click a stencil card to open the layer in the view, then **Manual bridges**
+  (key **P**) and drag across an opening, from one edge of material to the other. The bridge is
+  cut at the bridge width before the merges and the automatic bridges, which adapt to it (an island
+  it holds needs no other bridge); it applies even with the automatic bridges off. Manual bridges
+  are drawn in blue on the layer view; click one to select it, **Delete** removes it. They are
+  saved with the settings and the project (undo / redo included) and follow the crop, scale and
+  position of the image. Each one belongs to the layer it was drawn on, recognised by the tone it
+  paints: when the layers change (number of stencils, palette…), it goes to the layer whose tone is
+  closest (ΔE 15 at most). It is **ignored** (dashed orange, counted on the card) when no layer
+  paints that tone any more (it can then be attached to the layer shown), when an end is no longer
+  on material (an end within the bridge width, 1 mm at least, of the material is moved onto it) or
+  is off the sheet; a bridge that crosses no opening is shown in grey (no effect). Ignored bridges
+  are kept: undoing the change brings them back.
+  **Keep the automatic bridges** (button of the tool, remembered): the new manual bridges, or the
+  selected one, are cut **after** the merges and the automatic bridges, which then stay exactly
+  where they were, even when the manual bridge already holds an island (shown in teal instead of
+  blue). Off, the automatic bridges are placed again taking the manual bridge into account.
+  A click selects a bridge, a drag always draws a new one, even when it starts on a bridge.
+  With the same tool, click an **automatic bridge** and press **Delete** to remove it: no
+  automatic bridge of that layer may then pass there (the bridge and 2 mm on each side, at least
+  twice the bridge width), so the bridges are placed elsewhere; an island with no other place is
+  left without a bridge (counted on the card). The removed bridge stays drawn in dashed red: select
+  it and **Restore the bridge** to allow it again. The card counts the bridges removed by hand.
+  With **Keep the automatic bridges** on, a removed automatic bridge is simply taken off once the
+  automatic bridges are computed (the opening is reopened there, nothing is placed instead) and
+  the others stay where they are (dashed teal); if a later change moves the automatic bridges so
+  that none is there any more, it has no effect (grey). The button, or the **K** key, also switches the
+  selected manual or removed bridge from one mode to the other.
 
 ### 5.10 Layer effects
 
@@ -892,7 +920,7 @@ in `app.py` (Flask) and the interface in `static/index.html` (+ `static/i18n.js`
 5. **Material constraints** – morphological opening and closing, removal of tiny pieces.
    Then the optional **layer effects** (`overspraylab/effects.py`) reshape each layer mask, in
    spraying order, before the material limits are checked again.
-6. **Merges and bridges** – optionally, islands are first held by merging zones (morphological
+6. **Merges and bridges** – the manual bridges of the layer are cut first; then, optionally, islands are held by merging zones (morphological
    closing of narrow channels, removal of small islands), cheapest visible change first; each
    remaining island is linked to the frame (or to a neighbouring island, in a chain) by short
    bridges that stay clear of other edges, processed in passes from the nearest islands.

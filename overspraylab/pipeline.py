@@ -167,6 +167,9 @@ class Params:
     # Structural bridges (0 = off): largest spacing between two supports along the material, in mm
     # (a part held from one side only, or a long thin strip); see add_struct_bridges
     bridge_spacing_mm: float = 0.0
+    # Bridges drawn by hand (JSON list, see parse_manual_bridges); applied before the merges and the
+    # automatic bridges, even when the automatic bridges are off
+    manual_bridges: str = ""
     # Merging zones instead of bridges (0 = off): see merge_zones
     merge_amount: float = 0.0      # 0..150, progressive scale of the largest visible change accepted
     merge_channel_mm: float = 2.5  # A: channels of opening narrower than this may be closed
@@ -270,6 +273,8 @@ class Params:
         p.bridge_spacing_mm = float(np.clip(p.bridge_spacing_mm, 0, 2000))
         if 0 < p.bridge_spacing_mm < p.bridge_width_mm:    # at least the width of a bridge
             p.bridge_spacing_mm = p.bridge_width_mm
+        mb = parse_manual_bridges(p.manual_bridges)        # canonical form (also the cache key)
+        p.manual_bridges = json.dumps(mb, separators=(",", ":")) if mb else ""
         p.reg_corners = p.reg_corners if p.reg_corners in (0, 3, 4) else 4
         p.sheet_mode = p.sheet_mode if p.sheet_mode in ("around", "fit") else "fit"
         p.mat_orient = p.mat_orient if p.mat_orient in ("portrait", "landscape") else "portrait"
@@ -1456,11 +1461,25 @@ def merge_zones(opening: np.ndarray, p: Params, hidden: np.ndarray | None = None
     return merged, count
 
 
-def add_bridges(opening: np.ndarray, p: Params, hidden: np.ndarray | None = None) -> list[tuple]:
+def _crosses(forbid: np.ndarray | None, a, q) -> bool:
+    """Does the segment a -> q touch the `forbid` mask (bridges removed by hand)?"""
+    if forbid is None:
+        return False
+    n = max(2, int(math.ceil(math.hypot(q[0] - a[0], q[1] - a[1]))) + 1)
+    H, W = forbid.shape
+    lx = np.linspace(a[0], q[0], n).round().astype(int).clip(0, W - 1)
+    ly = np.linspace(a[1], q[1], n).round().astype(int).clip(0, H - 1)
+    return bool(forbid[ly, lx].any())
+
+
+def add_bridges(opening: np.ndarray, p: Params, hidden: np.ndarray | None = None,
+                forbid: np.ndarray | None = None) -> list[tuple]:
     """Connects every material island to the frame. Modifies `opening` in place.
 
     `hidden`: mask of the areas repainted by a later layer;
     a bridge running there will be invisible in the final result -> preferred.
+    `forbid`: mask no bridge may touch (automatic bridges removed by hand); an island with no
+    other place is left without a bridge (counted as short).
     Returns the list of bridges [(x1, y1, x2, y2)] in pixels.
     """
     ppm = p.px_per_mm
@@ -1469,6 +1488,7 @@ def add_bridges(opening: np.ndarray, p: Params, hidden: np.ndarray | None = None
     double_px = p.double_bridge_area_mm2 * ppm * ppm
     n_islands = None
     short_islands = 0  # islands that could not get the requested number of bridges
+    abandoned = []     # a pixel of each island left without a bridge (every place forbidden)
 
     for _ in range(2000):
         # One pass = components and distance map computed ONCE, then all pending islands
@@ -1482,6 +1502,9 @@ def add_bridges(opening: np.ndarray, p: Params, hidden: np.ndarray | None = None
         pending = [i for i in range(1, n) if i != main]
         if n_islands is None:
             n_islands = len(pending)
+        gone = {int(lab[y, x]) for x, y in abandoned}
+        if gone:
+            pending = [i for i in pending if i not in gone]
         if not pending:
             break
         is_main = lab == main
@@ -1509,12 +1532,18 @@ def add_bridges(opening: np.ndarray, p: Params, hidden: np.ndarray | None = None
                 continue
             check_cancel()
             want = max(p.min_bridges, 2 if stats[i, cv2.CC_STAT_AREA] > double_px else 1)
-            cands = _candidates(lab, i, stats[i], cents[i], dist, near, hidden, dv, ppm,
-                                wide=want > 1, bw=bw)
+            def allowed(cs):
+                # not through a removed bridge, nor landing on an island left without a bridge
+                if forbid is None:
+                    return cs
+                return [c for c in cs if c[2] is None or
+                        (not _crosses(forbid, c[1], c[2]) and int(lab[c[2][1], c[2][0]]) not in gone)]
+            cands = allowed(_candidates(lab, i, stats[i], cents[i], dist, near, hidden, dv, ppm,
+                                        wide=want > 1, bw=bw))
             if not cands or min(c[0] for c in cands) >= 1e6:
                 # no clean bridge near the island: search its whole outline, with no length limit
-                far = _candidates(lab, i, stats[i], cents[i], dist, near, hidden, dv, ppm,
-                                  wide=want > 1, bw=bw, unlimited=True)
+                far = allowed(_candidates(lab, i, stats[i], cents[i], dist, near, hidden, dv, ppm,
+                                          wide=want > 1, bw=bw, unlimited=True))
                 if far and min(c[0] for c in far) < 1e6:
                     cands = far
             if not cands:
@@ -1522,7 +1551,12 @@ def add_bridges(opening: np.ndarray, p: Params, hidden: np.ndarray | None = None
                 if q:
                     c = _clip_bridge(lab, i, px, py, q, bw)
                     q = c[0] if c else q
-                cands = [(dv, (px, py), q, 0.0)] if q else []
+                cands = allowed([(dv, (px, py), q, 0.0)] if q else [])
+                if not cands:              # every place forbidden: the island keeps no bridge
+                    short_islands += 1
+                    abandoned.append((px, py))
+                    drawn = True           # the next pass goes on with the other islands
+                    continue
             chosen = _spread(cands, want)
             if len(chosen) < want:
                 short_islands += 1
@@ -1741,14 +1775,16 @@ def _geodesic(src: np.ndarray, mat: np.ndarray, limit: float) -> np.ndarray:
     return D
 
 
-def _ray_bridge(work, xs, ys, maxlen, land_ok, hidden, bw, away=None, n_ang=48, avoid=None, focus=None):
+def _ray_bridge(work, xs, ys, maxlen, land_ok, hidden, bw, away=None, n_ang=48, avoid=None, focus=None,
+                forbid=None):
     """Best straight bridge leaving the material at one of the edge points (xs, ys), crossing an
     opening up to the first material met, where `land_ok(ax, ay, qx, qy, length)` (arrays -> bool
     array) accepts it. `away`: unit vector, only directions within 60° of it. Score = length weighted
     by the visible share (as `_candidates`); bridges running along an edge are rejected.
     `avoid`: (existing bridges [(x1, y1, x2, y2)], radius px): a bridge whose middle is that close to
     the middle of one of them is a last resort. `focus`: (x, y) the point to hold; the distance
-    from the anchor to it counts like the length of the bridge. Returns ((ax, ay), (qx, qy)) or None."""
+    from the anchor to it counts like the length of the bridge. `forbid`: mask no bridge may touch
+    (bridges removed by hand). Returns ((ax, ay), (qx, qy)) or None."""
     if len(xs) == 0:
         return None
     H, W = work.shape
@@ -1806,7 +1842,7 @@ def _ray_bridge(work, xs, ys, maxlen, land_ok, hidden, bw, away=None, n_ang=48, 
         best.append(((ln + 1) * (0.15 + 0.85 * vis) + float(off[k]) + crowd, a, q))
     best.sort()
     for _s, a, q in best:
-        if _clear_of_material(work, 1, a[0], a[1], q, bw):
+        if _clear_of_material(work, 1, a[0], a[1], q, bw) and not _crosses(forbid, a, q):
             return a, q
     return None
 
@@ -1869,8 +1905,10 @@ def support_map(res: "Result", L: "Layer") -> np.ndarray | None:
     return out
 
 
-def add_struct_bridges(opening: np.ndarray, p: Params, hidden: np.ndarray | None = None) -> tuple[list, int]:
+def add_struct_bridges(opening: np.ndarray, p: Params, hidden: np.ndarray | None = None,
+                       forbid: np.ndarray | None = None) -> tuple[list, int]:
     """Structural bridges (see above), after the island bridges. Modifies `opening` in place.
+    `forbid`: mask no bridge may touch (bridges removed by hand).
     Returns (bridges [(x1, y1, x2, y2)] in pixels, number of weak spots that got no bridge)."""
     if not p.bridges or p.bridge_spacing_mm <= 0:
         return [], 0
@@ -1944,7 +1982,8 @@ def add_struct_bridges(opening: np.ndarray, p: Params, hidden: np.ndarray | None
         reg = (Dm >= far - span / 2) & ((yy - fy) ** 2 + (xx - fx) ** 2 <= (span / 2) ** 2)
         ex, ey = edge_points(reg)
         b = _ray_bridge(work, ex, ey, maxlen, gain(span / 2, D), hidden, bw,
-                        avoid=(bridges, min(p.bridge_spacing_mm / 4, 10.0) * ppm), focus=(fx / s, fy / s))
+                        avoid=(bridges, min(p.bridge_spacing_mm / 4, 10.0) * ppm), focus=(fx / s, fy / s),
+                        forbid=forbid)
         if b is None:
             given |= cv2.dilate(reg.astype(np.uint8), _K8, iterations=max(1, int(span / 4))) > 0
             weak += 1
@@ -1963,7 +2002,7 @@ def add_struct_bridges(opening: np.ndarray, p: Params, hidden: np.ndarray | None
             around = np.zeros((h, w), np.uint8)
             cv2.circle(around, (int(ax * s), int(ay * s)), max(2, int(SPAN_RIGID_MM * ppm * s)), 1, -1)
             ox, oy = edge_points((around > 0) & (tlab == t), near=(ax, ay), r=SPAN_RIGID_MM * ppm)
-            b2 = _ray_bridge(work, ox, oy, maxlen, gain(span / 4, D), hidden, bw, away=-d)
+            b2 = _ray_bridge(work, ox, oy, maxlen, gain(span / 4, D), hidden, bw, away=-d, forbid=forbid)
         if b2 is not None and len(bridges) < SPAN_MAX_BRIDGES:
             draw(*b2)
             new.append(b2)
@@ -2034,14 +2073,298 @@ def _prune_struct(reach: list, solid, mat0, measured, span: float, cap: float, l
     return alive
 
 
-def hold_material(opening: np.ndarray, p: Params, hidden: np.ndarray | None = None) -> tuple:
-    """Island bridges, then structural bridges. Modifies `opening` in place.
+def hold_material(opening: np.ndarray, p: Params, hidden: np.ndarray | None = None,
+                  forbid: np.ndarray | None = None) -> tuple:
+    """Island bridges, then structural bridges. Modifies `opening` in place. `forbid`: mask no
+    bridge may touch (automatic bridges removed by hand).
     Returns (bridges, islands, short islands, structural bridges, weak spots without a bridge)."""
     if not p.bridges:
         return [], 0, 0, 0, 0
-    bridges, n_isl, n_short = add_bridges(opening, p, hidden)
-    sb, weak = add_struct_bridges(opening, p, hidden)
+    bridges, n_isl, n_short = add_bridges(opening, p, hidden, forbid)
+    sb, weak = add_struct_bridges(opening, p, hidden, forbid)
     return bridges + sb, n_isl, n_short, len(sb), weak
+
+
+# --------------------------------------------------------------------------
+# Manual bridges: segments drawn by hand on a stencil, stored in `Params.manual_bridges`:
+#   [{"id": "m1", "layer": 2, "kind": "color", "ref": "#8a7b6c", "pts": [u1, v1, u2, v2]}]
+# pts: both ends in fractions of the source image (they follow the crop, scale and position of
+# the image; may lie outside 0..1, on the sheet around the image). The layer is identified by its
+# number and by what it paints, `ref`: computed tone colour (kind "color"), outline layer key A, B…
+# (kind "outline", separate outline stencil) or stroke colour (kind "line", line style).
+# At each computation a bridge is:
+#   ok       - drawn (counted with the layer's bridges);
+#   useless  - its layer was found but the segment crosses no opening: no effect, kept;
+#   layer    - obsolete: no layer paints that tone any more (colour drift > MANUAL_DE);
+#   outside  - obsolete: an end lies off the stencil sheet;
+#   void     - obsolete: an end has no material of the layer within the snap tolerance
+#              (drawing it would leave a tab hanging in the opening).
+# Obsolete bridges are ignored but kept, so undoing the change makes them active again.
+# An entry with "type": "block" is an automatic bridge removed by hand: its segment, widened by a
+# margin (BLOCK_MARGIN_MM, at least twice the bridge width), is a zone no automatic bridge of the
+# layer may touch (state ok, layer or outside only).
+# A bridge with "after": true is cut after the merges and the automatic bridges, which are then
+# placed as if it did not exist (they stay where they were); otherwise it is cut first and the
+# automatic bridges adapt to it (an island it holds needs no other bridge). A removed automatic bridge
+# with "after": true does not forbid a zone: the automatic bridges are computed as usual, then the
+# ones it crosses are taken off (the opening reopened there), the others stay where they are
+# (state useless when no automatic bridge is there any more).
+# --------------------------------------------------------------------------
+MANUAL_DE = 15.0           # largest colour drift (ΔE) of a layer's tone still taken as the same layer
+_MANUAL_ID = re.compile(r"^m\d{1,6}$")
+MANUAL_KINDS = ("color", "outline", "line")
+BLOCK_MARGIN_MM = 2.0      # removed bridge: margin on each side kept free of automatic bridges
+
+
+def parse_manual_bridges(txt: str) -> list[dict]:
+    """Valid entries of a `manual_bridges` JSON text (others dropped), in canonical form."""
+    try:
+        data = json.loads(txt) if txt else []
+    except ValueError:
+        return []
+    out, seen = [], set()
+    for b in data if isinstance(data, list) else []:
+        if not isinstance(b, dict):
+            continue
+        bid, kind, ref, pts = str(b.get("id", "")), b.get("kind"), str(b.get("ref") or ""), b.get("pts")
+        typ = b.get("type", "bridge")
+        if not _MANUAL_ID.match(bid) or bid in seen or kind not in MANUAL_KINDS or typ not in ("bridge", "block"):
+            continue
+        try:
+            layer = int(b.get("layer"))
+            pts = [float(v) for v in pts]
+        except (TypeError, ValueError):
+            continue
+        if not 1 <= layer <= 99 or len(pts) != 4 or not all(math.isfinite(v) for v in pts):
+            continue
+        if kind == "outline":
+            if not _GROUP.match(ref):
+                continue
+        else:
+            ref = _hex(ref, "")
+            if not ref:
+                continue
+        seen.add(bid)
+        extra = ({"type": "block"} if typ == "block" else {}) | ({"after": True} if b.get("after") is True else {})
+        out.append({"id": bid, **extra, "layer": layer, "kind": kind,
+                    "ref": ref, "pts": [round(float(np.clip(v, -2.0, 3.0)), 6) for v in pts]})
+    return out
+
+
+def assign_manual(bridges: list[dict], refs: list[tuple]) -> dict[int, list[dict]]:
+    """Layer of each bridge: {layer index: [bridges]}. `refs`: [(index, kind, ref)] of the layers
+    computed, ref = BGR tone colour (color, line) or outline layer key (outline). A colour bridge
+    keeps its layer number while that layer's tone stays within MANUAL_DE of the one it was drawn
+    on, otherwise goes to the layer of the nearest tone within MANUAL_DE (layers added or removed);
+    bridges of no layer are left out."""
+    out: dict[int, list[dict]] = {}
+    for b in bridges:
+        cands = [(i, r) for i, k, r in refs if k == b["kind"]]
+        if b["kind"] == "outline":
+            hit = next((i for i, r in cands if r == b["ref"]), None)
+        else:
+            ref = _lab(hex_to_bgr(b["ref"]).astype(np.uint8))[0]
+            d = {i: float(np.linalg.norm(_lab(np.asarray(r, np.uint8))[0] - ref)) for i, r in cands}
+            ok = {i: v for i, v in d.items() if v <= MANUAL_DE}
+            hit = b["layer"] if b["layer"] in ok else (min(ok, key=ok.get) if ok else None)
+        if hit is not None:
+            out.setdefault(hit, []).append(b)
+    return out
+
+
+def manual_segments(bridges: list[dict], src_map, img_off: tuple, img_size: tuple) -> list[tuple]:
+    """[(id, type, x1, y1, x2, y2)] in sheet pixels (floats). `src_map`: ((x0, y0, x1, y1) part of the
+    source used for the computed image area, (width, height) of the source); `img_off`, `img_size`:
+    that area in the sheet (pixels)."""
+    (sx0, sy0, sx1, sy1), (sw, sh) = src_map
+    X0, Y0 = img_off
+    W, H = img_size
+    fx, fy = W / max(1e-9, sx1 - sx0), H / max(1e-9, sy1 - sy0)
+    out = []
+    for b in bridges:
+        u1, v1, u2, v2 = b["pts"]
+        typ = b.get("type", "bridge")
+        if b.get("after"):
+            typ = "lateblock" if typ == "block" else "late"
+        out.append((b["id"], typ, X0 + (u1 * sw - sx0) * fx, Y0 + (v1 * sh - sy0) * fy,
+                    X0 + (u2 * sw - sx0) * fx, Y0 + (v2 * sh - sy0) * fy))
+    return out
+
+
+def apply_manual_bridges(opening: np.ndarray, segs: list[tuple], p: Params, late: bool = False) -> tuple[list, list, object]:
+    """Draws the manual bridges `segs` ([(id, type, x1, y1, x2, y2)], sheet pixels) as material in
+    `opening` (modified in place). An end lying in an opening is moved to the nearest material
+    within the snap tolerance (the bridge width, at least 1 mm), so that small moves of the edges
+    keep the bridge. Returns (bridges drawn [(x1, y1, x2, y2)], states [(id, state, x1, y1, x2, y2)]
+    with the ends as used (pixels), mask of the removed automatic bridges ("block" entries: no
+    automatic bridge may touch it) or None). `late`: only the bridges cut after the automatic ones
+    (type "late"), otherwise all the others."""
+    segs = [(sid, "bridge" if t == "late" else t, *r) for sid, t, *r in segs
+            if (t == "late" if late else t in ("bridge", "block"))]
+    if not segs:
+        return [], [], None
+    Hs, Ws = opening.shape
+    ppm = p.px_per_mm
+    bw = max(1, int(round(p.bridge_width_mm * ppm)))
+    tol = max(bw, ppm)
+    r = int(math.ceil(tol))
+    drawn, states, forbid = [], [], None
+    for bid, typ, x1, y1, x2, y2 in segs:
+        if typ == "block":
+            if not all(0 <= int(round(x)) < Ws and 0 <= int(round(y)) < Hs for x, y in ((x1, y1), (x2, y2))):
+                states.append((bid, "outside", x1, y1, x2, y2))
+                continue
+            if forbid is None:
+                forbid = np.zeros((Hs, Ws), np.uint8)
+            margin = max(2 * bw, BLOCK_MARGIN_MM * ppm)
+            cv2.line(forbid, (int(round(x1)), int(round(y1))), (int(round(x2)), int(round(y2))), 1,
+                     thickness=int(round(bw + 2 * margin)))
+            states.append((bid, "ok", x1, y1, x2, y2))
+            continue
+        ends = []
+        for x, y in ((x1, y1), (x2, y2)):
+            xi, yi = int(round(x)), int(round(y))
+            if not (0 <= xi < Ws and 0 <= yi < Hs):
+                ends = None
+                break
+            if opening[yi, xi] == 0:
+                ends.append((xi, yi))
+                continue
+            wx0, wy0 = max(0, xi - r), max(0, yi - r)
+            ys, xs = np.nonzero(opening[wy0:yi + r + 1, wx0:xi + r + 1] == 0)
+            d2 = (xs + wx0 - xi) ** 2 + (ys + wy0 - yi) ** 2
+            if len(d2) == 0 or d2.min() > tol * tol:
+                ends.append(None)
+            else:
+                k = int(np.argmin(d2))
+                ends.append((int(xs[k] + wx0), int(ys[k] + wy0)))
+        if ends is None:
+            states.append((bid, "outside", x1, y1, x2, y2))
+            continue
+        if None in ends:
+            states.append((bid, "void", x1, y1, x2, y2))
+            continue
+        (ax, ay), (bx, by) = ends
+        # does the bridge cross an opening? (window around the segment)
+        m = bw + 2
+        wx0, wy0 = max(0, min(ax, bx) - m), max(0, min(ay, by) - m)
+        wx1, wy1 = min(Ws, max(ax, bx) + m + 1), min(Hs, max(ay, by) + m + 1)
+        band = np.zeros((wy1 - wy0, wx1 - wx0), np.uint8)
+        cv2.line(band, (ax - wx0, ay - wy0), (bx - wx0, by - wy0), 1, thickness=bw)
+        if not (band.astype(bool) & (opening[wy0:wy1, wx0:wx1] > 0)).any():
+            states.append((bid, "useless", ax, ay, bx, by))
+            continue
+        cv2.line(opening, (ax, ay), (bx, by), 0, thickness=bw, lineType=cv2.LINE_8)
+        drawn.append((ax, ay, bx, by))
+        states.append((bid, "ok", ax, ay, bx, by))
+    return drawn, states, (forbid > 0 if forbid is not None else None)
+
+
+def late_manual(opening: np.ndarray, pre: np.ndarray | None, held: tuple, segs: list[tuple],
+                p: Params) -> tuple[tuple, list, list]:
+    """After the automatic bridges (`held`, from hold_material): takes off the automatic bridges
+    crossed by the removed bridges of type "lateblock" (the opening `pre`, as before the automatic
+    bridges, is put back there; the other bridges are untouched), then cuts the manual bridges of
+    type "late". Modifies `opening` in place. Returns (held without the bridges taken off, manual
+    bridges drawn, states)."""
+    bridges, n_isl, n_short, n_struct, n_weak = held
+    states = []
+    blocks = [sg for sg in segs if sg[1] == "lateblock"]
+    if blocks and pre is not None:
+        Hs, Ws = opening.shape
+        bw = max(1, int(round(p.bridge_width_mm * p.px_per_mm)))
+        gone = set()
+        for bid, _t, x1, y1, x2, y2 in blocks:
+            if not all(0 <= int(round(x)) < Ws and 0 <= int(round(y)) < Hs for x, y in ((x1, y1), (x2, y2))):
+                states.append((bid, "outside", x1, y1, x2, y2))
+                continue
+            # the automatic bridge(s) with both ends near the removed one's (either way round): the
+            # same bridge, give or take the rounding of the stored ends, not a neighbour
+            tol = max(2.0, bw)
+
+            def same(a0, a1, b0, b1):
+                d1 = max(math.hypot(a0 - x1, a1 - y1), math.hypot(b0 - x2, b1 - y2))
+                d2 = max(math.hypot(a0 - x2, a1 - y2), math.hypot(b0 - x1, b1 - y1))
+                return min(d1, d2) <= tol
+            hit = [k for k, br in enumerate(bridges) if same(*br)]
+            gone.update(hit)
+            states.append((bid, "ok" if hit else "useless", x1, y1, x2, y2))
+        if gone:
+            first_struct = len(bridges) - n_struct      # structural bridges come last
+            m = np.zeros((Hs, Ws), np.uint8)
+            for k in gone:
+                a0, a1, b0, b1 = bridges[k]
+                cv2.line(m, (int(a0), int(a1)), (int(b0), int(b1)), 1, thickness=bw)
+            opening[(m > 0) & (pre > 0)] = 255
+            kept = [br for k, br in enumerate(bridges) if k not in gone]
+            for a0, a1, b0, b1 in kept:               # bridges sharing pixels with a removed one
+                cv2.line(opening, (int(a0), int(a1)), (int(b0), int(b1)), 0, thickness=bw)
+            n_struct -= sum(1 for k in gone if k >= first_struct)
+            bridges = kept
+    drawn, st2, _ = apply_manual_bridges(opening, segs, p, late=True)
+    return (bridges, n_isl, n_short, n_struct, n_weak), drawn, states + st2
+
+
+def needs_pre(segs: list[tuple]) -> bool:
+    """Is a copy of the opening before the automatic bridges needed (see late_manual)?"""
+    return any(sg[1] == "lateblock" for sg in segs)
+
+
+class ManualBridges:
+    """Manual bridges of one computation: which layer gets each one, and their states."""
+
+    def __init__(self, p: Params, src_map, img_off: tuple, img_size: tuple):
+        self.p = p
+        self.bridges = parse_manual_bridges(p.manual_bridges) if src_map is not None else []
+        self.src_map, self.img_off, self.img_size = src_map, img_off, img_size
+        self.states: dict = {}
+        self.layer_of: dict = {}
+
+    def assign(self, kind: str, refs: list[tuple]) -> dict[int, list[dict]]:
+        """{layer index: [bridges]} for the layers `refs` [(index, ref)] of one kind."""
+        return assign_manual([b for b in self.bridges if b["kind"] == kind], [(i, kind, r) for i, r in refs])
+
+    def apply(self, opening: np.ndarray, index: int, bridges: list[dict], late: bool = False) -> tuple:
+        """(bridges drawn, mask of the removed automatic bridges or None); `late`: the bridges cut
+        after the automatic ones"""
+        drawn, states, forbid = apply_manual_bridges(opening, self.segments(bridges), self.p, late)
+        self.record(index, states)
+        return drawn, forbid
+
+    def late(self, opening: np.ndarray, pre, index: int, bridges: list[dict], held: tuple) -> tuple:
+        """See late_manual: (held, manual bridges drawn)."""
+        held, drawn, states = late_manual(opening, pre, held, self.segments(bridges), self.p)
+        self.record(index, states)
+        return held, drawn
+
+    def segments(self, bridges: list[dict]) -> list[tuple]:
+        if not bridges:
+            return []
+        return manual_segments(bridges, self.src_map, self.img_off, self.img_size)
+
+    def record(self, index: int, states: list) -> None:
+        for bid, *st in states:
+            self.states[bid] = tuple(st)
+            self.layer_of[bid] = index
+
+    def report(self) -> tuple:
+        return tuple(manual_report(self.bridges, self.states, self.layer_of, self.p.px_per_mm))
+
+
+def manual_report(bridges: list[dict], states: dict, layer_of: dict, ppm: float) -> list[dict]:
+    """State of every manual bridge for the interface: {id, layer (index or None), state,
+    seg (sheet mm, ends as used / as drawn)}. `states`: {id: (state, x1, y1, x2, y2) pixels};
+    `layer_of`: {id: layer index}; a bridge of no layer gets the state "layer"."""
+    out = []
+    for b in bridges:
+        st = states.get(b["id"])
+        late = {"after": True} if b.get("after") else {}
+        if st is None:
+            out.append({"id": b["id"], "type": b.get("type", "bridge"), **late, "layer": None, "state": "layer", "seg": None})
+        else:
+            out.append({"id": b["id"], "type": b.get("type", "bridge"), **late, "layer": layer_of.get(b["id"]),
+                        "state": st[0], "seg": [round(v / ppm, 2) for v in st[1:]]})
+    return out
 
 
 # --------------------------------------------------------------------------
@@ -2104,6 +2427,7 @@ class Layer:
     tone: int | None = None  # index of the tone it paints in prepared.palette (colour layers)
     sources: tuple = ()      # line stencils of the "line" style: details:<group> | silhouette | zones | tone<n>
     group: str = ""          # outline stencil: key of its outline layer (A, B...)
+    manual_bridges: int = 0  # manual bridges drawn (included in `bridges`), see apply_manual_bridges
 
 
 @dataclass
@@ -2125,6 +2449,7 @@ class Result:
     zone_lines: dict = field(default_factory=dict)   # whole lines: {zone id: (lines kept, lines detected)}
     detect_painted: np.ndarray | None = None  # layer painting each pixel before the lines were merged
     detect_sim_pre: np.ndarray | None = None  # same render without the layer effects (None = no effect)
+    manual: tuple = ()           # state of each manual bridge (see manual_report)
 
     @property
     def sup_off_mm(self) -> tuple:
@@ -2167,12 +2492,16 @@ def recolor(res: "Result", p: Params) -> "Result":
 
 
 def layer_job(job):
-    """Merges + bridges + vectorisation of one layer (module-level function: can run in another process).
-    `protect`: areas no merge may change (lines added to the layer); `weight`: see merge_zones."""
-    opening, hidden, p, weight, protect = job
+    """Manual bridges + merges + bridges + vectorisation of one layer (module-level function: can
+    run in another process). `protect`: areas no merge may change (lines added to the layer);
+    `weight`: see merge_zones; `manual`: manual bridges of the layer (see apply_manual_bridges)."""
+    opening, hidden, p, weight, protect, manual = job
+    m_drawn, m_states, forbid = apply_manual_bridges(opening, manual, p)
     merged, n_merged = merge_zones(opening, p, hidden, weight, protect)
-    held = hold_material(opening, p, hidden)
-    return opening, held, vectorize(opening, p), merged, n_merged
+    pre = opening.copy() if needs_pre(manual) else None
+    held = hold_material(opening, p, hidden, forbid)
+    held, l_drawn, l_states = late_manual(opening, pre, held, manual, p)   # automatic bridges kept
+    return opening, held, vectorize(opening, p), merged, n_merged, (m_drawn + l_drawn, m_states + l_states)
 
 
 # Parallelism between layers: "thread" (default), "process" (separate processes), or "none" (serial)
@@ -2194,12 +2523,12 @@ def _pool():
 _JOB_CACHE: dict = {}
 _JOB_CACHE_MAX = 24
 # fields with no influence on layer_job (or already reflected in its masks)
-_JOB_KEY_SKIP = {"layer_colors", "layer_effects", "spray_mm"}
+_JOB_KEY_SKIP = {"layer_colors", "layer_effects", "spray_mm", "manual_bridges"}
 
 
 def _job_key(job) -> bytes:
     import hashlib
-    opening, hidden, p, weight, protect = job
+    opening, hidden, p, weight, protect, manual = job
     h = hashlib.blake2b(digest_size=20)
     for a in (opening, hidden, protect):
         if a is None:
@@ -2207,7 +2536,7 @@ def _job_key(job) -> bytes:
         else:
             h.update(repr((a.shape, a.dtype.str)).encode())
             h.update(np.ascontiguousarray(a).tobytes())
-    h.update(repr((round(weight, 6), [(f.name, getattr(p, f.name)) for f in fields(p)
+    h.update(repr((round(weight, 6), manual, [(f.name, getattr(p, f.name)) for f in fields(p)
                                       if f.name not in _JOB_KEY_SKIP])).encode())
     return h.digest()
 
@@ -2250,9 +2579,11 @@ def run_layer_jobs(jobs: list) -> list:
 
 
 def build(prep: Prepared, p: Params, outline_region: np.ndarray | None = None,
-          zone_regions: dict | None = None) -> Result:
+          zone_regions: dict | None = None, src_map: tuple | None = None) -> Result:
     """`zone_regions`: {zone id: boolean mask (image area) limiting the key-detail search of the
-    zone, or None = whole image}; without it, `outline_region` is the first zone's."""
+    zone, or None = whole image}; without it, `outline_region` is the first zone's.
+    `src_map`: ((x0, y0, x1, y1) part of the source image computed, (width, height) of the
+    source), to place the manual bridges (None: manual bridges ignored)."""
     labels = prep.labels
     H, W = labels.shape
     ppm = p.px_per_mm
@@ -2266,6 +2597,7 @@ def build(prep: Prepared, p: Params, outline_region: np.ndarray | None = None,
                    max(int(round((sx1 - sx0) * ppm)), ox + prep.off_px[0] + W + 1))
     X0, Y0 = ox + prep.off_px[0], oy + prep.off_px[1]
     support = hex_to_bgr(p.support_color)
+    manual = ManualBridges(p, src_map, (X0, Y0), (W, H))
 
     n_colors = len(prep.palette)
     sup = None
@@ -2310,6 +2642,7 @@ def build(prep: Prepared, p: Params, outline_region: np.ndarray | None = None,
     colors = [paints.get(li + 1, prep.palette[ci]) for li, ci in enumerate(color_ids)]
 
     def make_result(layers, **kw):
+        kw.setdefault("manual", manual.report())
         return Result(params=p, prepared=prep, layers=layers, support_color=support, support_label=sup,
                       sheet_mm=(sheet_shape[1] / ppm, sheet_shape[0] / ppm),
                       support_mm=(SW / ppm, SH / ppm), image_mm=(W / ppm, H / ppm),
@@ -2320,8 +2653,8 @@ def build(prep: Prepared, p: Params, outline_region: np.ndarray | None = None,
     # without the other; each one goes to an outline layer or into the colour layers.
     entries, groups = outline_entries(p, prep, zone_regions, outline_region)
     if p.stencil_style == "line":
-        return make_result(line_stencils(prep, p, entries, groups, support, place, fx_all),
-                           zone_lines=_zone_lines(entries))
+        layers = line_stencils(prep, p, entries, groups, support, place, fx_all, manual)
+        return make_result(layers, zone_lines=_zone_lines(entries))
 
     # Key-detail lines merged into the colour layers (instead of a separate outline stencil):
     # searched against the render of the layers before bridges, then added to the chosen layer.
@@ -2362,6 +2695,7 @@ def build(prep: Prepared, p: Params, outline_region: np.ndarray | None = None,
                 pre_fx[li] = pre_fx[li] | clean_mask(stroke, p)
 
     # Each layer (bridges + vectorisation) is independent of the others: computed in parallel
+    by_layer = manual.assign("color", [(li + 1, prep.palette[ci]) for li, ci in enumerate(color_ids)])
     jobs = []
     for li, ci in enumerate(color_ids):
         check_cancel()
@@ -2376,17 +2710,20 @@ def build(prep: Prepared, p: Params, outline_region: np.ndarray | None = None,
         under = colors[li - 1] if (p.layering == "cumulative" and li > 0) else support
         de = float(np.linalg.norm(_lab(colors[li]) - _lab(under)))
         protect = place(strokes[li]) > 0 if li in strokes else None
-        jobs.append((place(cleaned), hidden, p, float(np.clip(de / 40.0, 0.15, 1.0)), protect))
+        jobs.append((place(cleaned), hidden, p, float(np.clip(de / 40.0, 0.15, 1.0)), protect,
+                     manual.segments(by_layer.get(li + 1, []))))
     results = run_layer_jobs(jobs)
     layers = []
     for li, ci in enumerate(color_ids):
-        opening, (bridges, n_isl, n_short, n_struct, n_weak), paths, merged, n_merged = results[li]
+        (opening, (bridges, n_isl, n_short, n_struct, n_weak), paths, merged, n_merged,
+         (m_drawn, m_states)) = results[li]
+        manual.record(li + 1, m_states)
         target, cleaned = targets[li], cleaned_all[li]
         layers.append(Layer(index=li + 1, color=colors[li], target=target,
                             opening=opening, lost=cv2.bitwise_xor(pre_fx[li] if li + 1 in fx else cleaned, target),
-                            bridges=bridges, paths=paths,
+                            bridges=list(m_drawn) + bridges, paths=paths,
                             islands=n_isl, short_islands=n_short, struct_bridges=n_struct, weak_spots=n_weak,
-                            merged=merged, n_merged=n_merged, tone=ci))
+                            merged=merged, n_merged=n_merged, tone=ci, manual_bridges=len(m_drawn)))
     res = make_result(layers, detect_sim=detect_sim, detect_painted=detect_painted, lines_added=lines_added,
                       detect_sim_pre=detect_sim_pre, zone_lines=_zone_lines(entries))
 
@@ -2425,14 +2762,21 @@ def build(prep: Prepared, p: Params, outline_region: np.ndarray | None = None,
                                             cleaned_all + out_masks)
             out_masks.append(cleaned)
             opening = place(cleaned)
+            mine = manual.assign("outline", [(n_out, g)]).get(n_out, [])
+            m_drawn, forbid = manual.apply(opening, n_out, mine)
             merged, n_merged = merge_line_islands(opening, p, color, support)
-            bridges, n_isl, n_short, n_struct, n_weak = hold_material(opening, p, None)
+            pre = opening.copy() if needs_pre(manual.segments(mine)) else None
+            held = hold_material(opening, p, None, forbid)
+            held, l_drawn = manual.late(opening, pre, n_out, mine, held)
+            bridges, n_isl, n_short, n_struct, n_weak = held
+            m_drawn = m_drawn + l_drawn
             layers.append(Layer(index=n_out, color=color, target=target, opening=opening,
-                                lost=lost, bridges=bridges, paths=vectorize(opening, p),
+                                lost=lost, bridges=m_drawn + bridges, paths=vectorize(opening, p),
                                 islands=n_isl, short_islands=n_short, struct_bridges=n_struct, weak_spots=n_weak,
                                 merged=merged, n_merged=n_merged,
-                                kind="outline", group=g))
+                                kind="outline", group=g, manual_bridges=len(m_drawn)))
     res.zone_lines = _zone_lines(entries)       # counted once every zone has been searched
+    res.manual = manual.report()                # with the outline stencils
     return res
 
 
@@ -2947,11 +3291,12 @@ def zone_limits(prep: Prepared, p: Params) -> tuple[np.ndarray, np.ndarray]:
 
 
 def line_stencils(prep: Prepared, p: Params, entries: list, groups: dict, support: np.ndarray,
-                  place, fx: dict | None = None) -> list:
+                  place, fx: dict | None = None, manual: "ManualBridges | None" = None) -> list:
     """Stencils of the "line" style: no flat colour, only lines, one stencil per line colour
     (sprayed from the lightest to the darkest). Sources: key details found against the bare
     support, silhouette of a mask, limits between the tone zones (colouring book).
-    `fx`: effects per stencil number (see `effects.parse`), each applied to its stencil alone."""
+    `fx`: effects per stencil number (see `effects.parse`), each applied to its stencil alone.
+    `manual`: manual bridges, matched to the stencils by their colour."""
     H, W = prep.labels.shape
     ppm = p.px_per_mm
     flat = np.empty((H, W, 3), np.uint8)
@@ -3012,6 +3357,7 @@ def line_stencils(prep: Prepared, p: Params, entries: list, groups: dict, suppor
             g[1].append(src)
     order = sorted(by_colour.values(), key=lambda g: -float(_lab(g[2].reshape(1, 3))[0, 0]))  # light first
     layers, done = [], []
+    by_layer = manual.assign("line", [(i + 1, c) for i, (_t, _s, c) in enumerate(order)]) if manual else {}
     for i, (target, srcs, c) in enumerate(order):
         cleaned = clean_mask(target, p)
         lost = cv2.bitwise_xor(cleaned, target)
@@ -3019,13 +3365,21 @@ def line_stencils(prep: Prepared, p: Params, entries: list, groups: dict, suppor
             cleaned = fxmod.apply_alone(cleaned, fx[i + 1], p, prep.resized, prep.off_px, done)
         done.append(cleaned)
         opening = place(cleaned)
+        mine = by_layer.get(i + 1, [])
+        m_drawn, forbid = manual.apply(opening, i + 1, mine) if manual else ([], None)
         merged, n_merged = merge_line_islands(opening, p, c, support)
-        bridges, n_isl, n_short, n_struct, n_weak = hold_material(opening, p, None)
+        pre = opening.copy() if manual and needs_pre(manual.segments(mine)) else None
+        held = hold_material(opening, p, None, forbid)
+        if manual:
+            held, l_drawn = manual.late(opening, pre, i + 1, mine, held)
+            m_drawn = m_drawn + l_drawn
+        bridges, n_isl, n_short, n_struct, n_weak = held
         layers.append(Layer(index=i + 1, color=c, target=target, opening=opening,
-                            lost=lost, bridges=bridges,
+                            lost=lost, bridges=m_drawn + bridges,
                             paths=vectorize(opening, p), islands=n_isl, short_islands=n_short,
                             struct_bridges=n_struct, weak_spots=n_weak,
-                            merged=merged, n_merged=n_merged, kind="outline", sources=tuple(srcs)))
+                            merged=merged, n_merged=n_merged, kind="outline", sources=tuple(srcs),
+                            manual_bridges=len(m_drawn)))
     return layers
 
 
@@ -3857,6 +4211,7 @@ def layer_stats(L: Layer) -> dict:
         "kind": L.kind,
         "short_islands": L.short_islands,
         "struct_bridges": L.struct_bridges,
+        "manual_bridges": getattr(L, "manual_bridges", 0),
         "weak_spots": L.weak_spots,
         "cut_length_m": round(length / 1000, 2),
         "lost_pct": round(100 * float((L.lost > 0).mean()), 1),

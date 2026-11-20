@@ -597,7 +597,9 @@ def compute(sess, data):
     recolored = (sess.get("result") is not None and old is not None and pl.colors_only(p)
                  and old[0] == geom[0] and all(a is b for a, b in zip(old[1], geom[1])))
     try:
-        res = pl.recolor(sess["result"], p) if recolored else pl.build(sess["prep"], p, zone_regions=regions)
+        src_map = (lay.src_rect, (sess["img"].shape[1], sess["img"].shape[0]))
+        res = (pl.recolor(sess["result"], p) if recolored
+               else pl.build(sess["prep"], p, zone_regions=regions, src_map=src_map))
     except teed.TeedError as e:          # learned edges: model missing or unreadable
         return jsonify(error=str(e)), 503
     if p.stencil_style == "line" and not res.layers:
@@ -648,6 +650,9 @@ def compute(sess, data):
             "tone": L.tone,     # tone (index in `palette`) painted by this layer; None for the outline layer
             "sources": list(L.sources),   # line style: where the lines of this stencil come from
             "group": L.group,             # outline stencil: its outline layer (A, B...)
+            # automatic bridges (sheet mm), so that the manual bridge tool can pick one to remove
+            "auto_bridges": [[round(v / p.px_per_mm, 2) for v in b]
+                             for b in L.bridges[getattr(L, "manual_bridges", 0):]],
             # layer view without highlights + bridges and removed details as separate overlays
             # (shown / hidden in the browser)
             "image": cached((L.index, "view", hexc, tuple(sheet)),
@@ -681,14 +686,23 @@ def compute(sess, data):
     ref = on_support(res.prepared.raw if res.prepared.raw is not None else res.prepared.resized)
     pre_on = pl.preprocess_active(p) or res.prepared.fg is not None
     sheet_sim = pl.simulate_sheet(res)
+    mask_src = [lay.src_rect[0] / sess["img"].shape[1], lay.src_rect[1] / sess["img"].shape[0],
+                lay.src_rect[2] / sess["img"].shape[1], lay.src_rect[3] / sess["img"].shape[0]]
     out = dict(
         reference=png_b64(ref),
         # where the computed image area is in the preview images (fractions of the preview) and
         # which part of the source image it shows (fractions of the source): the Masks tab draws
         # the layers under a mask painted on the source image
         mask_map={"img": [ix * k / size[0], iy * k / size[1], (ix + W) * k / size[0], (iy + H) * k / size[1]],
-                  "src": [lay.src_rect[0] / sess["img"].shape[1], lay.src_rect[1] / sess["img"].shape[0],
-                          lay.src_rect[2] / sess["img"].shape[1], lay.src_rect[3] / sess["img"].shape[0]]},
+                  "src": mask_src},
+        # manual bridges: the computed image area in sheet mm and the part of the source it shows
+        # (fractions), to convert a segment drawn on a stencil into source fractions and back;
+        # state of each manual bridge (see pl.manual_report)
+        bridge_map={"mm": [round(v, 4) for v in (res.img_off_px[0] / p.px_per_mm, res.img_off_px[1] / p.px_per_mm,
+                                                 (res.img_off_px[0] + W) / p.px_per_mm,
+                                                 (res.img_off_px[1] + H) / p.px_per_mm)],
+                    "src": mask_src},
+        manual_bridges=list(res.manual),
         reference_pre=png_b64(on_support(pre_view(res))) if pre_on else None,
         subject_used=res.prepared.fg is not None,
         histogram=res.prepared.hist,
