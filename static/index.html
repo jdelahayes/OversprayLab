@@ -82,7 +82,14 @@
   section.view { padding: 14px 18px; overflow-y: auto; max-height: calc(100vh - 49px); display: flex; flex-direction: column; }
   section.view > * { flex-shrink: 0; }
   section.view > .viewspacer { flex: 1 0 10px; }
-  section.view:fullscreen { max-height: none; height: 100vh; box-sizing: border-box; background: var(--bg); }
+  /* full screen: the whole page minus the header (the popups and dialogs stay reachable); the side
+     panels start folded, Tab shows / hides them */
+  body.fs > header { display: none; }
+  body.fs main { min-height: 100vh; }
+  body.fs aside, body.fs .layercol { max-height: 100vh; }
+  body.fs section.view { max-height: none; height: 100vh; box-sizing: border-box; }
+  body.fs main.stageonly section.view > :not(.stage) { display: none !important; }
+  body.fs main.stageonly section.view { padding: 6px; }
   fieldset { border: 1px solid var(--line); border-radius: 8px; margin: 0 0 12px; padding: 8px 10px 10px; min-width: 0; }
   .fxlh { flex-wrap: wrap; }
   legend { font-weight: 600; padding: 0 4px; font-size: 13px; }
@@ -3733,36 +3740,54 @@ async function init() {
   // (in a text or number field, the field's own undo is left alone)
   $("undoBtn").onclick = () => historyGo(-1);
   $("redoBtn").onclick = () => historyGo(1);
-  // full screen: the whole view column (tabs, toolbars, image, info dock); Escape leaves it (browser)
-  const fullView = document.querySelector("section.view"), fullBtn = $("fullBtn");
-  if (!fullView.requestFullscreen) fullBtn.hidden = true;
+  // full screen: the whole page without the header (the popups, outside <main>, stay visible), the
+  // side panels as they were; Tab goes round panels shown → panels folded → view alone (no tabs,
+  // toolbars nor info dock) → panels shown. Leaving (Escape, browser) puts the panels back as they
+  // were before.
+  const fullRoot = document.documentElement, fullBtn = $("fullBtn"), mainEl = document.querySelector("main");
+  if (!fullRoot.requestFullscreen) fullBtn.hidden = true;
+  let panelsBeforeFull = null;
   fullBtn.onclick = () => document.fullscreenElement
-    ? document.exitFullscreen() : fullView.requestFullscreen().catch(() => {});
+    ? document.exitFullscreen() : fullRoot.requestFullscreen().catch(() => {});
   document.addEventListener("fullscreenchange", () => {
-    const on = document.fullscreenElement === fullView;
+    const on = document.fullscreenElement === fullRoot;
+    if (on === document.body.classList.contains("fs")) return;
+    document.body.classList.toggle("fs", on);
+    if (on) panelsBeforeFull = mainEl.classList.contains("nopanels");
+    else {
+      mainEl.classList.remove("stageonly");
+      if (panelsBeforeFull !== null && mainEl.classList.contains("nopanels") !== panelsBeforeFull) togglePanels(false);
+      panelsBeforeFull = null;
+    }
     fullBtn.setAttribute("aria-pressed", String(on));
-    fullBtn.title = on ? "Quitter le plein écran (Échap)" : "Vue en plein écran ; Échap pour sortir";
+    fullBtn.title = on ? "Quitter le plein écran (Échap) ; Tab : panneaux, puis vue seule" : "Vue en plein écran ; Échap pour sortir";
     fullBtn.setAttribute("aria-label", on ? "Quitter le plein écran" : "Plein écran");
     stageH(); window.dispatchEvent(new Event("resize"));
   });
   // Side panels folded / unfolded: button above the view or the Tab key (outside the form fields
   // and the dialogs; Shift + Tab keeps moving the focus)
   const panelsBtn = $("panelsBtn");
-  const togglePanels = () => {
+  function togglePanels(refit = true) {
     const on = document.querySelector("main").classList.toggle("nopanels");
     panelsBtn.setAttribute("aria-pressed", String(on));
     panelsBtn.title = on ? "Afficher les panneaux latéraux (Tab)" : "Masquer les panneaux latéraux (Tab)";
     panelsBtn.setAttribute("aria-label", on ? "Afficher les panneaux" : "Masquer les panneaux");
-    stageH(); window.dispatchEvent(new Event("resize"));             // the centre image re-fits
-  };
-  panelsBtn.onclick = togglePanels;
+    if (refit) { stageH(); window.dispatchEvent(new Event("resize")); }   // the centre image re-fits
+  }
+  panelsBtn.onclick = () => togglePanels();
   document.addEventListener("keydown", e => {
     if (e.key !== "Tab" || e.shiftKey || e.ctrlKey || e.metaKey || e.altKey || e.defaultPrevented) return;
     const a = document.activeElement;
     if (a && (a.isContentEditable || /^(INPUT|SELECT|TEXTAREA)$/.test(a.tagName))) return;
     if (a && a.closest && a.closest(".modalback, [role=dialog], .colorpop, .paledit, .palmenu")) return;
     if ([...document.querySelectorAll(".modalback")].some(m => !m.hidden)) return;
-    e.preventDefault(); togglePanels();
+    e.preventDefault();
+    if (!document.body.classList.contains("fs") || !mainEl.classList.contains("nopanels")) togglePanels();
+    else if (!mainEl.classList.contains("stageonly")) {          // full screen: view alone
+      mainEl.classList.add("stageonly");
+      if (a && a !== document.body && a.closest && a.closest("section.view") && !a.closest("#stage")) a.blur();
+      stageH(); window.dispatchEvent(new Event("resize"));
+    } else { mainEl.classList.remove("stageonly"); togglePanels(); }
   });
   document.addEventListener("keydown", e => {
     if (!(e.ctrlKey || e.metaKey) || e.altKey || !SID) return;
@@ -6168,17 +6193,17 @@ function stageH() {
   // compare bar (above the view) shown before measuring (applyZoom shows it too, but after the view is fitted)
   $("compareBar").hidden = !(LAST && SEL === null && VIEW === "compare");
   // the boxes under the view (warnings, dimensions) are kept on screen: taken off the minimum height too
-  const warnH = ["infoDock"].reduce((a, id) => { const e = $(id); return a + (e && !e.hidden ? e.offsetHeight + 10 : 0); }, 0);
+  const warnH = ["infoDock"].reduce((a, id) => { const e = $(id); return a + (e && !e.hidden && e.offsetParent ? e.offsetHeight + 10 : 0); }, 0);
   let h = window.innerHeight * 0.72 - warnH;
   // column with its own scrolling, or the view in full screen (as tall as the window)
-  if (view && st && (view.clientHeight < window.innerHeight || document.fullscreenElement === view)) {
+  if (view && st && (view.clientHeight < window.innerHeight || document.body.classList.contains("fs"))) {
     const top = st.getBoundingClientRect().top - view.getBoundingClientRect().top + view.scrollTop;
     const cs = getComputedStyle(st), num = v => parseFloat(v) || 0;
     const pad = num(cs.paddingTop) + num(cs.paddingBottom) + num(cs.borderTopWidth) + num(cs.borderBottomWidth);
     let below = 0;
     for (const id of ["infoDock"]) {
       const e = $(id);
-      if (!e || e.hidden) continue;
+      if (!e || e.hidden || !e.offsetParent) continue;            // hidden, or the view alone in full screen
       const m = getComputedStyle(e);
       below += e.offsetHeight + num(m.marginTop) + num(m.marginBottom) + (id === "infoDock" ? 10 : 0);   // + spacer
     }

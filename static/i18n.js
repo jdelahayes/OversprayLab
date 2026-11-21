@@ -163,6 +163,7 @@ try {
     "Rétablir le changement annulé (Ctrl + Y ou Ctrl + Maj + Z)": "Redo the undone change (Ctrl + Y or Ctrl + Shift + Z)",
     "Vue en plein écran ; Échap pour sortir": "Full-screen view; Esc to leave",
     "Quitter le plein écran (Échap)": "Leave full screen (Esc)",
+    "Quitter le plein écran (Échap) ; Tab : panneaux, puis vue seule": "Leave full screen (Esc); Tab: panels, then view alone",
     "Plein écran": "Full screen",
     "Masquer les panneaux latéraux (Tab)": "Hide the side panels (Tab)",
     "Afficher les panneaux latéraux (Tab)": "Show the side panels (Tab)",
