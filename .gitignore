@@ -9,6 +9,7 @@ presets_utilisateur.json
 
 # Exports et fichiers temporaires
 *_pochoirs.zip
+exports/
 
 # Photos de test personnelles
 samples/2400x0.jpg
