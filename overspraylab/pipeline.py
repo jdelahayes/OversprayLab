@@ -3242,13 +3242,16 @@ def lines_into_layers(prep: Prepared, sim: np.ndarray, p: Params, region: np.nda
     """Key-detail lines to add to the colour layers: {layer position: stroke mask (image area)}.
 
     `painted`: position of the last layer painting each pixel once cut (-1 = bare support).
-    Each line goes to a layer painted after the one(s) under it (darker tone, otherwise the paint
-    would not show): the darkest layer, or (`nearest`) the one whose tone is closest to the line's
-    colour in the original. Lines over an area already painted by the last layer are left out
-    (they are already cut). A given layer ("L<n>", beyond the last = the last): the parts of the
-    lines over a layer painted after it are left out (they would be covered). With `stages`,
-    returns the detection stages instead, the stroke limited to the lines added and `present` =
-    lines already in the layers (or covered)."""
+    Lines are placed piece by piece, a piece being the part of a line over one same layer (the
+    lightest one under its stroke): each piece goes to a layer painted after that one (darker
+    tone, otherwise the paint would not show): the darkest layer, or (`nearest`) the one whose
+    tone is closest to the piece's colour in the original, so a line may change layer on its way.
+    Pieces over an area already painted by the last layer are left out (they are already cut), as
+    are pieces too short to show once cut. (A whole line given to the layer most frequent under it
+    lost e.g. a mouth line half over a light chin, half over the dark mask.) A given layer ("L<n>",
+    beyond the last = the last): the parts of the lines over a layer painted after it are left out
+    (they would be covered). With `stages`, returns the detection stages instead, the stroke
+    limited to the lines added and `present` = lines already in the layers (or covered)."""
     st = detect_key_details(prep, sim, p, region, dark=True, stages=True)
     width = max(p.outline_width_mm, p.min_opening_mm * 1.05)
     k = disk(width * p.px_per_mm / 2)
@@ -3265,30 +3268,46 @@ def lines_into_layers(prep: Prepared, sim: np.ndarray, p: Params, region: np.nda
         return dict(st, present=np.zeros_like(st["kept"])) if stages else ({}, 0)
     ys, xs = np.nonzero(comp)
     c = comp[ys, xs]
-    # layer painting the area in the cut stencils = most frequent one along the line
-    nl = len(color_ids) + 1
-    counts = np.bincount(c * nl + painted[ys, xs] + 1, minlength=n * nl).reshape(n, nl)
-    local = counts.argmax(axis=1) - 1
-    # mean colour of the line in the original photo (the tone colours are measured there too)
-    lab = _lab(original(prep)[ys, xs]).astype(np.float64) if len(ys) else np.zeros((0, 3))
-    tot = np.bincount(c, minlength=n).astype(np.float64)
-    mean = np.stack([np.bincount(c, lab[:, k], minlength=n) for k in range(3)], 1) / np.maximum(tot, 1)[:, None]
     pal = _lab(prep.palette)
-    assign = np.full(n, -1, np.int32)
-    for i in range(1, n):
-        cands = list(range(local[i] + 1, len(color_ids)))         # layers are sorted light -> dark
-        if not cands:
-            continue
-        if p.outline_target == "nearest":
-            assign[i] = min(cands, key=lambda li: float(np.sum((pal[color_ids[li]] - mean[i]) ** 2)))
-        else:
-            assign[i] = cands[-1]
-    out = {}
-    for li in sorted(set(assign[assign >= 0].tolist())):
-        m = (assign[comp] == li) & (comp > 0)
-        out[li] = cv2.dilate(m.astype(np.uint8) * 255, k)
-    present = (assign[comp] < 0) & (comp > 0)
-    added = int((assign[1:] >= 0).sum())
+    out, added = {}, 0
+    present = np.zeros(comp.shape, bool)
+    if len(ys):
+        # pieces = (line, lightest layer under its stroke); layers are sorted light -> dark
+        nl = len(color_ids)
+        under = cv2.erode(painted.astype(np.int16), k)[ys, xs].astype(np.int64)
+        pids, inv = np.unique(c.astype(np.int64) * (nl + 1) + under + 1, return_inverse=True)
+        inv = inv.ravel()
+        # mean colour of each piece in the original photo (the tone colours are measured there too)
+        lab = _lab(original(prep)[ys, xs]).astype(np.float64)
+        tot = np.bincount(inv, minlength=len(pids)).astype(np.float64)
+        mean = np.stack([np.bincount(inv, lab[:, ch], minlength=len(pids)) for ch in range(3)], 1) \
+            / np.maximum(tot, 1)[:, None]
+        assign = np.full(len(pids), -1, np.int32)
+        for j, pid in enumerate(pids.tolist()):
+            cands = list(range(pid % (nl + 1), nl))      # layers painted after the one under the piece
+            if not cands:
+                continue
+            if p.outline_target == "nearest":
+                assign[j] = min(cands, key=lambda li: float(np.sum((pal[color_ids[li]] - mean[j]) ** 2)))
+            else:
+                assign[j] = cands[-1]
+        a = assign[inv]
+        keep = np.zeros(comp.shape, bool)
+        min_size = max(2, k.shape[0])
+        for li in sorted(set(assign[assign >= 0].tolist())):
+            m = np.zeros(comp.shape, np.uint8)
+            sel = a == li
+            m[ys[sel], xs[sel]] = 1
+            # pieces too short to show once cut (shorter than the stroke width): dropped
+            nc, cc, stats, _ = cv2.connectedComponentsWithStats(m, connectivity=8)
+            ok = np.maximum(stats[:, cv2.CC_STAT_WIDTH], stats[:, cv2.CC_STAT_HEIGHT]) >= min_size
+            ok[0] = False
+            m = ok[cc]
+            if m.any():
+                out[li] = cv2.dilate(m.astype(np.uint8) * 255, k)
+                keep |= m
+        present = (comp > 0) & ~keep
+        added = len(np.unique(comp[keep]))              # lines with at least one piece added
     if sil is not None:
         # Silhouette: each piece goes to a layer darker than the lightest one painted under its
         # stroke (both sides of the edge), so that it shows at least on the lighter side; only the
