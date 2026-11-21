@@ -155,6 +155,44 @@ EFFECTS: dict[str, dict] = {
                "entièrement dans la couche, sans descendre sous le Ø mini (sinon ils sont supprimés)"),
         ],
     },
+    "halftone_lines": {
+        "label": "Trame de lignes", "category": "Remplissage",
+        "tip": "Remplace l'aplat par des lignes parallèles dont l'épaisseur varie (trame de lignes, effet "
+               "pop art ou vitesse) : selon la distance au bord, un dégradé à travers la couche ou les tons "
+               "de l'image d'origine. Les lignes s'affinent en pointe là où leur épaisseur diminue.",
+        "params": [
+            _f("pitch_mm", "Pas", 0.8, 30, 0.1, 3, "mm", "Distance entre deux lignes voisines"),
+            _f("wmin_mm", "Largeur mini", 0, 20, 0.1, 0, "mm",
+               "Épaisseur des lignes les plus fines (0 = les lignes s'effilent jusqu'à disparaître)"),
+            _f("wmax_mm", "Largeur maxi", 0.3, 30, 0.1, 2.4, "mm",
+               "Épaisseur des lignes les plus épaisses (égale au pas : les lignes se touchent)"),
+            _c("style", "Lignes", [["straight", "droites"], ["wave", "ondulées"], ["zigzag", "en zigzag"],
+                                   ["circles", "cercles concentriques"]], "straight",
+               "Droites : parallèles, à l'angle choisi. Ondulées ou en zigzag : parallèles et ondulantes. "
+               "Cercles : centrés sur la couche"),
+            _f("angle", "Angle", 0, 180, 1, 0, "°", "Orientation des lignes",
+               when={"style": ["straight", "wave", "zigzag"]}),
+            _f("amplitude_mm", "Amplitude", 0.1, 30, 0.1, 1.5, "mm", "Hauteur des ondulations",
+               when={"style": ["wave", "zigzag"]}),
+            _f("period_mm", "Période", 1, 200, 0.5, 12, "mm", "Longueur d'une ondulation",
+               when={"style": ["wave", "zigzag"]}),
+            _c("source", "Épaisseur",
+               [["gradient", "dégradé à travers la couche"], ["edge", "selon la distance au bord"],
+                ["tone", "selon les tons de l'image"], ["flat", "constante (largeur maxi)"]],
+               "gradient",
+               "Dégradé : épaisses d'un côté de la couche, fines de l'autre. Distance au bord : fines près du "
+               "bord, épaisses au centre. Tons : épaisses dans les zones sombres de l'image d'origine, fines "
+               "dans les claires. Constante : toutes à la largeur maxi"),
+            _f("grad_angle", "Direction du dégradé", 0, 360, 1, 90, "°",
+               "Sens dans lequel les lignes s'affinent (0° = vers la droite, 90° = vers le bas)",
+               when={"source": "gradient"}),
+            _i("grad_extent", "Étendue du dégradé", 10, 100, 100,
+               "Part de la couche sur laquelle les lignes s'affinent ; au-delà elles restent à la largeur mini",
+               unit="%", when={"source": "gradient"}),
+            _f("fade_mm", "Fondu depuis le bord", 0.5, 50, 0.5, 6, "mm",
+               "Distance au bord sur laquelle les lignes s'épaississent", when={"source": "edge"}),
+        ],
+    },
     "hatch": {
         "label": "Hachures", "category": "Remplissage",
         "tip": "Remplace l'aplat par des bandes parallèles (hachures), simples ou croisées. Les hachures "
@@ -766,6 +804,51 @@ def fx_engrave(mask, ctx, a):
     return _u8((f <= w / 2) & (w > 0) & (mask > 0))
 
 
+def fx_halftone_lines(mask, ctx, a):
+    """Line screen: parallel (or concentric) lines whose width follows a share t in 0..1, sampled
+    per pixel so that the lines taper smoothly into points."""
+    if not mask.any():
+        return mask
+    ppm = ctx.ppm
+    pitch = a["pitch_mm"]
+    wmin, wmax = sorted((a["wmin_mm"], a["wmax_mm"]))
+    style = a["style"]
+    X, Y = ctx.grid_mm(mask.shape)
+    if style == "circles":
+        m = cv2.moments(mask, binaryImage=True)
+        cx = (m["m10"] / m["m00"] + 0.5 + ctx.off_px[0]) / ppm
+        cy = (m["m01"] / m["m00"] + 0.5 + ctx.off_px[1]) / ppm
+        u = np.hypot(X - cx, Y - cy)
+    else:
+        th = math.radians(a["angle"])
+        c, s = math.cos(th), math.sin(th)
+        u = X * c + Y * s
+        if style in ("wave", "zigzag"):
+            ph = (Y * c - X * s) / a["period_mm"]
+            w = np.sin(2 * np.pi * ph) if style == "wave" else 2 * np.abs(2 * np.mod(ph + 0.25, 1) - 1) - 1
+            u += a["amplitude_mm"] * w
+    f = np.abs(np.mod(u, pitch) - pitch / 2)       # distance to the centre line of the nearest line
+    del u
+    src = a["source"]
+    if src == "flat":
+        t = np.float32(1.0)
+    elif src == "edge":                            # the image border counts as outside
+        dist = _dist_inside(np.pad(mask, 1))[1:-1, 1:-1] / ppm
+        t = np.clip(dist / max(a["fade_mm"], 1e-3), 0, 1)
+    elif src == "tone":
+        t = _darkness(ctx, mask, pitch * ppm * 0.5)
+    else:                                          # linear gradient across the layer: thick -> thin
+        g = math.radians(a["grad_angle"])
+        p = X * math.cos(g) + Y * math.sin(g)
+        inside = p[mask > 0]
+        lo, hi = float(inside.min()), float(inside.max())
+        span = max((hi - lo) * a["grad_extent"] / 100.0, 1e-3)
+        t = np.clip(1 - (p - lo) / span, 0, 1)
+    del X, Y
+    w = wmin + (wmax - wmin) * t
+    return _u8((f <= w / 2) & (w > 0) & (mask > 0))
+
+
 def _stripes(X, Y, angle_deg, pitch, width):
     th = math.radians(angle_deg)
     u = X * math.cos(th) + Y * math.sin(th)
@@ -1105,7 +1188,7 @@ def fx_merge(mask, ctx, a):
 
 APPLY = {"smooth": fx_smooth, "polygon": fx_polygon, "angular": fx_angular, "rough": fx_rough,
          "wavy": fx_wavy, "drips": fx_drips, "offset": fx_offset, "halftone": fx_halftone,
-         "hatch": fx_hatch, "engrave": fx_engrave, "levels": fx_levels, "pattern": fx_pattern,
+         "halftone_lines": fx_halftone_lines, "hatch": fx_hatch, "engrave": fx_engrave, "levels": fx_levels, "pattern": fx_pattern,
          "outline": fx_outline, "shadow": fx_shadow, "halo": fx_halo, "blend": fx_blend, "mosaic": fx_mosaic, "bridges": fx_bridges, "overlap": fx_overlap,
          "merge": fx_merge}
 assert set(APPLY) == set(EFFECTS)

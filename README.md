@@ -131,7 +131,7 @@ also **draw bridges by hand** or remove automatic ones.
 ### Layer effects
 
 Each layer gets its own stack of effects, applied before the bridges: smoothing, polygonal or
-angular outlines, rough or wavy edges, drips, **halftone dots**, hatching, engraving, contour lines,
+angular outlines, rough or wavy edges, drips, **halftone dots**, **halftone lines**, hatching, engraving, contour lines,
 patterns, outline only, drop shadow, halo, blends between layers, mosaic, decorative bridges,
 overlap…
 
