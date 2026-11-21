@@ -684,7 +684,7 @@ try {
     "Erreur de la sélection d'objet": "Object selection error",
     "Requête de sélection invalide": "Invalid selection request",
     "Modèle de sélection téléchargé corrompu (empreinte SHA-256 inattendue)": "Downloaded selection model is corrupt (unexpected SHA-256 hash)",
-    "Module onnxruntime absent : relancez lancer.bat (qui installe les dépendances de requirements.txt)": "onnxruntime module missing: restart lancer.bat (it installs the dependencies of requirements.txt)",
+    "Module onnxruntime absent : relancez start.bat ou start.sh (qui installent les dépendances de requirements.txt)": "onnxruntime module missing: restart start.bat or start.sh (they install the dependencies of requirements.txt)",
     "Support foncé : les zones sombres laissées au support deviennent des îlots dans les couches claires, et leurs ponts resteront visibles. Pour des aplats foncés sans pont, décochez « La teinte la plus proche du support reste nue ».": "Dark support: dark areas left to the support become islands in the light layers, and their bridges will stay visible. For dark flat areas without bridges, uncheck “The tone closest to the support stays bare”.",
     "L'image dépasse du support : elle est rognée à ses bords (impression à fond perdu).": "The image overflows the support: it is cropped at its edges (full bleed).",
     "L'image est entièrement hors du support : elle a été recentrée.": "The image is entirely outside the support: it has been re-centred.",

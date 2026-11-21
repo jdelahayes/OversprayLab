@@ -36,15 +36,26 @@ stencil after another. OversprayLab takes care of the tedious part:
 
 ## Installation
 
-Requirements: **Windows** with **Python 3.10+** (any recent browser).
+Requirements: **Windows, Linux or macOS** with **Python 3.10+** (any recent browser).
 
-Double-click **`lancer.bat`**: the first launch creates a virtual environment and installs the
-dependencies, then opens **http://127.0.0.1:5000**. Manually (any OS):
+Start the launcher of your system: the first launch creates a virtual environment and installs the
+dependencies, then the application opens in the browser at **http://127.0.0.1:5000**.
+
+- **Windows**: double-click **`start.bat`**.
+- **Linux**: run **`./start.sh`** in a terminal. On Debian/Ubuntu, the venv module may need to be
+  installed first: `sudo apt install python3-venv`.
+- **macOS**: double-click **`start.command`** (or run `./start.sh` in a terminal). The first time,
+  macOS may block it: right-click it, then **Open**. Python 3.10+ comes from
+  [python.org](https://www.python.org/downloads/) or Homebrew (the `python3` of the Xcode tools is
+  too old).
+
+If port 5000 is already used by another program (on macOS, the AirPlay Receiver), the next free
+port from 5002 to 5009 is used instead; the console shows the address. Manually (any OS):
 
 ```
 python -m venv .venv
 .venv\Scripts\python -m pip install -r requirements.txt      # Linux/macOS: .venv/bin/python
-.venv\Scripts\python app.py
+.venv\Scripts\python app.py --open
 ```
 
 Everything runs locally; your images never leave your computer. The **Object** selection tool

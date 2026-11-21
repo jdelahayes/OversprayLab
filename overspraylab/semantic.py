@@ -76,7 +76,7 @@ def _load():
             try:
                 import onnxruntime as ort
             except ImportError as e:
-                raise SemanticError("Module onnxruntime absent : relancez lancer.bat (qui installe les "
+                raise SemanticError("Module onnxruntime absent : relancez start.bat ou start.sh (qui installent les "
                                     "dépendances de requirements.txt)") from e
             _download()
             prov = ["CPUExecutionProvider"]

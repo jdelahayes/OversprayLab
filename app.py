@@ -1311,9 +1311,64 @@ def api_snapshot():
     return jsonify({**project_state(d, snap), "snap": snap})
 
 
-if __name__ == "__main__":
+DEFAULT_PORT = 5000
+# tried in turn when 5000 is taken (on macOS 12+ the AirPlay Receiver listens on 5000); 5001 is left
+# to test instances
+FALLBACK_PORTS = range(5002, 5010)
+
+
+def port_free(port: int) -> bool:
+    """True when 127.0.0.1:port can be bound. No SO_REUSEADDR, so a port held by another program
+    (also through a wildcard address, like AirPlay on macOS) counts as taken."""
+    import socket
+    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+        try:
+            s.bind(("127.0.0.1", port))
+        except OSError:
+            return False
+    return True
+
+
+def running_here(port: int) -> bool:
+    """True when an OversprayLab server already answers on the port."""
+    import urllib.request
+    try:
+        with urllib.request.urlopen(f"http://127.0.0.1:{port}/", timeout=2) as r:
+            return b"<title>OversprayLab</title>" in r.read(4096)
+    except Exception:
+        return False
+
+
+def main() -> None:
     import os
-    # OVERSPRAYLAB_PORT: run a second instance (e.g. for tests) next to the usual one on 5000
-    port = int(os.environ.get("OVERSPRAYLAB_PORT", "5000"))
-    print(f"OversprayLab : http://127.0.0.1:{port}")
+    import sys
+    import webbrowser
+    # --open (start.bat / start.sh): opens the application in the browser once the server listens
+    open_browser = "--open" in sys.argv[1:]
+    # OVERSPRAYLAB_PORT: run a second instance (e.g. for tests) next to the usual one on 5000; that
+    # port is used as is, without falling back to another one
+    forced = os.environ.get("OVERSPRAYLAB_PORT")
+    port = int(forced or DEFAULT_PORT)
+    if not forced and not port_free(port):
+        # first port that is free or already serves OversprayLab (launched twice: that one is reused)
+        port = next((p for p in (DEFAULT_PORT, *FALLBACK_PORTS) if port_free(p) or running_here(p)), None)
+        if port is not None and not port_free(port):
+            print(f"OversprayLab is already running: http://127.0.0.1:{port}")
+            if open_browser:
+                webbrowser.open(f"http://127.0.0.1:{port}")
+            return
+        if port is None:
+            sys.exit(f"Port {DEFAULT_PORT} is used by another program, and so are ports "
+                     f"{FALLBACK_PORTS.start}-{FALLBACK_PORTS.stop - 1}. Set another one with OVERSPRAYLAB_PORT.")
+        print(f"Port {DEFAULT_PORT} is used by another program (on macOS: the AirPlay Receiver, which can be "
+              f"turned off in System Settings > General > AirDrop & Handoff); using port {port}.\n"
+              f"Settings remembered by the browser are kept per port.")
+    url = f"http://127.0.0.1:{port}"
+    print(f"OversprayLab: {url}")
+    if open_browser:
+        threading.Timer(1.0, webbrowser.open, (url,)).start()
     app.run(host="127.0.0.1", port=port, debug=False, threaded=True)
+
+
+if __name__ == "__main__":
+    main()

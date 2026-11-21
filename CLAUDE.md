@@ -5,7 +5,7 @@ are not obvious from the code.
 
 ## Run
 
-- Server: `.venv/Scripts/python app.py` → http://127.0.0.1:5000 (or `lancer.bat`).
+- Server: `.venv/Scripts/python app.py` → http://127.0.0.1:5000 (or `start.bat`; `start.sh` on Linux/macOS; both pass `--open`, and without `OVERSPRAYLAB_PORT` a busy 5000 falls back to 5002-5009).
 - Restart the server after any Python change (`app.py`, `overspraylab/*.py`); `static/` is served live.
 - `OVERSPRAYLAB_PORT=5001` runs a second instance; tests go there, 5000 is the author's own instance.
 - Layer computation is parallel; `OVERSPRAYLAB_PARALLEL=thread|process|none` (`none` helps debugging).
