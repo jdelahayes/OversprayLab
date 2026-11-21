@@ -2252,8 +2252,10 @@ function resolutionWarning() {
 }
 // Warnings box under the view: the warnings of the last computation (RENDER_WARNS) plus the
 // resolution one, which follows the image size live. Opened whenever a warning that was not shown
-// just before appears (compared on its start, so a changed number does not reopen it).
-let RENDER_WARNS = [], WARN_SEEN = new Set();
+// just before appears (compared on its start, so a changed number does not reopen it). Between a
+// session change (RENDER_WARNS dropped) and its first result, the warnings seen are kept, so that the
+// same warnings coming back (snapshot or project opened) do not reopen it.
+let RENDER_WARNS = [], WARN_SEEN = new Set(), WARN_STALE = false;
 const warnKey = w => w.replace(/<[^>]*>/g, "").split(/ :|[.(]/)[0].trim();
 function showResolutionWarning() { updateWarnings(); }
 function stockWarnings() {
@@ -2275,7 +2277,7 @@ function updateWarnings() {
   box.hidden = !items.length;
   const keys = new Set(items.map(warnKey));
   const fresh = [...keys].some(k => !WARN_SEEN.has(k));
-  WARN_SEEN = keys;
+  WARN_SEEN = WARN_STALE ? new Set([...WARN_SEEN, ...keys]) : keys;
   $("warnSum").textContent = `Avertissements (${items.length})`;
   $("warnings").replaceChildren(...items.map(w => {
     const d = document.createElement("div");
@@ -4221,7 +4223,7 @@ function setupProjectName() {
   showProjectName();
 }
 function setSession(j, name) {
-  SID = j.id; RENDER_WARNS = [];   // warnings of the former image dropped
+  SID = j.id; RENDER_WARNS = []; WARN_STALE = true;   // warnings of the former image dropped
   PROJ = { dir: null, snapshots: [], current: null, next: "v0" }; SNAP_KEY = null; CALC_KEY = null;
   IMG_FILE = String(j.filename || name || "");
   PROJECT_DEFAULT = IMG_FILE.replace(/\.[^.]+$/, "") || "projet";
@@ -6252,7 +6254,7 @@ function render() {
   const orphans = (LAST.manual_bridges || []).filter(s => s.state === "layer").length;
   if (orphans)
     warns.push(`${orphans} pont(s) manuel(s) ignoré(s) : aucune couche ne peint plus leur teinte. Ils reviennent si vous annulez le changement ; sinon, ouvrez une couche pour les y rattacher ou les supprimer (outil Ponts manuels).`);
-  RENDER_WARNS = warns;
+  RENDER_WARNS = warns; WARN_STALE = false;
   updateWarnings();
 
   renderOutlineSwatches();
