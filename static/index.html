@@ -90,6 +90,14 @@
   body.fs section.view { max-height: none; height: 100vh; box-sizing: border-box; }
   body.fs main.stageonly section.view > :not(.stage) { display: none !important; }
   body.fs main.stageonly section.view { padding: 6px; }
+  /* full screen: the header being hidden, a floating badge shows that a computation is running */
+  #fsBusy { display: none; }
+  body.fs > header.busy + #fsBusy { display: block; position: fixed; top: 10px; left: 50%; transform: translateX(-50%);
+    z-index: 60; pointer-events: none; padding: 5px 16px; border-radius: 999px; font-size: 13px; font-weight: 600;
+    color: #fff; background-color: #b45309; box-shadow: 0 2px 10px rgba(0,0,0,.35);
+    background-image: repeating-linear-gradient(-45deg, rgba(255,255,255,.12) 0 14px, rgba(255,255,255,0) 14px 28px);
+    background-size: 40px 40px; animation: busystripes 1s linear infinite; }
+  @media (prefers-reduced-motion: reduce) { body.fs > header.busy + #fsBusy { animation: none; } }
   fieldset { border: 1px solid var(--line); border-radius: 8px; margin: 0 0 12px; padding: 8px 10px 10px; min-width: 0; }
   .fxlh { flex-wrap: wrap; }
   legend { font-weight: 600; padding: 0 4px; font-size: 13px; }
@@ -740,6 +748,7 @@
   <button type="button" class="gear" id="prefsBtn" aria-haspopup="dialog" aria-expanded="false" aria-controls="prefPop"
     title="Préférences (langue, chargement des images)" aria-label="Préférences">⚙</button>
 </header>
+<div id="fsBusy" aria-hidden="true">Calcul en cours…</div>
 <div class="prefpop" id="prefPop" role="dialog" aria-label="Préférences" hidden>
   <h4>Préférences</h4>
   <label class="row" data-noi18n>Language / Langue
