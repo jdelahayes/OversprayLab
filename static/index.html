@@ -1213,12 +1213,14 @@
           <option value="nearest">Dans la couche de teinte la plus proche</option>
         </select>
         <p class="hint" id="outline_target_hint"></p>
-        <label class="row sel" for="zoneExcl" id="zoneExclBox">Exclus des autres couches
-          <select id="zoneExcl">
+        <div id="zoneExclBox">
+          <label class="full" for="zoneExcl">Exclus des autres couches</label>
+          <select id="zoneExcl" style="width:100%">
             <option value="">Réglage général</option>
             <option value="on">Oui</option>
             <option value="off">Non</option>
-          </select></label>
+          </select>
+        </div>
       </div>
       <label class="row sel" for="outline_method">Méthode
         <select id="outline_method">
@@ -1279,12 +1281,14 @@
       <div id="silDestBox">
         <label class="row sel" for="silDest">Destination
           <select id="silDest" title="Couche de contours de la silhouette, ou une couche de couleur"></select></label>
-        <label class="row sel" for="silExcl" id="silExclBox">Exclus des autres couches
-          <select id="silExcl">
+        <div id="silExclBox">
+          <label class="full" for="silExcl">Exclus des autres couches</label>
+          <select id="silExcl" style="width:100%">
             <option value="">Réglage général</option>
             <option value="on">Oui</option>
             <option value="off">Non</option>
-          </select></label>
+          </select>
+        </div>
       </div>
       <label class="row sel" for="outline_subject_pos">Position
         <select id="outline_subject_pos">
@@ -1309,19 +1313,12 @@
       <p class="hint" id="gapHint">0 = trait continu. Les interruptions tiennent la silhouette comme des ponts.</p>
     </div>
 
-    <div id="outlineColorBox">
-      <label class="full" id="olColorLbl">Couleur du trait</label>
-      <div class="selc">
-        <div class="check" style="margin:0" title="La teinte de l'image la plus contrastée avec le support"><input type="checkbox" id="outline_auto_color" checked><label for="outline_auto_color">Auto</label></div>
-        <input type="color" id="outline_color" value="#1e1e1e" aria-label="Couleur du trait" class="swc" disabled>
-        <div class="palette" id="outlineSwatches"></div>
-      </div>
-      <label class="row sel" for="groupExcl" id="groupExclBox">Exclus des couches de couleur
-        <select id="groupExcl">
-          <option value="">Réglage général</option>
-          <option value="on">Oui</option>
-          <option value="off">Non</option>
-        </select></label>
+    <!-- one sub-section per outline layer (Contours A, B...), built by renderOutlineSwatches -->
+    <div id="outlineColorBox"></div>
+    <!-- colour of the outline stencil in projects without zones (read by zLegacy only) -->
+    <div hidden>
+      <input type="checkbox" id="outline_auto_color" checked>
+      <input type="color" id="outline_color" value="#1e1e1e" aria-label="Couleur du trait">
     </div>
   </fieldset>
 
@@ -3503,13 +3500,6 @@ function zSave(s) {
 }
 const zCur = s => s.zones.find(z => z.id === ZONE_CUR) || s.zones[0];
 const zNewGroup = s => [..."ABCDEFGHIJKLMNOPQRSTUVWXYZ"].find(g => !zUsed(s).has(g)) || "Z";
-// outline layer whose colour the section shows: the zone's, else the silhouette's (line style: the first)
-function colourGroup(s, z) {
-  if (isGroup(z.dest)) return z.dest;
-  if (val("outline_subject") && isGroup(s.sil_dest)) return s.sil_dest;
-  if (val("stencil_style") === "line") return Object.keys(s.groups).sort()[0] || "A";
-  return null;
-}
 const isLayerDest = d => /^L[1-9]\d?$/.test(d || "");
 const destLabel = d => d === "darkest" ? "dans la couche la plus foncée" : d === "nearest" ? "dans la couche de teinte la plus proche" : isLayerDest(d) ? `dans la couche ${d.slice(1)}` : `Contours ${d}`;
 // fields of the section -> zone shown (and the colour of its outline layer)
@@ -3517,8 +3507,6 @@ function fieldsToZone() {
   const s = zState(), z = zCur(s);
   Object.assign(z, { method: val("outline_method"), sensitivity: val("outline_sensitivity"),
                      width_mm: val("outline_width_mm"), min_length_mm: val("outline_min_length_mm"), ref: val("outline_ref"), whole: val("outline_whole_lines"), line_sens: val("outline_line_sens"), close: val("outline_close_lines"), channel: val("outline_channel"), follow_mm: val("outline_follow_mm"), clahe: val("outline_clahe") });
-  const g = colourGroup(s, z);
-  if (g) s.groups[g] = { ...s.groups[g], auto: val("outline_auto_color"), color: val("outline_color") };
   zSave(s);
 }
 // zone shown -> fields of the section
@@ -3540,10 +3528,6 @@ function zoneToFields() {
   tsel.value = tv;
   $("zoneExcl").value = ["on", "off"].includes(z.excl) ? z.excl : "";
   syncZoneExcl();
-  const g = colourGroup(s, z), gc = g && (s.groups[g] || { auto: true, color: "#1e1e1e" });
-  if (gc) { $("outline_auto_color").checked = gc.auto !== false; $("outline_color").value = gc.color || "#1e1e1e"; }
-  $("groupExcl").value = gc && ["on", "off"].includes(gc.excl) ? gc.excl : "";
-  $("outline_color").disabled = $("outline_auto_color").checked;
   showValues(); methodHint(); syncOutlineTarget(); renderOutlineSwatches(); updateSummaries(); syncOutlineGroups();
 }
 // mask canvas of the zone shown
@@ -3601,6 +3585,7 @@ function renderZones() {
   $("zoneDel").disabled = s.zones.length < 2 || z.id === "z1";
   $("zoneDest").innerHTML = destOptions(s); $("zoneDest").value = z.dest;
   $("silDest").innerHTML = destOptions(s); $("silDest").value = s.sil_dest;
+  renderOutlineSwatches();
   $("silExcl").value = ["on", "off"].includes(s.sil_excl) ? s.sil_excl : "";
   syncZoneExcl();
 }
@@ -3666,13 +3651,8 @@ function setupZones() {
   $("silDest").addEventListener("change", () => destChange($("silDest"), (s, v) => { s.sil_dest = v; }));
   $("zoneExcl").addEventListener("change", () => { const s = zState(); zCur(s).excl = $("zoneExcl").value; zSave(s); schedule(); });
   $("silExcl").addEventListener("change", () => { const s = zState(); s.sil_excl = $("silExcl").value; zSave(s); schedule(); });
-  $("groupExcl").addEventListener("change", () => {
-    const s = zState(), g = colourGroup(s, zCur(s));
-    if (!g) return;
-    s.groups[g] = { ...(s.groups[g] || { auto: true, color: "#1e1e1e" }), excl: $("groupExcl").value };
-    zSave(s); schedule();
-  });
-  $("layering").addEventListener("change", syncZoneExcl);
+  setupGroupBoxes();
+  $("layering").addEventListener("change", () => { syncZoneExcl(); renderOutlineSwatches(); });
   $("zoneDel").onclick = zoneDelete;
   // rename (inline form)
   const form = $("zoneNameForm"), input = $("zoneName");
@@ -3685,25 +3665,22 @@ function setupZones() {
   form.querySelector(".cancel").onclick = () => close(false);
   input.addEventListener("keydown", e => { if (e.key === "Enter") { e.preventDefault(); close(true); } else if (e.key === "Escape") close(false); });
   // the fields of the section edit the zone shown
-  ["outline_method", "outline_sensitivity", "outline_width_mm", "outline_min_length_mm", "outline_auto_color", "outline_color", "outline_ref", "outline_whole_lines", "outline_line_sens", "outline_close_lines", "outline_channel", "outline_follow_mm", "outline_clahe"]
+  ["outline_method", "outline_sensitivity", "outline_width_mm", "outline_min_length_mm", "outline_ref", "outline_whole_lines", "outline_line_sens", "outline_close_lines", "outline_channel", "outline_follow_mm", "outline_clahe"]
     .forEach(k => { $(k).addEventListener("change", fieldsToZone); $(k).addEventListener("input", fieldsToZone); });
   ["outline_ref", "outline_whole_lines", "outline_line_sens", "outline_close_lines", "outline_channel"].forEach(k => $(k).addEventListener("change", () => { enableOutline(); detectPreview(); }));
   $("outline_whole_lines").addEventListener("change", syncLineSens);
   $("outline_line_sens").addEventListener("input", syncLineSens);
   $("outline_subject").addEventListener("change", () => { zoneToFields(); renderZones(); });
-  $("outline").addEventListener("change", syncOutlineGroups);
+  $("outline").addEventListener("change", () => { syncOutlineGroups(); renderOutlineSwatches(); });
   $("stencil_style").addEventListener("change", () => zoneToFields());
   zonesAfterLoad();
 }
 // colour of an outline layer (card colour picker, line-style sources "details:<group>")
 function setGroupColor(g, color) {
   const s = zState();
-  s.groups[g] = { auto: !color, color: color ? color.toLowerCase() : (s.groups[g] || {}).color || "#1e1e1e" };
+  s.groups[g] = { ...s.groups[g], auto: !color, color: color ? color.toLowerCase() : (s.groups[g] || {}).color || "#1e1e1e" };
   zSave(s);
-  if (colourGroup(s, zCur(s)) === g) {
-    $("outline_auto_color").checked = !color; $("outline_color").disabled = !color;
-    if (color) $("outline_color").value = color.toLowerCase();
-  }
+  renderOutlineSwatches();
 }
 const groupAuto = g => (zState().groups[g] || { auto: true }).auto !== false;
 
@@ -4121,7 +4098,7 @@ async function init() {
   });
   $("outline_target").addEventListener("change", () => { syncOutlineTarget(); enableOutline(); detectPreview(); });
   ["outline_sensitivity", "outline_width_mm", "outline_min_length_mm", "outline_follow_mm", "outline_clahe"].forEach(k => $(k).addEventListener("change", enableOutline));
-  ["outline_method", "outline_auto_color", "outline_color", "outline_subject", "outline_subject_mask", "outline_subject_pos", "outline_subject_width_mm", "outline_subject_weak", "outline_subject_de", "outline_subject_gap_every_mm", "outline_subject_gap_mm"].forEach(k => $(k).addEventListener("change", detectPreview));
+  ["outline_method", "outline_subject", "outline_subject_mask", "outline_subject_pos", "outline_subject_width_mm", "outline_subject_weak", "outline_subject_de", "outline_subject_gap_every_mm", "outline_subject_gap_mm"].forEach(k => $(k).addEventListener("change", detectPreview));
   $("outline_subject_weak").addEventListener("change", syncSilhouetteSource);
   $("stencil_style").addEventListener("change", () => { syncStyle(); detectPreview(); });
   $("line_zones").addEventListener("change", syncSilhouetteSource);
@@ -4170,11 +4147,7 @@ async function init() {
   $("preview_sim").addEventListener("change", () => { refreshPreviewOnly(); rememberSettings(); });
   $("preview_nobridges").addEventListener("change", () => { refreshPreviewOnly(); rememberSettings(); });
   $("showAll").onclick = () => { HIDDEN.clear(); refreshPreviewOnly(); };
-  // Outline stencil: automatic or chosen colour
-  $("outline_auto_color").addEventListener("change", () => { $("outline_color").disabled = $("outline_auto_color").checked; });
-  $("outline_color").addEventListener("input", schedule);
   ["outline_width_mm", "outline_subject_width_mm", "outline_min_length_mm", "outline_follow_mm"].forEach(k => $(k).addEventListener("input", schedule));
-  $("outline_color").disabled = $("outline_auto_color").checked;
   renderOutlineSwatches();
   methodHint(); syncOutlineTarget();
 
@@ -5572,15 +5545,10 @@ function syncZoneExcl() {
   const s = zState(), z = zCur(s), cumul = val("layering") === "cumulative";
   $("zoneExclBox").hidden = isGroup(z.dest) || cumul;
   $("silExclBox").hidden = isGroup(s.sil_dest) || cumul;
-  // outline stencil: its lines removed from the colour layers (none in the line style)
-  $("groupExclBox").hidden = !colourGroup(s, z) || cumul || val("stencil_style") === "line";
 }
 function syncOutlineTarget() {
   const t = $("outline_target").value;
   $("outline_target_hint").textContent = TARGET_HINTS[t] || (isLayerDest(t) ? LAYER_HINT : "");
-  const zs = zState(), g = colourGroup(zs, zCur(zs));
-  $("outlineColorBox").hidden = !g;
-  $("olColorLbl").textContent = g ? `Couleur du trait — Contours ${g}` : "Couleur du trait";
   if ($("silDestBox")) $("silDestBox").hidden = val("stencil_style") === "line";
 }
 function methodHint() {
@@ -8453,18 +8421,70 @@ function setLayerColor(idx, color) {
   status(color ? `Couche ${idx} : peinture ${color}` : `Couche ${idx} : teinte calculée`);
   schedule();
 }
+// Outline layers (Contours A, B...): one sub-section each, with the zones (and silhouette) sent to
+// it, its line colour and, in exclusive stacking, whether the colour layers paint under it
+function groupUsers(s) {
+  const out = {};
+  const add = (g, name, own) => { if (isGroup(g)) (out[g] = out[g] || []).push([name, own]); };
+  // line style: a zone sent into the colour layers goes to the first outline layer (no colour layers)
+  const first = Object.keys(s.groups).sort()[0] || "A", line = val("stencil_style") === "line";
+  if (val("outline")) s.zones.forEach(z => add(line && !isGroup(z.dest) ? first : z.dest, z.name, true));
+  if (val("outline_subject") && val("stencil_style") !== "line") add(s.sil_dest, "Silhouette", false);
+  return out;
+}
 function renderOutlineSwatches() {
+  const box = $("outlineColorBox"); if (!box) return;
+  const s = zState(), users = groupUsers(s), gs = Object.keys(users).sort();
+  box.hidden = !gs.length;
   const cols = ["#1e1e1e", "#ffffff"];
   if (LAST) LAST.layers.filter(L => L.kind !== "outline").forEach(L => { if (!cols.includes(L.color)) cols.push(L.color); });
-  $("outlineSwatches").innerHTML = cols.map(c => `<span class="sw pick" title="${c}" data-c="${c}" style="background:${c}"></span>`).join("");
-  $("outlineSwatches").querySelectorAll(".sw").forEach(sw => sw.onclick = () => {
-    $("outline_auto_color").checked = false; $("outline_color").disabled = false;
-    $("outline_color").value = sw.dataset.c; fieldsToZone(); updateSummaries(); schedule();
+  const exclOn = val("layering") !== "cumulative" && val("stencil_style") !== "line";
+  const opt = (v, t, cur) => `<option value="${v}"${cur === v ? " selected" : ""}>${t}</option>`;
+  box.innerHTML = gs.map(g => {
+    const gc = s.groups[g] || { auto: true, color: "#1e1e1e" }, auto = gc.auto !== false;
+    // in automatic mode, the colour actually chosen by the last computation
+    const ol = LAST && LAST.layers.find(L => L.kind === "outline" && (L.group === g || (!L.group && (L.sources || []).includes("details:" + g))));
+    const shown = auto && ol ? ol.color : (gc.color || "#1e1e1e");
+    // zone names are the user's (not translated)
+    const who = users[g].map(([n, own]) => own ? `<span data-noi18n>${escH(n)}</span>` : `<span>${n}</span>`).join(", ");
+    const ex = ["on", "off"].includes(gc.excl) ? gc.excl : "";
+    return `<div class="subhead">Contours ${g}</div>
+    <div class="ogroup" data-g="${g}">
+      <p class="hint"><span>Traits :</span> ${who}</p>
+      <label class="full">Couleur du trait</label>
+      <div class="selc">
+        <div class="check" style="margin:0" title="La teinte de l'image la plus contrastée avec le support"><input type="checkbox" class="gauto" id="gauto${g}"${auto ? " checked" : ""}><label for="gauto${g}">Auto</label></div>
+        <input type="color" class="gcolor swc" value="${shown}" aria-label="Couleur du trait"${auto ? " disabled" : ""}>
+        <div class="palette">${cols.map(c => `<span class="sw pick" title="${c}" data-c="${c}" style="background:${c}"></span>`).join("")}</div>
+      </div>
+      <div title="${TIPS.groupExcl}"${exclOn ? "" : " hidden"}>
+        <label class="full" for="gexcl${g}">Exclus des couches de couleur</label>
+        <select class="gexcl" id="gexcl${g}" style="width:100%">${opt("", "Réglage général", ex)}${opt("on", "Oui", ex)}${opt("off", "Non", ex)}</select>
+      </div>
+    </div>`;
+  }).join("");
+}
+function setupGroupBoxes() {
+  const box = $("outlineColorBox");
+  const edit = (el, f, rerender) => {
+    const g = el.closest("[data-g]").dataset.g, s = zState();
+    s.groups[g] = { ...(s.groups[g] || { auto: true, color: "#1e1e1e" }) };
+    f(s.groups[g]); zSave(s);
+    if (rerender) renderOutlineSwatches();
+    updateSummaries(); detectPreview(); schedule();
+  };
+  box.addEventListener("change", e => {
+    const t = e.target;
+    if (t.matches(".gauto")) edit(t, gc => { gc.auto = t.checked; }, true);
+    else if (t.matches(".gcolor")) edit(t, gc => { gc.auto = false; gc.color = t.value.toLowerCase(); }, true);
+    else if (t.matches(".gexcl")) edit(t, gc => { gc.excl = t.value; }, false);
   });
-  // In automatic mode, show the colour actually chosen (outline layer of the zone shown)
-  const zs = zState(), g = colourGroup(zs, zCur(zs));
-  const ol = LAST && LAST.layers.find(L => L.kind === "outline" && (L.group === g || (!L.group && (L.sources || []).includes("details:" + g))));
-  if (ol && $("outline_auto_color").checked) $("outline_color").value = ol.color;
+  // colour picker: follows the colour while it is moved, without rebuilding the box
+  box.addEventListener("input", e => { if (e.target.matches(".gcolor")) edit(e.target, gc => { gc.auto = false; gc.color = e.target.value.toLowerCase(); }, false); });
+  box.addEventListener("click", e => {
+    const sw = e.target.closest(".sw[data-c]"); if (!sw) return;
+    edit(sw, gc => { gc.auto = false; gc.color = sw.dataset.c; }, true);
+  });
 }
 function regHint() { $("regHint").textContent = REG_HINT[val("reg_shape")] + (val("reg_corners") === "3" ? " Le coin bas-droit sans repère sert de détrompeur." : ""); }
 function lum(h) { const n = parseInt(h.slice(1), 16); return 0.299 * (n >> 16) + 0.587 * (n >> 8 & 255) + 0.114 * (n & 255); }
