@@ -333,6 +333,9 @@ try {
       "Opens the Masks tab on the Flat areas mask: paint or click (Object tool) each zone to fill with a single tone (face, background, clothing…). Each separate zone is processed on its own.",
     "Masque aplats": "Flat areas mask",
     "Zone d'aplat forcé": "Forced flat zone",
+    "Résolution automatique : enfoncé, la résolution suit les limites du matériau (au moins 6 px sur la plus petite des deux largeurs minimales, ouverture ou bande de matière ; entre 6 et 12 px/mm). Relâché (clic ou curseur bougé), elle reste celle du curseur":
+      "Automatic resolution: pressed, the resolution follows the material limits (at least 6 px across the smaller of the two minimum widths, opening or material strip; between 6 and 12 px/mm). Released (click or slider moved), it stays at the slider's value",
+    "Résolution réglée à la main": "Resolution set by hand",
     "Tolérance générale : enfoncé, cet aplat suit la tolérance de l'aplat Générale. Relâché (clic ou curseur bougé), il garde sa propre tolérance, celle du curseur ; recliquer le ramène à la tolérance générale":
       "General tolerance: pressed, this flat area follows the tolerance of the General flat area. Released (click or slider moved), it keeps its own tolerance, the slider's; clicking again brings it back to the general tolerance",
     "Générale": "General",
@@ -1246,6 +1249,7 @@ try {
     [/^(\d+) projets?$/, (m, n) => plural(n, "project")],
     [/^(\d+) couches? à colorer$/, (m, n) => `${plural(n, "layer")} to colour`],
     [/^Proposition (\d+)$/, (m, n) => `Proposal ${n}`],
+    [/^Résolution automatique : (\d+) px\/mm \(selon les limites du matériau\)$/, (m, n) => `Automatic resolution: ${n} px/mm (from the material limits)`],
     [/^Proposition (\d+) appliquée aux couches$/, (m, n) => `Proposal ${n} applied to the layers`],
     [/^Lisibilité (\d+) % · Proximité avec l'image (\d+) % · Respect des réglages (\d+) %$/, (m, a, b, c) => `Legibility ${a} % · Closeness to the image ${b} % · Match with the settings ${c} %`],
     [/^Teinte (\d+)$/, (m, n) => `Tone ${n}`],

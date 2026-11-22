@@ -596,7 +596,7 @@ def compute(sess, data):
         warnings.append(f"Silhouette : le masque {SILHOUETTE_MASK_NAMES[p.outline_subject_mask]} est vide "
                         f"(onglet Masques)")
     # Only the paints changed (and they do not change the cut): same geometry, new colours
-    geom = ({f.name: getattr(p, f.name) for f in fields(p) if f.name != "layer_colors"},
+    geom = ({f.name: getattr(p, f.name) for f in fields(p) if f.name not in ("layer_colors", "px_per_mm_auto")},
             (sess["prep"], sess.get("mask"), sess.get("silmask"), sess.get("fg"),
              *[m for _, m in sorted((sess.get("zmasks") or {}).items())]))
     old = sess.get("geom")

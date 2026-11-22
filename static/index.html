@@ -1501,8 +1501,11 @@
     <div class="check"><input type="checkbox" id="smooth_curves" checked><label for="smooth_curves">Courbes lisses (Bézier)</label></div>
     <label class="row">Flou de pulvérisation (mm) <span class="v" id="spray_mm_v"></span>
       <input type="range" id="spray_mm" min="0" max="3" step="0.1" value="0.4"></label>
-    <label class="row">Résolution de calcul (px/mm) <span class="v" id="px_per_mm_v"></span>
-      <input type="range" id="px_per_mm" min="3" max="12" step="1" value="6"></label>
+    <label class="row" for="px_per_mm">Résolution de calcul (px/mm) <span class="v" id="px_per_mm_v"></span></label>
+    <div style="display:flex; gap:6px; align-items:center; margin:-2px 0 6px">
+      <button type="button" id="ppmAuto" class="vt-opt" aria-pressed="false" title="Résolution automatique : enfoncé, la résolution suit les limites du matériau (au moins 6 px sur la plus petite des deux largeurs minimales, ouverture ou bande de matière ; entre 6 et 12 px/mm). Relâché (clic ou curseur bougé), elle reste celle du curseur">Auto</button>
+      <input type="checkbox" id="px_per_mm_auto" hidden>
+      <input type="range" id="px_per_mm" min="3" max="12" step="1" value="6" aria-label="Résolution de calcul (px/mm)" style="flex:1; min-width:0"></div>
     <p class="hint">Plus haut = plus précis mais plus lent.</p>
   </fieldset>
 
@@ -1749,7 +1752,7 @@ const PARAMS = ["support_w_mm", "support_h_mm", "support_color", "inner_margin_m
   "n_layers", "detail", "hue_weight", "color_vividness", "flat_auto", "flat_tolerance", "flat_tolerances", "color_mode", "layering", "skip_support", "fill_gaps", "protect_lines",
   "outline", "outline_target", "outline_method", "outline_sensitivity", "outline_width_mm", "outline_min_length_mm", "outline_subject", "outline_subject_mask", "outline_subject_pos", "outline_subject_width_mm", "outline_subject_weak", "outline_subject_de", "outline_subject_gap_every_mm", "outline_subject_gap_mm", "stencil_style", "line_zones", "line_zones_color", "line_sil_color", "outline_auto_color", "outline_color", "outline_zones", "outline_ref", "outline_whole_lines", "outline_line_sens", "outline_close_lines", "outline_channel", "outline_follow_mm", "outline_clahe",
   ...MAT_FIELDS, "merge_amount", "merge_channel_mm", "merge_channels", "merge_islands", "merge_line_islands",
-  "tolerance_mm", "smooth_curves", "spray_mm", "px_per_mm"];
+  "tolerance_mm", "smooth_curves", "spray_mm", "px_per_mm", "px_per_mm_auto"];
 const SUPPORT_COLORS = [["Blanc", "#ffffff"], ["Ivoire", "#f3ecd9"], ["Kraft", "#c8a26e"], ["Gris", "#9a9a9a"], ["Noir", "#1e1e1e"]];
 const REG_DEFAULT = { equerre: 10, croix: 8, rond: 5 };
 const REG_HINT = {
@@ -2640,6 +2643,26 @@ function setVals(o) {
   if (o && "flat_tolerance" in o && !("flat_tolerances" in o)) $("flat_tolerances").value = JSON.stringify({ auto: +o.flat_tolerance });
   flatTolToField();
   drawCurve();
+  syncPpmAuto();
+}
+// Automatic computation resolution: at least PPM_AUTO_PX pixels across the smallest material limit
+// (minimum opening / strip width), between 6 (the former default) and 12 px/mm (slider maximum).
+// Below that, an opening or a strip near its limit is kept or removed depending on where it falls
+// on the pixel grid (one pixel = 15 to 20 % of the limit), which gives ragged, broken shapes.
+const PPM_AUTO_PX = 6;
+function autoPpm() {
+  const lims = ["min_opening_mm", "min_strip_mm"].map(val).filter(v => v > 0);
+  return lims.length ? clamp(Math.ceil(PPM_AUTO_PX / Math.min(...lims) - 1e-9), 6, 12) : 6;
+}
+// Button state from the hidden checkbox (saved with the settings); when pressed, the slider follows
+// the limits. Returns true when the resolution changed.
+function syncPpmAuto() {
+  const on = $("px_per_mm_auto").checked;
+  $("ppmAuto").setAttribute("aria-pressed", String(on));
+  if (!on || val("px_per_mm") === autoPpm()) return false;
+  $("px_per_mm").value = autoPpm();
+  showValues(); showResolutionWarning();
+  return true;
 }
 async function presetCall(method, url, body) {
   try {
@@ -2885,6 +2908,7 @@ function cutInfo() {
 function applyMaterial(k) {
   const m = MATS[k]; if (!m) return;
   MAT_FIELDS.forEach(f => { const e = $(f); if (m[f] === undefined) return; if (e.type === "checkbox") e.checked = !!m[f]; else e.value = m[f]; });
+  syncPpmAuto();
   cutInfo();
 }
 
@@ -3667,6 +3691,20 @@ async function init() {
 
   sel.addEventListener("change", () => { applyMaterial(sel.value); cutInfo(); schedule(); });
   $("px_per_mm").addEventListener("input", showResolutionWarning);
+  // Automatic resolution: the button toggles it (saved as px_per_mm_auto); moving the slider leaves it;
+  // while it is on, the resolution follows the minimum opening / strip widths
+  $("ppmAuto").onclick = () => {
+    $("px_per_mm_auto").checked = !$("px_per_mm_auto").checked;
+    syncPpmAuto();
+    $("px_per_mm_auto").dispatchEvent(new Event("change"));
+    status($("px_per_mm_auto").checked ? `Résolution automatique : ${val("px_per_mm")} px/mm (selon les limites du matériau)`
+                                       : "Résolution réglée à la main");
+  };
+  $("px_per_mm").addEventListener("input", () => {
+    if (!$("px_per_mm_auto").checked) return;
+    $("px_per_mm_auto").checked = false; syncPpmAuto();
+  });
+  ["min_opening_mm", "min_strip_mm"].forEach(f => $(f).addEventListener("input", syncPpmAuto));
   // Editing a field: a built-in material switches to "Custom"; a ★ material stays selected
   // (marked "modified") so it can be overwritten with "Save".
   MAT_FIELDS.forEach(f => $(f).addEventListener("input", () => {

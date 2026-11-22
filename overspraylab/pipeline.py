@@ -59,6 +59,9 @@ class Params:
     image_pos_x: float = 50.0      # image centre, as % of the support width
     image_pos_y: float = 50.0      # image centre, as % of the support height
     px_per_mm: float = 6.0
+    # "Auto" button of the interface: px_per_mm follows the material limits (computed by the
+    # client, autoPpm in index.html); kept here so that it is saved with the project
+    px_per_mm_auto: bool = False
     # Image preprocessing (before simplification)
     pre_auto_levels: bool = False  # automatic levels stretch (luminance)
     pre_clahe: float = 0.0         # local contrast (CLAHE), 0..100
@@ -2468,17 +2471,55 @@ def vectorize(opening: np.ndarray, p: Params) -> list[np.ndarray]:
     cnts, _ = cv2.findContours(opening, cv2.RETR_LIST, cv2.CHAIN_APPROX_NONE)
     sigma = max(0.8, 0.2 * ppm)
     eps = max(0.3, p.tolerance_mm * ppm)
+    field = None
     out = []
     for c in cnts:
         if len(c) < 6:
             continue
-        pts = c[:, 0, :].astype(np.float32)
+        if field is None:
+            field = _edge_field(opening)
+        pts = _subpixel_edge(c[:, 0, :].astype(np.float32), *field)
         pts = _smooth_closed(pts, sigma)
         approx = cv2.approxPolyDP(pts.reshape(-1, 1, 2), eps, True)[:, 0, :]
         if len(approx) < 3:
             continue
         out.append((approx + 0.5) / ppm)
     return out
+
+
+EDGE_SIGMA_PX = 0.7     # blur of the opening mask whose 0.5 level gives the sub-pixel outline
+
+
+def _edge_field(opening: np.ndarray) -> tuple:
+    """Opening mask blurred (0..1) and its gradient, for _subpixel_edge."""
+    f = cv2.GaussianBlur((opening > 0).astype(np.float32), (0, 0), EDGE_SIGMA_PX)
+    return f, cv2.Sobel(f, cv2.CV_32F, 1, 0, ksize=3), cv2.Sobel(f, cv2.CV_32F, 0, 1, ksize=3)
+
+
+def _subpixel_edge(pts: np.ndarray, f: np.ndarray, gx: np.ndarray, gy: np.ndarray) -> np.ndarray:
+    """Outline points moved onto the edge of the pixels. `findContours` gives the centres of the
+    opening's border pixels, half a pixel inside the edge (and on a staircase): the openings came out
+    ~1 px narrower than computed. Each point moves along the normal (gradient of the blurred mask)
+    to where the blurred mask crosses 0.5; where there is none (strand 1 px wide, no clear normal),
+    it moves half a pixel, or stays when the normal is undefined."""
+    sx = lambda img, x, y: cv2.remap(img, x, y, cv2.INTER_LINEAR, borderMode=cv2.BORDER_CONSTANT, borderValue=0)
+    x, y = pts[:, :1].copy(), pts[:, 1:].copy()
+    nx, ny = -sx(gx, x, y), -sx(gy, x, y)              # outwards: the mask decreases
+    n = np.hypot(nx, ny)
+    ok = n > 1e-3
+    nx, ny = np.where(ok, nx / np.maximum(n, 1e-6), 0), np.where(ok, ny / np.maximum(n, 1e-6), 0)
+    step = 0.125
+    ts = np.arange(-1.0, 1.5 + step / 2, step, dtype=np.float32)[None, :]
+    v = sx(f, (x + ts * nx).astype(np.float32), (y + ts * ny).astype(np.float32))
+    a, b = v[:, :-1], v[:, 1:]
+    cross = (a >= 0.5) & (b < 0.5)
+    tc = ts[:, :-1] + step * np.clip((a - 0.5) / np.maximum(a - b, 1e-6), 0, 1)
+    tc = np.where(cross, tc, np.inf)
+    k = np.argmin(np.abs(tc - 0.5), axis=1)
+    t = tc[np.arange(len(pts)), k]
+    t = np.where(np.isfinite(t), t, 0.5)
+    t = np.where(ok[:, 0], t, 0.0)[:, None]
+    return np.concatenate([x + t * nx, y + t * ny], axis=1).astype(np.float32)
 
 
 def _smooth_closed(pts: np.ndarray, sigma: float) -> np.ndarray:
@@ -3141,6 +3182,7 @@ def _contrast_factor(L: np.ndarray, region: np.ndarray | None) -> float:
 
 FDOG_SMOOTH_MM = 2.0     # FDoG: length (sigma) of the averaging along the flow of the contours
 FDOG_STEP_PX = 2.0       # ... step of the streamlines (1 px: hardly better, twice as slow)
+FDOG_PPM = 6.0           # ... computed at this resolution at most (px/mm), then enlarged
 _FDOG_CACHE: OrderedDict = OrderedDict()     # FDoG strength maps of the last images (slow to compute)
 _FDOG_LOCK = threading.Lock()
 
@@ -3169,8 +3211,31 @@ def _fdog_strength(chans: list, ppm: float, dark: bool) -> np.ndarray:
         c = c.astype(np.float32)
         d = np.maximum(sign * (cv2.GaussianBlur(c, (0, 0), 1.6 * sc) - cv2.GaussianBlur(c, (0, 0), sc)), 0)
         resp = d if resp is None else np.maximum(resp, d)
-    # tangent of the contours (structure tensor of the first channel)
     L = chans[0].astype(np.float32)
+    # The averaging along the streamlines is a smoothing over ~FDOG_SMOOTH_MM: above FDOG_PPM it
+    # runs on a reduced grid (the DoG itself stays at full resolution, its scales in mm unchanged)
+    full = L.shape
+    if ppm > FDOG_PPM * 1.05:
+        s = FDOG_PPM / ppm
+        size = (max(8, round(full[1] * s)), max(8, round(full[0] * s)))
+        # Measured at 8 and 10 px/mm against the full computation: lines within 1 px of each other
+        # (98-99 % on test_visage) and 2x faster. Adding back what the reduction takes from the DoG
+        # (peaks of sharp lines 4-13 % lower) brought back grain and changed more of the selection.
+        flow = _fdog_flow(cv2.resize(resp, size, interpolation=cv2.INTER_AREA),
+                          cv2.resize(L, size, interpolation=cv2.INTER_AREA), FDOG_PPM)
+        out = np.maximum(cv2.resize(flow, (full[1], full[0]), interpolation=cv2.INTER_CUBIC), 0)
+    else:
+        out = _fdog_flow(resp, L, ppm)
+    with _FDOG_LOCK:
+        _FDOG_CACHE[key] = out
+        while len(_FDOG_CACHE) > 4:
+            _FDOG_CACHE.popitem(last=False)
+    return out
+
+
+def _fdog_flow(resp: np.ndarray, L: np.ndarray, ppm: float) -> np.ndarray:
+    """`resp` averaged along the streamlines of the contours of `L` (see _fdog_strength)."""
+    # tangent of the contours (structure tensor of the first channel)
     sig = max(1.0, 0.3 * ppm)
     g = cv2.GaussianBlur(L, (0, 0), max(0.8, 0.15 * ppm))
     gx = cv2.Sobel(g, cv2.CV_32F, 1, 0, ksize=3)
@@ -3201,12 +3266,7 @@ def _fdog_strength(chans: list, ppm: float, dark: bool) -> np.ndarray:
             u = i * FDOG_STEP_PX
             w = float(np.exp(-u * u / (2 * sm * sm)))
             acc += w * samp(resp, px, py); wsum += w
-    out = (acc / np.float32(wsum)).astype(np.float32)
-    with _FDOG_LOCK:
-        _FDOG_CACHE[key] = out
-        while len(_FDOG_CACHE) > 4:
-            _FDOG_CACHE.popitem(last=False)
-    return out
+    return (acc / np.float32(wsum)).astype(np.float32)
 
 
 # methods whose hysteresis reach is the zone setting `outline_follow_mm` (others: HYST_MM)
