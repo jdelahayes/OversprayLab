@@ -738,6 +738,9 @@
   .ogroup { border-left: 2px solid color-mix(in srgb, var(--muted) 60%, transparent); padding: 2px 0 4px 10px; margin: 2px 0 8px 6px; }
   .ogroup[hidden] { display: none; }
   .ogroup .hint { margin-top: 0; }
+  /* two groups one after the other (silhouette, then its interruptions): one continuous bar */
+  .ogroup:has(+ .ogroup:not([hidden])) { margin-bottom: 0; }
+  .ogroup:not([hidden]) + .ogroup { margin-top: 0; }
   /* sub-sections of a section: a title, then its settings behind a vertical bar (.ogroup) */
   .subhead, .phead.sub label { display: block; font-weight: 600; margin: 10px 0 2px; }
   .phead.sub { margin-top: 6px; }
