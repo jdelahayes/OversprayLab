@@ -25,7 +25,7 @@ try {
   // ------------------------------------------------------------------ exact
   const EN = {
     // Header, tabs, bars
-    "pochoirs multicouches pour l'aérographe": "multi-layer airbrush stencils",
+    "Le projet OversprayLab sur GitHub": "The OversprayLab project on GitHub",
     "Chargez une image pour commencer": "Load an image to get started",
     "Derniers réglages restaurés — chargez une image": "Last settings restored — load an image",
     "Réglages par défaut": "Default settings",
