@@ -1205,6 +1205,24 @@ def api_project_rename(name):
     return jsonify(project_state(d, None))
 
 
+@app.delete("/api/projects/<name>")
+def api_project_delete(name):
+    """Deletes a whole project folder. Sessions opened on it keep their image and settings, now in
+    no project (unsaved): their next snapshot creates a new project folder."""
+    try:
+        d = projects.project_dir(name)
+        with LOCK:
+            projects.delete_project(d)
+            for sess in SESSIONS.values():
+                if sess.get("proj_dir") == d:
+                    sess["proj_dir"], sess["snap"] = None, None
+    except projects.ProjectError as e:
+        return jsonify(error=str(e)), 404
+    except OSError as e:
+        return jsonify(error=f"Suppression impossible : {e}"), 500
+    return jsonify(projects=projects.list_projects(), folder=str(projects.ROOT))
+
+
 @app.delete("/api/projects/<name>/<snap>")
 def api_snapshot_delete(name, snap):
     """Deletes a snapshot (its folder). Sessions opened on it keep their state, now unsaved."""

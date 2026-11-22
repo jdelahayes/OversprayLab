@@ -112,15 +112,19 @@
   .hint { color: var(--muted); font-size: 12px; margin: 4px 0 0; }
   /* preference "hints off": explanations under the settings hidden, states (.keep) kept */
   body.no-hints aside .hint:not(.keep) { display: none !important; }
-  /* image box (drop zone) on the left, project buttons stacked on its right */
-  .topbox { display: flex; gap: 8px; align-items: flex-start; margin-bottom: 12px; }
+  /* project icons in a column on the left, image box (drop zone) beside them, as tall */
+  .topbox { display: flex; gap: 8px; align-items: stretch; margin-bottom: 12px; }
   #drop { border: 2px dashed var(--line); border-radius: 10px; padding: 10px; text-align: center;
-          cursor: pointer; color: var(--muted); flex: 1 1 auto; min-width: 0; max-width: 220px; font-size: 12px; }
+          cursor: pointer; color: var(--muted); flex: 1 1 auto; min-width: 0; font-size: 12px;
+          display: flex; flex-direction: column; justify-content: center; }
   #drop.over { border-color: var(--accent); color: var(--ink); }
   /* new project: the image box invites to load an image */
   #drop.invite { border-color: var(--accent); color: var(--ink); animation: invite 1.4s ease-in-out 3; }
   @keyframes invite { 50% { box-shadow: 0 0 0 4px color-mix(in srgb, var(--accent) 35%, transparent); } }
-  #drop img { max-width: 100%; max-height: 120px; display: block; margin: 0 auto 6px; border-radius: 4px; }
+  /* loaded image: fills the box (as tall as the icon column) above its caption, proportions kept */
+  #dropInner:has(img) { flex: 1 1 auto; min-height: 0; display: flex; flex-direction: column; gap: 6px; }
+  #drop img { flex: 1 1 0; min-height: 0; width: 100%; object-fit: contain; display: block; }
+  #drop:has(img) { padding: 6px; }
   button { font: inherit; border-radius: 7px; border: 1px solid var(--line); background: var(--soft);
            color: var(--ink); padding: 7px 12px; cursor: pointer; }
   button.primary { background: var(--accent); color: var(--accent-ink); border-color: var(--accent); font-weight: 600; }
@@ -331,6 +335,11 @@
   .pj-card .pname { font-weight: 600; margin-top: 3px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .pj-card .pmeta { color: var(--muted); font-size: 12px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .pj-empty { grid-column: 1 / -1; }
+  .pj-item { position: relative; display: flex; min-width: 0; }
+  .pj-item .pj-card { flex: 1; }
+  .pj-del { position: absolute; top: 10px; right: 10px; opacity: 0; transition: opacity .12s; }
+  .pj-item:hover .pj-del, .pj-item:focus-within .pj-del, .pj-del.confirm { opacity: 1; }
+  @media (hover: none) { .pj-del { opacity: 1; } }
   .modalback { position: fixed; inset: 0; z-index: 80; background: rgba(0,0,0,.45); display: flex; align-items: center; justify-content: center; }
   .modalback[hidden] { display: none; }
   .modal { width: 380px; max-width: calc(100vw - 32px); background: var(--panel); color: var(--ink); border: 1px solid var(--line);
@@ -593,13 +602,14 @@
   input[type=text], textarea { width: 100%; padding: 5px 6px; border: 1px solid var(--line); border-radius: 6px;
           background: var(--panel); color: var(--ink); font: inherit; }
   textarea { resize: vertical; font-size: 12px; }
-  .projbar { display: flex; flex-direction: column; gap: 6px; flex: none; }
+  .projbar { display: flex; flex-direction: column; gap: 5px; flex: none; order: -1; }
+  .projbar .ibtn { padding: 6px 8px; }
+  .projbar .sep { height: 1px; margin: 2px 3px; background: var(--line); }
   .projname { padding: 4px 6px; border: 1px dashed transparent; border-radius: 6px; cursor: text; font-weight: 600;
               overflow-wrap: anywhere; min-height: 1.4em; }
   .projname:hover, .projname:focus-visible { border-color: var(--line); }
   .projname.empty { color: var(--muted); font-weight: normal; cursor: default; }
   #projNameInput { width: 100%; }
-  .projbar button { font-size: 12px; padding: 4px 10px; text-align: left; }
   header button.link { margin-left: 12px; background: none; border: none; color: var(--muted); text-decoration: underline; padding: 0; font-size: 12px; }
   .aligngrid { display: grid; grid-template-columns: repeat(3, 30px); gap: 3px; }
   .aligngrid button, #alignH, #alignV { padding: 3px 0; width: 30px; font-size: 14px; line-height: 1.2; }
@@ -807,12 +817,14 @@
     <div id="dropInner">Glissez une image ici<br>ou cliquez pour choisir</div>
     <input type="file" id="file" accept="image/*" hidden>
   </div>
-  <div class="projbar">
-    <button type="button" id="newProject" title="Commence un nouveau projet : tous les réglages par défaut, sans image ; il ne reste qu'à charger une image. Une version courante non enregistrée d'un projet peut d'abord être enregistrée">Nouveau projet</button>
-    <button type="button" id="openProject" aria-haspopup="dialog" aria-expanded="false" aria-controls="projPop" title="Rouvrir un projet récent à sa dernière snapshot, un dossier de projet ou un zip exporté par OversprayLab">Ouvrir un projet…</button>
-    <button type="button" class="primary" id="export" disabled title="Pochoirs SVG + projet rechargeable (image d'origine, masques, réglages et snapshots). Une version courante non enregistrée devient d'abord une snapshot.">Exporter le projet</button>
-    <button type="button" id="resetAll" title="Rétablit tous les réglages par défaut ; l'image chargée et ses masques sont conservés, ainsi que les réglages enregistrés">Réglages par défaut</button>
-    <button type="button" id="applySettings" title="Applique tous les réglages d'un projet (support, matériau, couches, couleurs, cadrage…) à l'image chargée, qui garde ses masques : zip exporté par OversprayLab, ou fichier infos.json (celui d'un export ou d'une snapshot)">Appliquer les réglages d'un projet…</button>
+  <div class="projbar" role="toolbar" aria-label="Projet">
+    <button type="button" class="ibtn" id="newProject" aria-label="Nouveau projet" title="Nouveau projet : tous les réglages par défaut, sans image ; il ne reste qu'à charger une image. Une version courante non enregistrée d'un projet peut d'abord être enregistrée"><svg class="ico" viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z"/><path d="M14 3v5h5"/><path d="M12 11v6"/><path d="M9 14h6"/></svg></button>
+    <button type="button" class="ibtn" id="openProject" aria-label="Ouvrir un projet…" aria-haspopup="dialog" aria-expanded="false" aria-controls="projPop" title="Ouvrir un projet : un projet récent à sa dernière snapshot, un dossier de projet ou un zip exporté par OversprayLab"><svg class="ico" viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m6 14 1.5-2.9A2 2 0 0 1 9.24 10H20a2 2 0 0 1 1.94 2.5l-1.54 6a2 2 0 0 1-1.95 1.5H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h3.9a2 2 0 0 1 1.69.9l.81 1.2a2 2 0 0 0 1.67.9H18a2 2 0 0 1 2 2v2"/></svg></button>
+    <button type="button" class="ibtn" id="allProjects" aria-label="Tous les projets…" aria-haspopup="dialog" aria-controls="projAll" title="Tous les projets : ceux du dossier des projets, avec recherche par nom (ouverture et suppression)"><svg class="ico" viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></svg></button>
+    <button type="button" class="ibtn primary" id="export" disabled aria-label="Exporter le projet" title="Exporter le projet : pochoirs SVG + projet rechargeable (image d'origine, masques, réglages et snapshots). Une version courante non enregistrée devient d'abord une snapshot."><svg class="ico" viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3v12"/><path d="m7 10 5 5 5-5"/><path d="M5 21h14"/></svg></button>
+    <span class="sep" aria-hidden="true"></span>
+    <button type="button" class="ibtn" id="resetAll" aria-label="Réglages par défaut" title="Réglages par défaut : rétablit tous les réglages par défaut ; l'image chargée et ses masques sont conservés, ainsi que les réglages enregistrés"><svg class="ico" viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/></svg></button>
+    <button type="button" class="ibtn" id="applySettings" aria-label="Appliquer les réglages d'un projet…" title="Appliquer les réglages d'un projet (support, matériau, couches, couleurs, cadrage…) à l'image chargée, qui garde ses masques : zip exporté par OversprayLab, ou fichier infos.json (celui d'un export ou d'une snapshot)"><svg class="ico" viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 4h-7"/><path d="M10 4H3"/><path d="M21 12h-9"/><path d="M8 12H3"/><path d="M21 20h-5"/><path d="M12 20H3"/><path d="M14 2v4"/><path d="M8 10v4"/><path d="M16 18v4"/></svg></button>
     <input type="file" id="projectFile" accept=".zip,application/zip" hidden>
     <input type="file" id="settingsFile" accept=".zip,.json,application/zip,application/json" hidden>
   </div>
@@ -4684,8 +4696,11 @@ async function openFolder(files) {
 const PJ = { list: [], token: 0 };
 const pjNorm = t => String(t || "").normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase();
 async function showAllProjects() {
+  // focus given back on closing: the icon that opened it, else "Open a project" (the popup is closed)
+  PJ.opener = document.activeElement === $("allProjects") ? $("allProjects") : $("openProject");
   hideProjects();
   const back = $("projAll"), tok = ++PJ.token;
+  PJ.del = null; clearTimeout(PJ.delTimer);
   back.hidden = false;
   $("pjSearch").value = "";
   $("pjInfo").textContent = "";
@@ -4699,7 +4714,7 @@ async function showAllProjects() {
   PJ.folder = j.folder || "";
   renderAllProjects();
 }
-function hideAllProjects() { PJ.token++; $("projAll").hidden = true; $("openProject").focus(); }
+function hideAllProjects() { PJ.token++; $("projAll").hidden = true; (PJ.opener || $("openProject")).focus(); }
 function pjShown() {
   const q = pjNorm($("pjSearch").value).trim().split(/\s+/).filter(Boolean);
   const ps = PJ.list.filter(p => { const t = pjNorm(p.name + " " + p.dir); return q.every(w => t.includes(w)); });
@@ -4712,26 +4727,60 @@ function renderAllProjects() {
   $("pjInfo").innerHTML = `<span>${PJ.list.length > 1 ? `${PJ.list.length} projets` : `${PJ.list.length} projet`}</span> · <span data-noi18n>${escH(PJ.folder)}</span>`;
   if (!PJ.list.length) { grid.innerHTML = `<p class="hint pj-empty">Aucun projet : la première snapshot (ou le premier export) d'un projet le crée dans le dossier des projets.</p>`; return; }
   if (!ps.length) { grid.innerHTML = `<p class="hint pj-empty">Aucun projet ne correspond à la recherche</p>`; return; }
-  grid.innerHTML = ps.map(p => `<button type="button" class="pj-card${p.dir === PROJ.dir ? " cur" : ""}" data-dir="${escH(p.dir)}" data-snap="${p.last || ""}"${p.last ? "" : " disabled"}
+  grid.innerHTML = ps.map(p => { const armed = PJ.del === p.dir; return `<div class="pj-item" data-dir="${escH(p.dir)}">
+      <button type="button" class="pj-card${p.dir === PROJ.dir ? " cur" : ""}" data-dir="${escH(p.dir)}" data-snap="${p.last || ""}"${p.last ? "" : " disabled"}
       title="${p.last ? (p.dir === PROJ.dir ? "Projet ouvert : revenir à sa dernière snapshot" : "Ouvrir ce projet à sa dernière snapshot") : "Ce projet n'a aucune snapshot"}">
       ${p.thumb ? `<img src="${thumbUrl(p.dir, p.last)}" alt="" loading="lazy">` : `<span class="nothumb"></span>`}
       <span class="pname" data-noi18n>${escH(p.name)}</span>
       ${p.dir !== p.name ? `<span class="pmeta" data-noi18n>${escH(p.dir)}</span>` : ""}
-      <span class="pmeta">${p.count} snapshot${p.count > 1 ? "s" : ""}${p.used ? ` · ${snapDate(p.used, true)}` : ""}</span></button>`).join("");
+      <span class="pmeta">${p.count} snapshot${p.count > 1 ? "s" : ""}${p.used ? ` · ${snapDate(p.used, true)}` : ""}</span></button>
+      <button type="button" class="ibtn pj-del${armed ? " confirm" : ""}" data-act="delete" aria-label="Supprimer le projet"
+        title="${armed ? "Cliquer encore pour confirmer la suppression" : "Supprimer ce projet (définitivement : son dossier, avec l'image d'origine et toutes ses snapshots, est effacé)"}">${SNAP_ICONS.delete}</button></div>`; }).join("");
 }
 function pjOpen(b) {
   if (!b || b.disabled) return;
   hideAllProjects();
   openSnapshot(b.dataset.dir, b.dataset.snap);
 }
+// Deleting a project (all projects window): 2-click confirmation, as for the snapshots. The open
+// project may be deleted: the current version stays loaded, in no project (its next snapshot
+// creates a new project folder)
+async function pjDelete(dir) {
+  clearTimeout(PJ.delTimer);
+  if (PJ.del !== dir) {
+    PJ.del = dir; renderAllProjects();
+    const b = $("pjGrid").querySelector(`.pj-item[data-dir="${CSS.escape(dir)}"] .pj-del`);
+    if (b) b.focus();                 // the list was rebuilt: the second click / Enter stays on it
+    PJ.delTimer = setTimeout(() => { PJ.del = null; if (!$("projAll").hidden) renderAllProjects(); }, 3000);
+    return;
+  }
+  PJ.del = null;
+  const p = PJ.list.find(x => x.dir === dir), name = p ? p.name : dir;
+  const j = await snapCall("DELETE", `/api/projects/${encodeURIComponent(dir)}`);
+  if (j) {
+    PJ.list = j.projects || [];
+    if (PROJ.dir === dir) {
+      PROJ = { dir: null, snapshots: [], current: null, next: "v0" }; SNAP_KEY = null;
+      renderSnaps();
+      status(`Projet « ${name} » supprimé : la version courante reste chargée, sans projet (la prochaine snapshot crée un nouveau projet)`);
+    } else status(`Projet « ${name} » supprimé`);
+  }
+  if (!$("projAll").hidden) { renderAllProjects(); $("pjSearch").focus(); }
+}
 function setupAllProjects() {
   const back = $("projAll");
   $("projAllBtn").onclick = showAllProjects;
+  $("allProjects").onclick = showAllProjects;
   $("pjClose").onclick = hideAllProjects;
   $("pjSearch").addEventListener("input", renderAllProjects);
   $("pjSort").addEventListener("change", renderAllProjects);
   $("pjSearch").addEventListener("keydown", e => { if (e.key === "Enter") { e.preventDefault(); pjOpen($("pjGrid").querySelector(".pj-card:not(:disabled)")); } });
-  $("pjGrid").addEventListener("click", e => pjOpen(e.target.closest(".pj-card")));
+  $("pjGrid").addEventListener("click", e => {
+    const del = e.target.closest(".pj-del");
+    if (del) return pjDelete(del.closest(".pj-item").dataset.dir);
+    if (PJ.del) { PJ.del = null; clearTimeout(PJ.delTimer); }
+    pjOpen(e.target.closest(".pj-card"));
+  });
   back.addEventListener("click", e => { if (e.target === back) hideAllProjects(); });
   document.addEventListener("keydown", e => { if (e.key === "Escape" && !back.hidden) { e.preventDefault(); hideAllProjects(); } });
 }

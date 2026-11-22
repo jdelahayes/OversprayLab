@@ -29,7 +29,7 @@ try {
     "Chargez une image pour commencer": "Load an image to get started",
     "Derniers réglages restaurés — chargez une image": "Last settings restored — load an image",
     "Réglages par défaut": "Default settings",
-    "Rétablit tous les réglages par défaut ; l'image chargée et ses masques sont conservés, ainsi que les réglages enregistrés": "Restores all default settings; the loaded image and its masks are kept, as well as the saved presets",
+    "Réglages par défaut : rétablit tous les réglages par défaut ; l'image chargée et ses masques sont conservés, ainsi que les réglages enregistrés": "Default settings: restores all default settings; the loaded image and its masks are kept, as well as the saved presets",
     "Réglages par défaut rétablis (image conservée)": "Default settings restored (image kept)",
     "Calcul auto": "Auto compute",
     "Préférences": "Preferences", "Préférences (langue, chargement des images)": "Preferences (language, image loading)",
@@ -90,6 +90,11 @@ try {
     "Exporter la snapshot": "Export the snapshot",
     "Supprimer cette snapshot (définitivement : son répertoire est effacé)": "Delete this snapshot (for good: its folder is erased)",
     "Supprimer la snapshot": "Delete the snapshot",
+    "Supprimer le projet": "Delete the project",
+    "Tous les projets : ceux du dossier des projets, avec recherche par nom (ouverture et suppression)":
+      "All projects: those of the projects folder, with a search by name (open and delete)",
+    "Supprimer ce projet (définitivement : son dossier, avec l'image d'origine et toutes ses snapshots, est effacé)":
+      "Delete this project (for good: its folder, with the original image and all its snapshots, is erased)",
     "Ouvrir cette snapshot : image, masques, réglages et résultat, sans recalcul": "Open this snapshot: image, masks, settings and result, without computing",
     "Version courante, pas encore enregistrée : la prochaine snapshot ou le prochain export l'enregistre": "Current version, not saved yet: the next snapshot or export saves it",
     "non enregistrée": "not saved",
@@ -132,8 +137,8 @@ try {
       "Closest: gives each layer the palette colour closest to its real tone in the image (two layers never get the same colour); with no palette chosen, picks the palette that best matches the image",
     "Auto : revenir aux teintes calculées pour toutes les couches": "Auto: back to the computed tones for all layers",
     "Pochoirs SVG + projet rechargeable (image d'origine, masque, réglages)": "SVG stencils + reloadable project (original image, mask, settings)",
-    "Pochoirs SVG + projet rechargeable (image d'origine, masques, réglages et snapshots). Une version courante non enregistrée devient d'abord une snapshot.":
-      "SVG stencils + reloadable project (original image, masks, settings and snapshots). A current version not saved yet becomes a snapshot first.",
+    "Exporter le projet : pochoirs SVG + projet rechargeable (image d'origine, masques, réglages et snapshots). Une version courante non enregistrée devient d'abord une snapshot.":
+      "Export the project: SVG stencils + reloadable project (original image, masks, settings and snapshots). A current version not saved yet becomes a snapshot first.",
     "Glisser pour élargir / réduire (double-clic : largeur par défaut)": "Drag to widen / narrow (double-click: default width)",
     "Largeur du panneau des réglages": "Settings panel width", "Largeur de la colonne des pochoirs": "Stencil column width",
     // Stencil column
@@ -660,11 +665,11 @@ try {
     "Réglages du projet chargés — chargez maintenant une image": "Project settings loaded — now load an image",
     "Appliquer les réglages d'un projet…": "Apply the settings of a project…",
     "Nouveau projet": "New project",
-    "Commence un nouveau projet : tous les réglages par défaut, sans image ; il ne reste qu'à charger une image. Une version courante non enregistrée d'un projet peut d'abord être enregistrée": "Starts a new project: all the default settings, no image; then just load an image. A current version of a project not saved yet can be saved first",
+    "Nouveau projet : tous les réglages par défaut, sans image ; il ne reste qu'à charger une image. Une version courante non enregistrée d'un projet peut d'abord être enregistrée": "New project: all the default settings, no image; then just load an image. A current version of a project not saved yet can be saved first",
     "Nouveau projet : chargez une image (glissez-la sur la zone ou cliquez dessus)": "New project: load an image (drop it on the box or click it)",
-    "Applique tous les réglages d'un projet (support, matériau, couches, couleurs, cadrage…) à l'image chargée, qui garde ses masques : zip exporté par OversprayLab, ou fichier infos.json (celui d'un export ou d'une snapshot)":
-      "Applies all the settings of a project (support, material, layers, colours, crop…) to the loaded image, which keeps its masks: zip exported by OversprayLab, or infos.json file (the one of an export or of a snapshot)",
-    "Rouvrir un projet récent à sa dernière snapshot, un dossier de projet ou un zip exporté par OversprayLab": "Reopen a recent project at its last snapshot, a project folder or a zip exported by OversprayLab",
+    "Appliquer les réglages d'un projet (support, matériau, couches, couleurs, cadrage…) à l'image chargée, qui garde ses masques : zip exporté par OversprayLab, ou fichier infos.json (celui d'un export ou d'une snapshot)":
+      "Apply the settings of a project (support, material, layers, colours, crop…) to the loaded image, which keeps its masks: zip exported by OversprayLab, or infos.json file (the one of an export or of a snapshot)",
+    "Ouvrir un projet : un projet récent à sa dernière snapshot, un dossier de projet ou un zip exporté par OversprayLab": "Open a project: a recent project at its last snapshot, a project folder or a zip exported by OversprayLab",
     "Zip exporté par OversprayLab (image, masques, réglages et snapshots)": "Zip exported by OversprayLab (image, masks, settings and snapshots)",
     "Projet OversprayLab exporté (.zip).": "Exported OversprayLab project (.zip).",
     "Projet OversprayLab exporté (.zip) ou fichier infos.json : ses réglages sont appliqués à l'image chargée.": "Exported OversprayLab project (.zip) or infos.json file: its settings are applied to the loaded image.",
@@ -1436,6 +1441,9 @@ try {
     [/^(v\d+(?: — [\d/:, ]+)?) ([A-ZÀ-Ý].*)$/, (m, v, t) => `${v.trim()}\n${tr(t)}`],
     [/^Snapshot (v\d+) renommée$/, (m, v) => `Snapshot ${v} renamed`],
     [/^Snapshot (v\d+) supprimée$/, (m, v) => `Snapshot ${v} deleted`],
+    [/^Projet « (.+) » supprimé$/, (m, n) => `Project “${n}” deleted`],
+    [/^Projet « (.+) » supprimé : la version courante reste chargée, sans projet \(la prochaine snapshot crée un nouveau projet\)$/,
+      (m, n) => `Project “${n}” deleted: the current version stays loaded, in no project (the next snapshot creates a new project)`],
     [/^Export de la snapshot (v\d+)…$/, (m, v) => `Exporting snapshot ${v}…`],
     [/^Suppression impossible : ([\s\S]+)$/, (m, e) => `Deletion impossible: ${e}`],
     [/^Snapshot (v\d+) ouverte$/, (m, v) => `Snapshot ${v} opened`],

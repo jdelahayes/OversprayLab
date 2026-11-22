@@ -94,6 +94,14 @@ def delete_snapshot(d: Path, sid: str) -> None:
     shutil.rmtree(s)
 
 
+def delete_project(d: Path) -> None:
+    """Deletes a whole project folder (original image and all its snapshots), for good. `d` comes
+    from project_dir (an existing project directly inside ROOT)."""
+    if d.resolve().parent != ROOT.resolve() or not (d / PROJECT_FILE).is_file():
+        raise ProjectError("Projet inconnu")
+    shutil.rmtree(d)
+
+
 def set_label(d: Path, sid: str, label: str) -> None:
     s = snap_dir(d, sid)
     meta = _read_json(s / SNAP_FILE)
