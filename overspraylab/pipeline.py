@@ -115,7 +115,9 @@ class Params:
     outline_target: str = "stencil"
     # exclusive layers: the key-detail lines cut into a colour layer are removed from the other
     # layers (only their layer paints them); off = they are painted over the lighter layers.
-    # Default of the zones (zone key "excl": "" = this setting, "on" / "off"); the silhouette uses it
+    # Default of the zones (zone key "excl": "" = this setting, "on" / "off"), of the silhouette
+    # (key "sil_excl" of outline_zones) and of the outline stencils (group key "excl": the colour
+    # layers are then not painted under the stencil's lines)
     outline_exclusive: bool = False
     outline_sensitivity: float = 50.0   # 0 = only the strongest details .. 100 = many details (progressive)
     outline_width_mm: float = 0.8       # line width (at least the material's minimum opening)
@@ -2990,8 +2992,8 @@ def build(prep: Prepared, p: Params, outline_region: np.ndarray | None = None,
 
     # Each layer (bridges + vectorisation) is independent of the others: computed in parallel
     by_layer = manual.assign("color", [(li + 1, prep.palette[ci]) for li, ci in enumerate(color_ids)])
-    jobs = []
-    for li, ci in enumerate(color_ids):
+
+    def layer_job_of(li, ci, forbid_extra=None):
         check_cancel()
         cleaned = cleaned_all[li]
         hidden = None
@@ -3013,21 +3015,25 @@ def build(prep: Prepared, p: Params, outline_region: np.ndarray | None = None,
                 if k < li or (k > li and not p.under_darker):
                     o |= c2
             others = place(o) > 0 if o.any() else None
-        jobs.append((place(cleaned), hidden, p, float(np.clip(de / 40.0, 0.15, 1.0)), protect,
-                     manual.segments(by_layer.get(li + 1, [])), others))
-    results = run_layer_jobs(jobs)
-    layers = []
-    for li, ci in enumerate(color_ids):
+        if forbid_extra is not None:      # outline stencils excluded from the colour layers
+            others = forbid_extra if others is None else (others | forbid_extra)
+        return (place(cleaned), hidden, p, float(np.clip(de / 40.0, 0.15, 1.0)), protect,
+                manual.segments(by_layer.get(li + 1, [])), others)
+
+    def color_layer(li, ci, result):
         (opening, (bridges, n_isl, n_short, n_struct, n_weak), paths, merged, n_merged,
-         (m_drawn, m_states), cut) = results[li]
+         (m_drawn, m_states), cut) = result
         manual.record(li + 1, m_states)
         target, cleaned = targets[li], cleaned_all[li]
-        layers.append(Layer(index=li + 1, color=colors[li], target=target,
-                            opening=opening, lost=cv2.bitwise_xor(pre_fx[li] if li + 1 in fx else cleaned, target),
-                            bridges=list(m_drawn) + bridges, paths=paths,
-                            islands=n_isl, short_islands=n_short, struct_bridges=n_struct, weak_spots=len(n_weak), weak_points=_weak_mm(n_weak, p),
-                            merged=merged, n_merged=n_merged, tone=ci, manual_bridges=len(m_drawn),
-                            bridge_cut=cut))
+        return Layer(index=li + 1, color=colors[li], target=target,
+                     opening=opening, lost=cv2.bitwise_xor(pre_fx[li] if li + 1 in fx else cleaned, target),
+                     bridges=list(m_drawn) + bridges, paths=paths,
+                     islands=n_isl, short_islands=n_short, struct_bridges=n_struct, weak_spots=len(n_weak), weak_points=_weak_mm(n_weak, p),
+                     merged=merged, n_merged=n_merged, tone=ci, manual_bridges=len(m_drawn),
+                     bridge_cut=cut)
+
+    results = run_layer_jobs([layer_job_of(li, ci) for li, ci in enumerate(color_ids)])
+    layers = [color_layer(li, ci, r) for (li, ci), r in zip(enumerate(color_ids), results)]
     res = make_result(layers, detect_sim=detect_sim, detect_painted=detect_painted, lines_added=lines_added,
                       detect_sim_pre=detect_sim_pre, zone_lines=_zone_lines(entries))
 
@@ -3035,6 +3041,7 @@ def build(prep: Prepared, p: Params, outline_region: np.ndarray | None = None,
     # the zones (and silhouette) sent to it
     order = [g for g in groups if any(e[2] == g for e in entries)]
     out_masks = []                         # outline stencils done (image area), for their effects
+    excluded = None                        # outline stencils excluded from the colour layers (image area)
     sim = sim_pre = None
     for g in order:
         check_cancel()
@@ -3078,11 +3085,35 @@ def build(prep: Prepared, p: Params, outline_region: np.ndarray | None = None,
             cut = _bridge_cut(cut | _cut_by(s, opening), opening, merged)
             bridges, n_isl, n_short, n_struct, n_weak = held
             m_drawn = m_drawn + l_drawn
+            if excl and color_ids and group_exclusive(p, groups[g]):
+                # what the stencil paints once its bridges are retouched (its merges included)
+                cut_all = (opening > 0) if cut is None else ((opening > 0) | cut)
+                part = cut_all[Y0:Y0 + H, X0:X0 + W]
+                excluded = part if excluded is None else (excluded | part)
             layers.append(Layer(index=n_out, color=color, target=target, opening=opening,
                                 lost=lost, bridges=m_drawn + bridges, paths=vectorize(opening, p),
                                 islands=n_isl, short_islands=n_short, struct_bridges=n_struct, weak_spots=len(n_weak), weak_points=_weak_mm(n_weak, p),
                                 merged=merged, n_merged=n_merged,
                                 kind="outline", group=g, manual_bridges=len(m_drawn), bridge_cut=cut))
+    if excluded is not None:
+        # Outline stencils excluded from the colour layers (exclusive stacking): only they paint
+        # their lines. The stencils are searched on the finished colour layers (detection unchanged),
+        # then the colour layers painting under them are computed again without them (bridges,
+        # merges and paths), their merges kept off the lines.
+        ex_sheet = place(excluded.astype(np.uint8) * 255) > 0
+        redo = []
+        for li in range(len(color_ids)):
+            img_part = layers[li].opening[Y0:Y0 + H, X0:X0 + W] > 0
+            if (img_part & excluded).any() or (cleaned_all[li][excluded] > 0).any():
+                redo.append(li)
+        for li in redo:
+            cleaned_all[li] = trim_taken(cleaned_all[li], excluded, p, extra_area)
+            targets[li] = np.where(excluded, np.uint8(0), targets[li])
+            pre_fx[li] = np.where(excluded, np.uint8(0), pre_fx[li])
+        if redo:
+            again = run_layer_jobs([layer_job_of(li, color_ids[li], ex_sheet) for li in redo])
+            for li, r in zip(redo, again):
+                layers[li] = color_layer(li, color_ids[li], r)
     res.zone_lines = _zone_lines(entries)       # counted once every zone has been searched
     res.manual = manual.report()                # with the outline stencils
     return res
@@ -3126,7 +3157,8 @@ def outline_plan(p: Params) -> tuple[list, dict, str]:
     groups = {}
     for k, g in (data.get("groups") or {}).items():
         if isinstance(k, str) and _GROUP.match(k) and isinstance(g, dict):
-            groups[k] = {"auto": g.get("auto") is not False, "color": _hex(g.get("color"), "#1e1e1e")}
+            groups[k] = {"auto": g.get("auto") is not False, "color": _hex(g.get("color"), "#1e1e1e"),
+                         "excl": g.get("excl") if g.get("excl") in ("on", "off") else ""}
     zones = []
     seen = set()
     for z in data["zones"][:20]:
@@ -3172,8 +3204,26 @@ def zone_params(p: Params, z: dict) -> Params:
                    outline_target="stencil" if _GROUP.match(z["dest"]) else z["dest"])
 
 
+def group_exclusive(p: Params, g: dict) -> bool:
+    """Outline layer excluded from the colour layers (exclusive stacking): its "excl" ("on" / "off"),
+    else the general setting `outline_exclusive`."""
+    e = g.get("excl", "")
+    return p.outline_exclusive if e not in ("on", "off") else e == "on"
+
+
 def group_params(p: Params, g: dict) -> Params:
     return replace(p, outline_auto_color=g["auto"], outline_color=g["color"])
+
+
+def _sil_excl(p: Params) -> str:
+    """Silhouette cut into a colour layer, excluded from the other layers: "" = the general setting
+    (`outline_exclusive`), "on" / "off" (key "sil_excl" of `outline_zones`)."""
+    try:
+        data = json.loads(p.outline_zones) if p.outline_zones else None
+    except (ValueError, TypeError):
+        data = None
+    v = data.get("sil_excl") if isinstance(data, dict) else None
+    return v if v in ("on", "off") else ""
 
 
 def outline_entries(p: Params, prep: "Prepared", zone_regions: dict | None,
@@ -3197,7 +3247,9 @@ def outline_entries(p: Params, prep: "Prepared", zone_regions: dict | None,
             object.__setattr__(pz, "_zone", z["id"])          # to report its line counts
             entries.append((pz, r, z["dest"], False))
     if p.outline_subject:
+        excl = _sil_excl(p)
         entries.append((replace(p, outline=False, outline_subject=True, outline_ref="layers",
+                                outline_exclusive=p.outline_exclusive if not excl else excl == "on",
                                 outline_width_mm=p.outline_subject_width_mm or p.outline_width_mm,
                                 outline_target="stencil" if _GROUP.match(sil_dest) else sil_dest),
                         None, sil_dest, True))

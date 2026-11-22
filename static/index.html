@@ -1276,6 +1276,12 @@
       <div id="silDestBox">
         <label class="row sel" for="silDest">Destination
           <select id="silDest" title="Couche de contours de la silhouette, ou une couche de couleur"></select></label>
+        <label class="row sel" for="silExcl" id="silExclBox">Exclus des autres couches
+          <select id="silExcl">
+            <option value="">Réglage général</option>
+            <option value="on">Oui</option>
+            <option value="off">Non</option>
+          </select></label>
       </div>
       <label class="row sel" for="outline_subject_pos">Position
         <select id="outline_subject_pos">
@@ -1307,6 +1313,12 @@
         <input type="color" id="outline_color" value="#1e1e1e" aria-label="Couleur du trait" class="swc" disabled>
         <div class="palette" id="outlineSwatches"></div>
       </div>
+      <label class="row sel" for="groupExcl" id="groupExclBox">Exclus des couches de couleur
+        <select id="groupExcl">
+          <option value="">Réglage général</option>
+          <option value="on">Oui</option>
+          <option value="off">Non</option>
+        </select></label>
     </div>
   </fieldset>
 
@@ -3116,7 +3128,9 @@ const TIPS = {
   fill_gaps: "Ce que les limites du matériau retirent d'une couche est donné aux couches qui l'entourent, pour que le support ne se voie pas à travers. Empilement exclusif uniquement. Les formes changent et il peut falloir plus de ponts.",
   protect_lines: "Les traits fins, sombres ou clairs (yeux, sourcils, narines, mèches), gardent leur teinte au lieu d'être absorbés par la zone voisine lors de la simplification. Les traits plus fins que l'ouverture mini disparaissent quand même : utilisez alors « Détails clés estompés ».",
   under_darker: "Empilement exclusif : chaque endroit n'est peint que par une couche. Cochée, une couche claire peut quand même peindre sous une couche plus foncée qui la recouvre (fusions et limites du matériau) : moins de ponts, rien de visible. Décochée : aucun endroit n'est peint par deux couches.",
-  outline_exclusive: "Empilement exclusif : les détails clés découpés dans une couche de couleur sont retirés des autres couches, seule leur couche les peint. Décochée : ils sont peints par-dessus les couches plus claires. Chaque zone peut garder ce réglage ou le remplacer.",
+  outline_exclusive: "Empilement exclusif : les détails clés découpés dans une couche de couleur sont retirés des autres couches, seule leur couche les peint. Décochée : ils sont peints par-dessus les couches plus claires. Chaque zone, la silhouette et chaque pochoir de contours peuvent garder ce réglage ou le remplacer.",
+  groupExcl: "Empilement exclusif : les couches de couleur ne peignent pas sous les traits de ce pochoir de contours, seul lui les peint (un décalage de calage laisse alors voir le support le long des traits). Réglage général : celui de la section Couches.",
+  silExcl: "La silhouette découpée dans une couche de couleur est-elle retirée des autres couches ? Réglage général : celui de la section Couches.",
   zoneExcl: "Les traits de cette zone découpés dans une couche de couleur sont-ils retirés des autres couches ? Réglage général : celui de la section Couches.",
   outline_target: "Pochoir séparé : un pochoir de plus, peint en dernier, de la couleur choisie. Dans une couche : pas de pochoir en plus, les traits sont découpés dans une couche de couleur (plus foncée que la zone qu'ils traversent).",
   skip_support: "La teinte de l'image la plus proche de la couleur du support n'a pas de pochoir : le support reste visible à la place.",
@@ -3501,7 +3515,7 @@ function fieldsToZone() {
   Object.assign(z, { method: val("outline_method"), sensitivity: val("outline_sensitivity"),
                      width_mm: val("outline_width_mm"), min_length_mm: val("outline_min_length_mm"), ref: val("outline_ref"), whole: val("outline_whole_lines"), line_sens: val("outline_line_sens"), close: val("outline_close_lines"), channel: val("outline_channel"), follow_mm: val("outline_follow_mm"), clahe: val("outline_clahe") });
   const g = colourGroup(s, z);
-  if (g) s.groups[g] = { auto: val("outline_auto_color"), color: val("outline_color") };
+  if (g) s.groups[g] = { ...s.groups[g], auto: val("outline_auto_color"), color: val("outline_color") };
   zSave(s);
 }
 // zone shown -> fields of the section
@@ -3525,6 +3539,7 @@ function zoneToFields() {
   syncZoneExcl();
   const g = colourGroup(s, z), gc = g && (s.groups[g] || { auto: true, color: "#1e1e1e" });
   if (gc) { $("outline_auto_color").checked = gc.auto !== false; $("outline_color").value = gc.color || "#1e1e1e"; }
+  $("groupExcl").value = gc && ["on", "off"].includes(gc.excl) ? gc.excl : "";
   $("outline_color").disabled = $("outline_auto_color").checked;
   showValues(); methodHint(); syncOutlineTarget(); renderOutlineSwatches(); updateSummaries(); syncOutlineGroups();
 }
@@ -3583,6 +3598,8 @@ function renderZones() {
   $("zoneDel").disabled = s.zones.length < 2 || z.id === "z1";
   $("zoneDest").innerHTML = destOptions(s); $("zoneDest").value = z.dest;
   $("silDest").innerHTML = destOptions(s); $("silDest").value = s.sil_dest;
+  $("silExcl").value = ["on", "off"].includes(s.sil_excl) ? s.sil_excl : "";
+  syncZoneExcl();
 }
 function zonesAfterLoad() {        // after the settings were set (restore, undo, project, reset)
   if (!$("zoneBar")) return;
@@ -3645,6 +3662,13 @@ function setupZones() {
   $("zoneDest").addEventListener("change", () => destChange($("zoneDest"), (s, v) => { zCur(s).dest = v; }));
   $("silDest").addEventListener("change", () => destChange($("silDest"), (s, v) => { s.sil_dest = v; }));
   $("zoneExcl").addEventListener("change", () => { const s = zState(); zCur(s).excl = $("zoneExcl").value; zSave(s); schedule(); });
+  $("silExcl").addEventListener("change", () => { const s = zState(); s.sil_excl = $("silExcl").value; zSave(s); schedule(); });
+  $("groupExcl").addEventListener("change", () => {
+    const s = zState(), g = colourGroup(s, zCur(s));
+    if (!g) return;
+    s.groups[g] = { ...(s.groups[g] || { auto: true, color: "#1e1e1e" }), excl: $("groupExcl").value };
+    zSave(s); schedule();
+  });
   $("layering").addEventListener("change", syncZoneExcl);
   $("zoneDel").onclick = zoneDelete;
   // rename (inline form)
@@ -5542,8 +5566,11 @@ const TARGET_HINTS = {
 const LAYER_HINT = "Découpés dans cette couche, sauf là où une couche peinte après la recouvrirait (au-delà de la dernière couche : la dernière).";
 // "excluded from the other layers": only for a zone cut into a colour layer, in exclusive stacking
 function syncZoneExcl() {
-  const z = zCur(zState());
-  $("zoneExclBox").hidden = isGroup(z.dest) || val("layering") === "cumulative";
+  const s = zState(), z = zCur(s), cumul = val("layering") === "cumulative";
+  $("zoneExclBox").hidden = isGroup(z.dest) || cumul;
+  $("silExclBox").hidden = isGroup(s.sil_dest) || cumul;
+  // outline stencil: its lines removed from the colour layers (none in the line style)
+  $("groupExclBox").hidden = !colourGroup(s, z) || cumul || val("stencil_style") === "line";
 }
 function syncOutlineTarget() {
   const t = $("outline_target").value;
