@@ -4513,14 +4513,27 @@ function snapDate(d, full = false) {
   return t.toLocaleString(I18N.lang === "fr" ? "fr-FR" : "en-GB",
     { day: "2-digit", month: "2-digit", ...(full ? { year: "numeric" } : {}), hour: "2-digit", minute: "2-digit" });
 }
-const thumbUrl = (dir, snap) => `/api/projects/${encodeURIComponent(dir)}/${snap}/thumb.jpg`;
+// v = version of the snapshot (uid, new when it is replaced): the cached thumbnail is not reused
+const thumbUrl = (dir, snap, v) => `/api/projects/${encodeURIComponent(dir)}/${snap}/thumb.jpg${v ? "?v=" + encodeURIComponent(v) : ""}`;
 const SNAP_ICONS = {
   export: '<svg class="ico" viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3v12"/><path d="m7 10 5 5 5-5"/><path d="M5 21h14"/></svg>',
+  replace: '<svg class="ico" viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 12a9 9 0 0 1-15.5 6.2"/><path d="M3 12a9 9 0 0 1 15.5-6.2"/><path d="M19 2v4h-4"/><path d="M5 22v-4h4"/></svg>',
   delete: '<svg class="ico" viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 6h18"/><path d="M8 6V4h8v2"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/><path d="M10 11v6"/><path d="M14 11v6"/></svg>',
 };
-// SNAP_EDIT: snapshot whose label is being edited; SNAP_DEL: snapshot whose delete icon waits for
-// the confirming second click
+// SNAP_EDIT: snapshot whose label is being edited; SNAP_DEL: "action:id" of the icon (delete or
+// replace) that waits for the confirming second click
 let SNAP_EDIT = null, SNAP_DEL = null, SNAP_DEL_TIMER = null;
+// 2-click confirmation, without a dialog box: true when this click is the confirming one
+function snapConfirm(act, id) {
+  clearTimeout(SNAP_DEL_TIMER);
+  if (SNAP_DEL !== `${act}:${id}`) {
+    SNAP_DEL = `${act}:${id}`; renderSnaps();
+    SNAP_DEL_TIMER = setTimeout(() => { SNAP_DEL = null; renderSnaps(); }, 3000);
+    return false;
+  }
+  SNAP_DEL = null;
+  return true;
+}
 function renderSnaps() {
   showProjectPath();
   const bar = $("snapBar");
@@ -4539,18 +4552,20 @@ function renderSnaps() {
   if (SNAP_EDIT && document.activeElement && document.activeElement.classList.contains("edit")) return;
   const act = (a, title, label, extra = "") => `<button type="button" class="ibtn${extra}" data-act="${a}" aria-label="${label}" title="${title}">${SNAP_ICONS[a]}</button>`;
   const items = PROJ.snapshots.map(s => {
-    const cur = saved && s.id === PROJ.current, armed = SNAP_DEL === s.id, name = snapName(s);
+    const cur = saved && s.id === PROJ.current, name = snapName(s);
+    const armed = SNAP_DEL === `delete:${s.id}`, armedRep = SNAP_DEL === `replace:${s.id}`;
     // technical id and creation date: only in the tooltips ("v3 — date" + what a click does)
     const tip = what => escH(`${s.id} — ${snapDate(s.date, true)}\n${what}`);
     return `<div class="snap${cur ? " cur" : ""}" data-snap="${s.id}">
       <${cur ? "div" : "button type=\"button\""} class="snapopen" data-act="open"
         title="${tip(cur ? "Version courante" : "Ouvrir cette snapshot : image, masques, réglages et résultat, sans recalcul")}">
-      ${s.thumb ? `<img src="${thumbUrl(PROJ.dir, s.id)}" alt="">` : `<span class="nothumb"></span>`}</${cur ? "div" : "button"}>
+      ${s.thumb ? `<img src="${thumbUrl(PROJ.dir, s.id, s.uid)}" alt="">` : `<span class="nothumb"></span>`}</${cur ? "div" : "button"}>
       ${SNAP_EDIT === s.id
         ? `<input type="text" class="slabel edit" maxlength="80" value="${escH(name)}" aria-label="Nom de la snapshot" data-noi18n>`
         : `<button type="button" class="slabel" data-act="rename" title="${tip("Cliquer pour renommer la snapshot")}"><span data-noi18n>${escH(name)}</span></button>`}
       <div class="snapacts">
         ${act("export", "Exporter cette snapshot en zip : pochoirs et projet rechargeable ne contenant qu'elle", "Exporter la snapshot")}
+        ${saved ? "" : act("replace", armedRep ? "Cliquer encore pour confirmer le remplacement" : "Remplacer cette snapshot par la version courante (même nom ; son contenu précédent est perdu)", "Remplacer la snapshot", armedRep ? " confirm" : "")}
         ${act("delete", armed ? "Cliquer encore pour confirmer la suppression" : "Supprimer cette snapshot (définitivement : son répertoire est effacé)", "Supprimer la snapshot", armed ? " confirm" : "")}
       </div></div>`;
   });
@@ -4590,16 +4605,24 @@ async function renameSnapshot(id, label) {
   renderSnaps();
 }
 async function deleteSnapshot(id) {
-  clearTimeout(SNAP_DEL_TIMER);
-  if (SNAP_DEL !== id) {          // 2-click confirmation, without a dialog box
-    SNAP_DEL = id; renderSnaps();
-    SNAP_DEL_TIMER = setTimeout(() => { SNAP_DEL = null; renderSnaps(); }, 3000);
-    return;
-  }
-  SNAP_DEL = null;
+  if (!snapConfirm("delete", id)) return;
   const j = await snapCall("DELETE", snapUrl(id));
   if (j) { snapUpdated(j, id); status(`Snapshot ${id} supprimée`); }
   renderSnaps();
+}
+// Current version saved in place of a snapshot (same id and name), which becomes the current one
+async function replaceSnapshot(id) {
+  if (!snapConfirm("replace", id) || !SID || SNAP_BUSY) return renderSnaps();
+  SNAP_BUSY = true; renderSnaps();
+  try {
+    if (!(await settle())) return status("Remplacement impossible : le calcul n'a pas abouti", true);
+    const dir = PROJ.dir;
+    const j = await snapCall("POST", snapUrl(id) + "/replace", { id: SID, name: PROJECT_NAME, ui: uiState(), lang: I18N.lang });
+    if (!j) return;
+    PROJ = j; SNAP_KEY = snapKey();
+    SNAP_RENDERS.delete(`/api/projects/${encodeURIComponent(dir)}/${id}/render`);
+    status(`Snapshot ${id} remplacée par la version courante`);
+  } finally { SNAP_BUSY = false; renderSnaps(); }
 }
 function exportSnapshot(id) {
   status(`Export de la snapshot ${id}…`);
@@ -4674,7 +4697,7 @@ async function showProjects() {
   $("projFolder").textContent = j.folder || "";
   const ps = (j.projects || []).filter(p => p.last);
   list.innerHTML = ps.length ? ps.map(p => `<button type="button" class="projitem" data-dir="${escH(p.dir)}" data-snap="${p.last}">
-      ${p.thumb ? `<img src="${thumbUrl(p.dir, p.last)}" alt="">` : `<span class="nothumb"></span>`}
+      ${p.thumb ? `<img src="${thumbUrl(p.dir, p.last, p.uid)}" alt="">` : `<span class="nothumb"></span>`}
       <span class="pname" data-noi18n>${escH(p.name)}</span>
       <span class="pmeta">${p.dir !== p.name ? `<span data-noi18n>${escH(p.dir)}</span> · ` : ""}${p.count} snapshot${p.count > 1 ? "s" : ""} · ${snapDate(p.used)}</span></button>`).join("")
     : `<p class="hint">Aucun projet récent : la première snapshot (ou le premier export) d'un projet le crée dans le dossier des projets.</p>`;
@@ -4818,10 +4841,11 @@ function setupProjects() {
     const b = e.target.closest("button[data-act]"), card = e.target.closest(".snap[data-snap]");
     if (!b || !card || !PROJ.dir) return;
     const id = card.dataset.snap, a = b.dataset.act;
-    if (a !== "delete" && SNAP_DEL) { SNAP_DEL = null; clearTimeout(SNAP_DEL_TIMER); }
+    if (a !== "delete" && a !== "replace" && SNAP_DEL) { SNAP_DEL = null; clearTimeout(SNAP_DEL_TIMER); }
     if (a === "open") openSnapshot(PROJ.dir, id);
     else if (a === "rename") { SNAP_EDIT = id; renderSnaps(); }
     else if (a === "export") exportSnapshot(id);
+    else if (a === "replace") replaceSnapshot(id);
     else if (a === "delete") deleteSnapshot(id);
   });
   // label: Enter or leaving the field saves it, Escape gives up
@@ -6018,7 +6042,7 @@ async function renderPreview(st) {
 // ---------------- Compare tab: a version on each side of the line ----------------
 // "orig" = source image on the support, "pre" = preprocessed image (source when no preprocessing),
 // "cur" = current preview, "snap:v<n>" = computed result saved
-// in a snapshot of the project (fetched once: a snapshot never changes)
+// in a snapshot of the project (fetched once: dropped when the snapshot is replaced)
 // sbs = side by side instead of the slider; hid = numbers of the layers hidden on each side
 const CMP = { left: "orig", right: "cur", sbs: false, hid: { left: new Set(), right: new Set() } };
 const SNAP_RENDERS = new Map();

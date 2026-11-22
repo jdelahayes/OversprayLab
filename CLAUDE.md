@@ -69,7 +69,8 @@ Hard-won constraints, verified by the author in Silhouette Studio – do not "cl
 - `overspraylab/projects.py`: one folder per project in `projets/` (git-ignored; `OVERSPRAYLAB_PROJECTS`
   moves it – tests must point it to a temporary folder, never to the author's `projets/`).
   `original.<ext>` = source image as loaded, never reduced (`sess["orig_raw"]`); each `snapshots/v<n>/`
-  is written once (temp folder renamed) and never changed.
+  is written once (temp folder renamed) and never changed. Replacing a snapshot by the current
+  version writes a whole new folder swapped with the old one (same id and label, new `uid`).
 - `session.pkl.gz` = pickle of the session entries in `SESSION_DUMP` (app.py), restored as is so the
   next computation still reuses the geometry (identity of the masks in `sess["geom"]`). Bump
   `projects.SESSION_FORMAT` when those objects change incompatibly: older dumps are then ignored and

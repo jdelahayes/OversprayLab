@@ -1285,29 +1285,22 @@ def api_snapshot_open():
     return answer(open_snapshot(d, str(data.get("snap", ""))))
 
 
-@app.post("/api/snapshot")
-def api_snapshot():
-    """Saves the current version of the session as a new snapshot of its project folder (created
-    with the first snapshot). The session must hold an up-to-date computation."""
-    data = request.get_json(force=True)
+def snapshot_session(data):
+    """(session, error answer) of a snapshot request: the session must hold a computation."""
     sess = SESSIONS.get(data.get("id", ""))
     if not sess:
-        return jsonify(error="Session inconnue, rechargez l'image"), 404
-    res = sess.get("result")
-    if res is None:
-        return jsonify(error="Snapshot : lancez d'abord un calcul"), 409
+        return None, (jsonify(error="Session inconnue, rechargez l'image"), 404)
+    if sess.get("result") is None:
+        return None, (jsonify(error="Snapshot : lancez d'abord un calcul"), 409)
     if isinstance(data.get("ui"), dict):
         sess["ui"] = data["ui"]          # view options and palette may have changed since the computation
-    name = project_name(data.get("name"), sess["name"])
-    label = re.sub(r"[\x00-\x1f]+", " ", str(data.get("label") or "")).strip()[:80]
-    with LOCK:
-        d = sess.get("proj_dir")
-        if d is None or not d.is_dir():
-            d = projects.create_project(name, sess["orig_raw"], sess["orig_ext"], sess.get("filename"))
-            sess["proj_dir"] = d
-        else:
-            projects.rename_project(d, name)
-    token = _LANG.set(req_lang(data.get("lang")))
+    return sess, None
+
+
+def snapshot_content(sess, name, label, lang):
+    """(files, meta, thumbnail, session dump) of the current version of a session."""
+    res = sess["result"]
+    token = _LANG.set(req_lang(lang))
     try:
         files = project_files(res, sess.get("material"), name, image_file="reduite",
                               original=(sess["raw"], sess["ext"]) if sess.get("reduced") else None,
@@ -1324,7 +1317,61 @@ def api_snapshot():
     meta = {"libelle": label, "date": projects.now(), "delta_e": last.get("delta_e"), "pochoirs": len(res.layers),
             "image_reduite": bool(sess.get("reduced")), "taille_image": [w, h]}
     dump = {k: sess[k] for k in SESSION_DUMP if k in sess}
-    snap = projects.write_snapshot(d, files, meta, thumb.tobytes(), dump)
+    return files, meta, thumb.tobytes() if ok else None, dump
+
+
+@app.post("/api/snapshot")
+def api_snapshot():
+    """Saves the current version of the session as a new snapshot of its project folder (created
+    with the first snapshot). The session must hold an up-to-date computation."""
+    data = request.get_json(force=True)
+    sess, err = snapshot_session(data)
+    if err:
+        return err
+    name = project_name(data.get("name"), sess["name"])
+    label = re.sub(r"[\x00-\x1f]+", " ", str(data.get("label") or "")).strip()[:80]
+    with LOCK:
+        d = sess.get("proj_dir")
+        if d is None or not d.is_dir():
+            d = projects.create_project(name, sess["orig_raw"], sess["orig_ext"], sess.get("filename"))
+            sess["proj_dir"] = d
+        else:
+            projects.rename_project(d, name)
+    snap = projects.write_snapshot(d, *snapshot_content(sess, name, label, data.get("lang")))
+    sess["snap"] = snap
+    return jsonify({**project_state(d, snap), "snap": snap})
+
+
+@app.post("/api/projects/<name>/<snap>/replace")
+def api_snapshot_replace(name, snap):
+    """Replaces a snapshot of the session's project by the current version of the session (same
+    id and label). Other sessions opened on that snapshot keep their state, now unsaved."""
+    data = request.get_json(force=True)
+    try:
+        d = snapshot_of(name, snap)
+    except projects.ProjectError as e:
+        return jsonify(error=str(e)), 404
+    sess, err = snapshot_session(data)
+    if err:
+        return err
+    if sess.get("proj_dir") != d:
+        return jsonify(error="Cette snapshot n'appartient pas au projet ouvert"), 409
+    pname = project_name(data.get("name"), sess["name"])
+    with LOCK:
+        projects.rename_project(d, pname)
+    content = snapshot_content(sess, pname, "", data.get("lang"))
+    try:
+        with LOCK:
+            projects.replace_snapshot(d, snap, *content)
+            for k in [k for k in _SNAP_RENDERS if k[0] == str(projects.snap_dir(d, snap))]:
+                _SNAP_RENDERS.pop(k)
+            for other in SESSIONS.values():
+                if other is not sess and other.get("proj_dir") == d and other.get("snap") == snap:
+                    other["snap"] = None
+    except projects.ProjectError as e:
+        return jsonify(error=str(e)), 404
+    except OSError as e:
+        return jsonify(error=f"Remplacement impossible : {e}"), 500
     sess["snap"] = snap
     return jsonify({**project_state(d, snap), "snap": snap})
 

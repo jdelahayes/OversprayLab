@@ -3,7 +3,8 @@
     <projects>/<project folder>/
         projet.json              project: id, name, original image
         original.<ext>           source image as loaded, never reduced, stored once
-        snapshots/v<n>/          one self-contained snapshot (written once, never changed)
+        snapshots/v<n>/          one self-contained snapshot (written once, never changed: a replacement
+                                 is a new folder swapped whole with it)
             infos.json           settings (same format as the export)
             *.png                painted masks (size of the working image of the snapshot)
             reduite.<ext>        working image, only when the snapshot works on a reduced image
@@ -151,7 +152,7 @@ def list_projects(limit: int | None = None) -> list[dict]:
         info, snaps = project_info(d), snapshots(d)
         last = snaps[-1] if snaps else None
         out.append({"dir": d.name, "name": str(info.get("nom") or d.name), "count": len(snaps),
-                    "last": last["id"] if last else None,
+                    "last": last["id"] if last else None, "uid": last["uid"] if last else None,
                     "date": (last or {}).get("date") or info.get("date"),
                     "used": info.get("ouvert_le") or (last or {}).get("date") or info.get("date"),
                     "thumb": bool(last and last["thumb"])})
@@ -193,12 +194,8 @@ def now() -> str:
     return datetime.now().isoformat(timespec="seconds")
 
 
-def write_snapshot(d: Path, files: dict[str, bytes], meta: dict, thumb: bytes | None,
-                   session: dict | None) -> str:
-    """Writes a new snapshot (next number) and returns its id. Written into a temporary folder
-    renamed at the end: a snapshot is complete or absent."""
-    base = d / "snapshots"
-    base.mkdir(exist_ok=True)
+def _fill_tmp(base: Path, files: dict[str, bytes], thumb: bytes | None, session: dict | None) -> Path:
+    """Temporary folder of the snapshots folder holding a snapshot's files (but its snapshot.json)."""
     tmp = base / f".tmp_{uuid.uuid4().hex[:8]}"
     tmp.mkdir()
     try:
@@ -212,6 +209,48 @@ def write_snapshot(d: Path, files: dict[str, bytes], meta: dict, thumb: bytes | 
                 (tmp / SESSION_FILE).write_bytes(gzip.compress(blob, 6))
             except (pickle.PicklingError, TypeError, AttributeError):
                 pass                     # no cache: the snapshot is recomputed when opened
+    except BaseException:
+        shutil.rmtree(tmp, ignore_errors=True)
+        raise
+    return tmp
+
+
+def replace_snapshot(d: Path, sid: str, files: dict[str, bytes], meta: dict, thumb: bytes | None,
+                     session: dict | None) -> None:
+    """Replaces the content of a snapshot by another version, keeping its id and its label. The
+    new folder is written aside and swapped whole with the old one (a snapshot's folder itself is
+    never modified). It gets a new uid: another version, imported as such from older zips."""
+    s = snap_dir(d, sid)
+    old = _read_json(s / SNAP_FILE)
+    base = s.parent
+    tmp = None
+    try:
+        tmp = _fill_tmp(base, files, thumb, session)
+        _write_json(tmp / SNAP_FILE, {**meta, "id": sid, "libelle": old.get("libelle") or "",
+                                      "date": meta.get("date") or now(), "uid": uuid.uuid4().hex})
+        trash = base / f".tmp_old_{uuid.uuid4().hex[:8]}"
+        s.rename(trash)
+        try:
+            tmp.rename(s)
+        except BaseException:
+            trash.rename(s)              # put the old version back
+            raise
+        tmp = None
+        shutil.rmtree(trash, ignore_errors=True)
+        touch(d)
+    finally:
+        if tmp is not None:
+            shutil.rmtree(tmp, ignore_errors=True)
+
+
+def write_snapshot(d: Path, files: dict[str, bytes], meta: dict, thumb: bytes | None,
+                   session: dict | None) -> str:
+    """Writes a new snapshot (next number) and returns its id. Written into a temporary folder
+    renamed at the end: a snapshot is complete or absent."""
+    base = d / "snapshots"
+    base.mkdir(exist_ok=True)
+    tmp = _fill_tmp(base, files, thumb, session)
+    try:
         while True:
             sid = next_id(d)
             _write_json(tmp / SNAP_FILE, {**meta, "id": sid, "date": meta.get("date") or now(),

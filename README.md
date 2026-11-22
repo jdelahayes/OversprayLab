@@ -176,7 +176,8 @@ difference (ΔE).
 ### Projects, snapshots and presets
 
 - **Snapshots** keep versions of a project (image, masks, settings and computed result) in the
-  `projets/` folder; click a thumbnail to go back to it instantly.
+  `projets/` folder; click a thumbnail to go back to it instantly. A modified version can also
+  replace an existing snapshot (same name) instead of adding a new one.
 - **Open a project…** reopens recent projects, a project folder or an exported zip.
 - **Undo / redo** (Ctrl + Z / Ctrl + Y) covers settings and painted masks.
 - Your own supports, materials, mats, machines and palettes are saved as presets.
