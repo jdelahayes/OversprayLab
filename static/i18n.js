@@ -423,7 +423,7 @@ try {
     "Marge intérieure pour « Ajuster au support » (mm)": "Inner margin for “Fit to support” (mm)",
     "Faites glisser l'image dans l'onglet « Mise en page » ; poignée en bas à droite = taille.": "Drag the image in the “Layout” tab; bottom-right handle = size.",
     // Preprocessing
-    "Prétraitement de l'image": "Image preprocessing", "Niveaux automatiques": "Auto levels",
+    "Prétraitement": "Preprocessing", "Niveaux automatiques": "Auto levels",
     "Étire les tons du plus sombre au plus clair.": "Stretches the tones from darkest to lightest.",
     "Contraste local": "Local contrast", "Tons moyens (gamma)": "Midtones (gamma)",
     "Fait ressortir les volumes (visage, plis) avant le découpage en teintes.": "Brings out volumes (face, folds) before splitting into tones.",

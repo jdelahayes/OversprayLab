@@ -86,7 +86,7 @@ uselessly high) for its printed size.
 
 ![Layout view with the cutting mat](docs/screenshots/layout.jpg)
 
-### Image preprocessing
+### Preprocessing
 
 Levels, local contrast (CLAHE), shadows / highlights, gamma, an editable **tone curve** with
 presets, saturation, sharpening, background removal. The histogram shows where each tone ends; drag

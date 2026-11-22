@@ -1032,7 +1032,7 @@
   </fieldset>
 
   <fieldset>
-    <legend>Prétraitement de l'image</legend>
+    <legend>Prétraitement</legend>
     <div style="display:flex; align-items:center; gap:8px; margin:6px 0 2px">
       <label class="full" style="margin:0"><input type="checkbox" id="pre_auto_levels"> Niveaux automatiques</label>
       <button type="button" id="preReset" class="vt-small" title="Aucun prétraitement">Réinitialiser</button>
@@ -2940,7 +2940,7 @@ const SECTION_SUMMARY = {
   "Projet": () => PROJECT_NAME,
   "Support à peindre": () => `${val("support_w_mm")} × ${val("support_h_mm")} mm`,
   "Position de l'image": () => IMG ? `${$("img_width_mm").value} × ${$("img_height_mm").value} mm` : "",
-  "Prétraitement de l'image": () => {
+  "Prétraitement": () => {
     const a = [];
     if (val("pre_auto_levels")) a.push("niveaux");
     if (val("pre_clahe") > 0) a.push(`contraste ${val("pre_clahe")}`);
