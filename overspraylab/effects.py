@@ -1314,10 +1314,11 @@ def pass_on(orig: list, out: list, ctx: Context, changed: set, opts: dict) -> se
 
 
 def apply_all(masks: list, effects: dict, p, image_bgr: np.ndarray, off_px: tuple,
-              limit: np.ndarray | None = None, opts: dict | None = None) -> list:
+              limit: np.ndarray | None = None, opts: dict | None = None, under: dict | None = None) -> list:
     """Applies the stacks to the colour layer masks (image area), in spraying order.
     `limit`: area the openings must stay in (removed background), None = whole image.
-    `opts`: see `options` (exclusive stacking only; None = no passing on)."""
+    `opts`: see `options` (exclusive stacking only; None = no passing on).
+    `under`: filled with {layer position: what the Overlap effect added under the next layers}."""
     orig = list(masks)
     out = list(masks)
     ctx = Context(ppm=p.px_per_mm, off_px=off_px, image_bgr=image_bgr, masks=out,
@@ -1338,6 +1339,8 @@ def apply_all(masks: list, effects: dict, p, image_bgr: np.ndarray, off_px: tupl
         ctx.touched |= pass_on(orig, out, ctx, done | ctx.touched, opts)
     for i in sorted(done | ctx.touched):
         out[i] = clean_after(out[i], p, limit)
+    if under is not None:
+        under.update(ctx.under)
     return out
 
 

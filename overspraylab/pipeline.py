@@ -92,6 +92,10 @@ class Params:
     skip_support: bool = True      # the tone closest to the support gets no stencil
     # exclusive layers: what the material limits remove goes to the layers around it
     fill_gaps: bool = False
+    # exclusive layers: each spot is painted by one layer only (see exclusive_layers); with this on, a
+    # lighter layer may still paint under a darker one, which repaints it (its merges and the material
+    # limits may then fill areas of the darker layer, hidden: fewer bridges)
+    under_darker: bool = True
     protect_lines: bool = False    # thin strokes (eyes, eyebrows…) escape the majority filter
     # Flat areas (poster look: full flat layers, no interleaving): 0 = off .. 100 = strongest.
     # Islands of a tone whose border with the surrounding area has a low contrast are absorbed by it
@@ -109,6 +113,10 @@ class Params:
     # where the lines go: stencil = separate outline stencil painted last;
     # darkest = into the darkest layer; nearest = into the layer of the nearest (darker) tone
     outline_target: str = "stencil"
+    # exclusive layers: the key-detail lines cut into a colour layer are removed from the other
+    # layers (only their layer paints them); off = they are painted over the lighter layers.
+    # Default of the zones (zone key "excl": "" = this setting, "on" / "off"); the silhouette uses it
+    outline_exclusive: bool = False
     outline_sensitivity: float = 50.0   # 0 = only the strongest details .. 100 = many details (progressive)
     outline_width_mm: float = 0.8       # line width (at least the material's minimum opening)
     outline_min_length_mm: float = 4.0  # minimum line length
@@ -1222,6 +1230,63 @@ def clean_mask(mask: np.ndarray, p: Params, extra_area_mm2: float = 0.0) -> np.n
     return m
 
 
+def trim_taken(mask: np.ndarray, taken: np.ndarray, p: Params, extra_area_mm2: float = 0.0) -> np.ndarray:
+    """`mask` without `taken` (bool), then the material limits that only remove opening: the parts
+    left thinner than the minimum opening or smaller than the minimum area are removed, only around
+    what was taken (unlike clean_mask, never adds opening: what a layer gives up must stay given up)."""
+    m = np.where(taken, np.uint8(0), mask)
+    if not (taken & (mask > 0)).any():
+        return mask
+    ppm = p.px_per_mm
+    t = m
+    r_open = p.min_opening_mm * ppm / 2
+    if r_open >= 0.5:
+        t = cv2.morphologyEx(t, cv2.MORPH_OPEN, disk(r_open))
+    amin = int((p.min_area_mm2 + extra_area_mm2) * ppm * ppm)
+    if amin > 1:
+        t = remove_small(t, amin)
+    gone = (m > 0) & (t == 0)
+    if gone.any():
+        near = cv2.dilate(taken.astype(np.uint8), disk(max(r_open, 1.0) * 2 + 1)) > 0
+        n, lab = cv2.connectedComponents(gone.astype(np.uint8), connectivity=8)
+        hit = np.unique(lab[gone & near])
+        m = np.where(np.isin(lab, hit[hit > 0]), np.uint8(0), m)
+    return m
+
+
+def exclusive_layers(masks: list, targets: list, p: Params, extra_area_mm2: float = 0.0,
+                     keep: dict | None = None) -> list:
+    """Exclusive stacking: each spot painted by one layer only. A spot several layers paint (the
+    material limits closing a narrow gap or filling a small hole of one layer over another one)
+    stays with the layer whose tone it is (`targets`), else with the darkest of them; the others
+    give it up (trim_taken), except a lighter layer when `p.under_darker` (painted under, hidden by
+    the darker one). `keep`: {layer: spots it keeps anyway} (the Overlap effect, on purpose)."""
+    n = len(masks)
+    if n < 2:
+        return masks
+    cnt = np.zeros(masks[0].shape, np.uint8)
+    for m in masks:
+        cnt += m > 0
+    multi = cnt > 1
+    if not multi.any():
+        return masks
+    owner = np.full(multi.shape, -1, np.int16)
+    for k in range(n):                       # darkest painting it
+        owner[multi & (masks[k] > 0)] = k
+    for k in range(n):                       # the layer of its tone (targets are disjoint)
+        owner[multi & (masks[k] > 0) & (targets[k] > 0)] = k
+    out = list(masks)
+    for k in range(n):
+        take = multi & (masks[k] > 0) & (owner != k)
+        if p.under_darker:
+            take &= owner < k                # under a darker layer: kept
+        if keep and k in keep:
+            take &= ~(keep[k] > 0)
+        if take.any():
+            out[k] = trim_taken(masks[k], take, p, extra_area_mm2)
+    return out
+
+
 def _grow_layers(grown: list, gained: list, todo: np.ndarray, refused: list, tone: np.ndarray,
                  dist: np.ndarray) -> np.ndarray:
     """Grows the layers together into the `todo` pixels, one pixel (4-neighbours) per step, until
@@ -1341,7 +1406,8 @@ def merge_area_mm2(amount: float) -> float:
 
 
 def merge_zones(opening: np.ndarray, p: Params, hidden: np.ndarray | None = None,
-                weight: float = 1.0, protect: np.ndarray | None = None) -> tuple[np.ndarray, int]:
+                weight: float = 1.0, protect: np.ndarray | None = None,
+                others: np.ndarray | None = None) -> tuple[np.ndarray, int]:
     """Holds material islands by merging zones instead of bridges, when the change is small enough.
 
     A. closes a narrow channel of opening (narrower than `merge_channel_mm`) separating an island
@@ -1352,6 +1418,8 @@ def merge_zones(opening: np.ndarray, p: Params, hidden: np.ndarray | None = None
     the cost stays under `merge_area_mm2(p.merge_amount)` and the merge links separate groups.
     `protect`: areas no merge may change (key-detail lines cut into the layer); the islands touching
     them are kept too, unless `merge_line_islands` (the lines themselves are never closed).
+    `others`: areas of other layers this layer may not paint (exclusive stacking): an island
+    reaching them is not removed (B).
     Modifies `opening` in place; returns (mask of the changed areas, number of merges).
     """
     check_cancel()
@@ -1373,6 +1441,8 @@ def merge_zones(opening: np.ndarray, p: Params, hidden: np.ndarray | None = None
         if protect is not None and not p.merge_line_islands:   # islands bordering a protected line are kept
             near = (cv2.dilate(protect.astype(np.uint8), np.ones((3, 3), np.uint8)) > 0) & material
             ring = set(np.unique(lab[near]).tolist())
+        if others is not None:              # island over another layer's paint: kept
+            ring |= set(np.unique(lab[others & material]).tolist())
         for i in range(1, n):
             if i in ring:
                 continue
@@ -2631,11 +2701,11 @@ def layer_job(job):
     """Manual bridges + merges + bridges + vectorisation of one layer (module-level function: can
     run in another process). `protect`: areas no merge may change (lines added to the layer);
     `weight`: see merge_zones; `manual`: manual bridges of the layer (see apply_manual_bridges)."""
-    opening, hidden, p, weight, protect, manual = job
+    opening, hidden, p, weight, protect, manual, others = job
     s = opening.copy()
     m_drawn, m_states, forbid = apply_manual_bridges(opening, manual, p)
     cut = _cut_by(s, opening)
-    merged, n_merged = merge_zones(opening, p, hidden, weight, protect)
+    merged, n_merged = merge_zones(opening, p, hidden, weight, protect, others)
     s = opening.copy()
     pre = s if needs_pre(manual) else None
     held = hold_material(opening, p, hidden, forbid, m_drawn)
@@ -2722,9 +2792,9 @@ _JOB_KEY_SKIP = {"layer_colors", "layer_effects", "spray_mm", "manual_bridges"}
 
 def _job_key(job) -> bytes:
     import hashlib
-    opening, hidden, p, weight, protect, manual = job
+    opening, hidden, p, weight, protect, manual, others = job
     h = hashlib.blake2b(digest_size=20)
-    for a in (opening, hidden, protect):
+    for a in (opening, hidden, protect, others):
         if a is None:
             h.update(b"-")
         else:
@@ -2832,10 +2902,14 @@ def build(prep: Prepared, p: Params, outline_region: np.ndarray | None = None,
     fx = fx_all if color_ids else {}
     pre_fx = list(cleaned_all)            # without effects: what the "removed details" are compared to
     base_masks = list(cleaned_all)        # colour layers before their effects (key details "before effects")
+    fx_under = {}                         # Overlap effect: under the next layers on purpose
     if fx:
         limit = None if prep.fg is None else np.where(prep.fg, 255, 0).astype(np.uint8)
         cleaned_all = fxmod.apply_all(cleaned_all, fx, p, prep.resized, prep.off_px, limit,
-                                      fxmod.options(p.layer_effects))
+                                      fxmod.options(p.layer_effects), fx_under)
+    excl = p.layering == "exclusive"
+    if excl:                              # each spot painted by one layer only (material limits)
+        cleaned_all = exclusive_layers(cleaned_all, targets, p, extra_area, fx_under)
 
     paints = parse_layer_colors(p.layer_colors)
     colors = [paints.get(li + 1, prep.palette[ci]) for li, ci in enumerate(color_ids)]
@@ -2882,16 +2956,37 @@ def build(prep: Prepared, p: Params, outline_region: np.ndarray | None = None,
             (lambda pe=pe, reg=reg: lines_into_layers(prep, ref_sim(pe, detect_sim, detect_sim_pre), pe, reg,
                                                       color_ids, painted))
             for pe, reg, _, _ in into])
-        for s, n_added in found:
+        alone = {}                        # lines removed from the other layers (outline_exclusive)
+        for (pe, _, _, _), (s, n_added) in zip(into, found):
             lines_added += n_added
             for li, stroke in s.items():
                 strokes[li] = stroke if li not in strokes else (strokes[li] | stroke)
+                if excl and pe.outline_exclusive:
+                    alone[li] = stroke if li not in alone else (alone[li] | stroke)
         detect_painted = painted
         for li, stroke in strokes.items():
+            line = clean_mask(stroke, p)
             targets[li] = targets[li] | stroke
-            cleaned_all[li] = clean_mask(cleaned_all[li] | clean_mask(stroke, p), p)
+            before = cleaned_all[li]
+            cleaned_all[li] = clean_mask(cleaned_all[li] | line, p)
             if li + 1 in fx:
-                pre_fx[li] = pre_fx[li] | clean_mask(stroke, p)
+                pre_fx[li] = pre_fx[li] | line
+            if excl:
+                # what the cleaning added around the line over another layer: given back (over a
+                # lighter one always, over a darker one unless the layer may paint under it)
+                extra = (cleaned_all[li] > 0) & (before == 0) & (line == 0)
+                for k, other in enumerate(cleaned_all):
+                    if k != li and (k < li or not p.under_darker):
+                        extra_k = extra & (other > 0)
+                        if extra_k.any():
+                            cleaned_all[li] = trim_taken(cleaned_all[li], extra_k, p)
+        for li, stroke in alone.items():  # only their layer paints these lines
+            line = (clean_mask(stroke, p) > 0) & (cleaned_all[li] > 0)
+            for k in range(len(cleaned_all)):
+                if k != li and (cleaned_all[k][line] > 0).any():
+                    cleaned_all[k] = trim_taken(cleaned_all[k], line, p, extra_area)
+                    targets[k] = np.where(line, np.uint8(0), targets[k])
+                    pre_fx[k] = np.where(line, np.uint8(0), pre_fx[k])
 
     # Each layer (bridges + vectorisation) is independent of the others: computed in parallel
     by_layer = manual.assign("color", [(li + 1, prep.palette[ci]) for li, ci in enumerate(color_ids)])
@@ -2909,8 +3004,17 @@ def build(prep: Prepared, p: Params, outline_region: np.ndarray | None = None,
         under = colors[li - 1] if (p.layering == "cumulative" and li > 0) else support
         de = float(np.linalg.norm(_lab(colors[li]) - _lab(under)))
         protect = place(strokes[li]) > 0 if li in strokes else None
+        # exclusive: the merges may not paint the areas of the lighter layers (nor of the darker
+        # ones, unless the layer may paint under them)
+        others = None
+        if excl and len(color_ids) > 1:
+            o = np.zeros_like(cleaned)
+            for k, c2 in enumerate(cleaned_all):
+                if k < li or (k > li and not p.under_darker):
+                    o |= c2
+            others = place(o) > 0 if o.any() else None
         jobs.append((place(cleaned), hidden, p, float(np.clip(de / 40.0, 0.15, 1.0)), protect,
-                     manual.segments(by_layer.get(li + 1, []))))
+                     manual.segments(by_layer.get(li + 1, [])), others))
     results = run_layer_jobs(jobs)
     layers = []
     for li, ci in enumerate(color_ids):
@@ -3010,7 +3114,7 @@ def outline_plan(p: Params) -> tuple[list, dict, str]:
                   width_mm=p.outline_width_mm, min_length_mm=p.outline_min_length_mm, dest=legacy,
                   ref=p.outline_ref, whole=bool(p.outline_whole_lines), line_sens=p.outline_line_sens,
                   close=p.outline_close_lines, channel=p.outline_channel, follow_mm=p.outline_follow_mm,
-                  clahe=p.outline_clahe)]
+                  clahe=p.outline_clahe, excl="")]
     sil = legacy
     try:
         data = json.loads(p.outline_zones) if p.outline_zones else None
@@ -3045,7 +3149,8 @@ def outline_plan(p: Params) -> tuple[list, dict, str]:
                           close=z.get("close") if z.get("close") in CLOSE_LINES else "",
                           channel=z.get("channel") if z.get("channel") in OUTLINE_CHANNELS else "light",
                           whole=z.get("whole") is True, line_sens=num("line_sens", 0, 100, 50.0),
-                          follow_mm=num("follow_mm", 0, 50, HYST_MM_DOG), clahe=num("clahe", 0, 100, 0.0)))
+                          follow_mm=num("follow_mm", 0, 50, HYST_MM_DOG), clahe=num("clahe", 0, 100, 0.0),
+                          excl=z.get("excl") if z.get("excl") in ("on", "off") else ""))
     if not zones:
         return outline_plan(replace(p, outline_zones=""))
     sil = data.get("sil_dest") if ok_dest(data.get("sil_dest")) else zones[0]["dest"]
@@ -3063,6 +3168,7 @@ def zone_params(p: Params, z: dict) -> Params:
                    outline_min_length_mm=z["min_length_mm"], outline_ref=z["ref"], outline_whole_lines=z["whole"],
                    outline_line_sens=z["line_sens"], outline_close_lines=z["close"], outline_channel=z["channel"],
                    outline_follow_mm=z["follow_mm"], outline_clahe=z["clahe"],
+                   outline_exclusive=p.outline_exclusive if not z.get("excl") else z["excl"] == "on",
                    outline_target="stencil" if _GROUP.match(z["dest"]) else z["dest"])
 
 

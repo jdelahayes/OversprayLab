@@ -102,6 +102,10 @@ measured on the original photo. For a deeper preparation of the source image, se
 - **Level of detail**, **hue weight** (split colours of similar lightness), **colour vividness**.
 - **Flat areas**: poster-like flat layers, automatic or painted zone by zone, optionally forced into a given layer.
 - **Stacking**: exclusive (each layer paints its own tone) or cumulative (layers overlap, forgiving registration).
+  In exclusive stacking no spot is painted by two layers; two options relax it: a lighter layer may paint
+  under a darker one (merges and material limits, hidden, fewer bridges), and key details cut into a colour
+  layer may be painted over the lighter layers instead of being removed from them (general setting, each
+  zone can override it).
 - **Merge instead of bridges**: close narrow channels or drop small islands when the visible change stays small.
 
 ### Masks and object selection

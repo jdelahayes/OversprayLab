@@ -1143,6 +1143,8 @@
         <p class="hint">Cumulatif : chaque pochoir ouvre sa couleur + les plus foncées. Moins de pièces fragiles et pas de liseré entre couleurs.</p>
         <div class="check"><input type="checkbox" id="skip_support" checked><label for="skip_support">La teinte la plus proche du support reste nue (pas de pochoir)</label></div>
         <div class="check"><input type="checkbox" id="fill_gaps"><label for="fill_gaps">Combler les trous laissés par les limites du matériau</label></div>
+        <div class="check"><input type="checkbox" id="under_darker" checked><label for="under_darker">Une couche claire peut peindre sous une couche plus foncée</label></div>
+        <div class="check"><input type="checkbox" id="outline_exclusive"><label for="outline_exclusive">Détails clés découpés dans une couche : exclus des autres couches</label></div>
         <div class="check"><input type="checkbox" id="protect_lines"><label for="protect_lines">Protéger les traits fins de la simplification (yeux, sourcils, mèches…)</label></div>
       </div>
     </div>
@@ -1208,6 +1210,12 @@
           <option value="nearest">Dans la couche de teinte la plus proche</option>
         </select>
         <p class="hint" id="outline_target_hint"></p>
+        <label class="row sel" for="zoneExcl" id="zoneExclBox">Exclus des autres couches
+          <select id="zoneExcl">
+            <option value="">Réglage général</option>
+            <option value="on">Oui</option>
+            <option value="off">Non</option>
+          </select></label>
       </div>
       <label class="row sel" for="outline_method">Méthode
         <select id="outline_method">
@@ -1761,8 +1769,8 @@ const PARAMS = ["support_w_mm", "support_h_mm", "support_color", "inner_margin_m
   "pre_auto_levels", "pre_clahe", "pre_contrast", "pre_shadows", "pre_highlights", "pre_black", "pre_white", "pre_gamma", "pre_curve",
   "manual_thresholds", "thresholds", "pre_saturation", "pre_sharpen", "pre_remove_bg",
   "layer_colors", "layer_effects", "manual_bridges",
-  "n_layers", "detail", "hue_weight", "color_vividness", "flat_auto", "flat_tolerance", "flat_tolerances", "color_mode", "layering", "skip_support", "fill_gaps", "protect_lines",
-  "outline", "outline_target", "outline_method", "outline_sensitivity", "outline_width_mm", "outline_min_length_mm", "outline_subject", "outline_subject_mask", "outline_subject_pos", "outline_subject_width_mm", "outline_subject_weak", "outline_subject_de", "outline_subject_gap_every_mm", "outline_subject_gap_mm", "stencil_style", "line_zones", "line_zones_color", "line_sil_color", "outline_auto_color", "outline_color", "outline_zones", "outline_ref", "outline_whole_lines", "outline_line_sens", "outline_close_lines", "outline_channel", "outline_follow_mm", "outline_clahe",
+  "n_layers", "detail", "hue_weight", "color_vividness", "flat_auto", "flat_tolerance", "flat_tolerances", "color_mode", "layering", "skip_support", "fill_gaps", "under_darker", "protect_lines",
+  "outline", "outline_target", "outline_exclusive", "outline_method", "outline_sensitivity", "outline_width_mm", "outline_min_length_mm", "outline_subject", "outline_subject_mask", "outline_subject_pos", "outline_subject_width_mm", "outline_subject_weak", "outline_subject_de", "outline_subject_gap_every_mm", "outline_subject_gap_mm", "stencil_style", "line_zones", "line_zones_color", "line_sil_color", "outline_auto_color", "outline_color", "outline_zones", "outline_ref", "outline_whole_lines", "outline_line_sens", "outline_close_lines", "outline_channel", "outline_follow_mm", "outline_clahe",
   ...MAT_FIELDS, "merge_amount", "merge_channel_mm", "merge_channels", "merge_islands", "merge_line_islands",
   "tolerance_mm", "smooth_curves", "spray_mm", "px_per_mm", "px_per_mm_auto"];
 const SUPPORT_COLORS = [["Blanc", "#ffffff"], ["Ivoire", "#f3ecd9"], ["Kraft", "#c8a26e"], ["Gris", "#9a9a9a"], ["Noir", "#1e1e1e"]];
@@ -3107,6 +3115,9 @@ const TIPS = {
   paintFlat: "Ouvre l'onglet Masques sur le masque Aplats : peignez ou cliquez (outil Objet) chaque zone à remplir d'une seule teinte (visage, fond, vêtement…). Chaque zone séparée est traitée seule.",
   fill_gaps: "Ce que les limites du matériau retirent d'une couche est donné aux couches qui l'entourent, pour que le support ne se voie pas à travers. Empilement exclusif uniquement. Les formes changent et il peut falloir plus de ponts.",
   protect_lines: "Les traits fins, sombres ou clairs (yeux, sourcils, narines, mèches), gardent leur teinte au lieu d'être absorbés par la zone voisine lors de la simplification. Les traits plus fins que l'ouverture mini disparaissent quand même : utilisez alors « Détails clés estompés ».",
+  under_darker: "Empilement exclusif : chaque endroit n'est peint que par une couche. Cochée, une couche claire peut quand même peindre sous une couche plus foncée qui la recouvre (fusions et limites du matériau) : moins de ponts, rien de visible. Décochée : aucun endroit n'est peint par deux couches.",
+  outline_exclusive: "Empilement exclusif : les détails clés découpés dans une couche de couleur sont retirés des autres couches, seule leur couche les peint. Décochée : ils sont peints par-dessus les couches plus claires. Chaque zone peut garder ce réglage ou le remplacer.",
+  zoneExcl: "Les traits de cette zone découpés dans une couche de couleur sont-ils retirés des autres couches ? Réglage général : celui de la section Couches.",
   outline_target: "Pochoir séparé : un pochoir de plus, peint en dernier, de la couleur choisie. Dans une couche : pas de pochoir en plus, les traits sont découpés dans une couche de couleur (plus foncée que la zone qu'ils traversent).",
   skip_support: "La teinte de l'image la plus proche de la couleur du support n'a pas de pochoir : le support reste visible à la place.",
   outline: "Retrace d'un trait fin les détails estompés par la simplification et le flou de l'aérographe, dans un pochoir séparé ou dans une couche de couleur.",
@@ -3249,7 +3260,7 @@ function renderFx(force) {
   $("fxAll").checked = s.on;
   $("fxSync").checked = s.sync; $("fxFreed").value = s.freed;
   const cumul = val("layering") === "cumulative";
-  $("fxSync").disabled = $("fxFreed").disabled = $("fill_gaps").disabled = cumul; $("fxExclHint").hidden = !cumul;
+  $("fxSync").disabled = $("fxFreed").disabled = $("fill_gaps").disabled = $("under_darker").disabled = $("outline_exclusive").disabled = cumul; $("fxExclHint").hidden = !cumul;
   // focused control kept across the rebuild (keyboard use of the sliders)
   const a = document.activeElement, keep = a && box.contains(a)
     ? { id: a.closest(".fxitem")?.dataset.id, k: a.dataset.k, cls: a.className.split(" ")[0], l: a.closest(".fxlayer")?.dataset.l } : null;
@@ -3510,6 +3521,8 @@ function zoneToFields() {
   const tsel = $("outline_target"), tv = isGroup(z.dest) ? "stencil" : z.dest;
   if (![...tsel.options].some(o => o.value === tv)) tsel.add(new Option(destLabel(tv), tv));   // "L<n>"
   tsel.value = tv;
+  $("zoneExcl").value = ["on", "off"].includes(z.excl) ? z.excl : "";
+  syncZoneExcl();
   const g = colourGroup(s, z), gc = g && (s.groups[g] || { auto: true, color: "#1e1e1e" });
   if (gc) { $("outline_auto_color").checked = gc.auto !== false; $("outline_color").value = gc.color || "#1e1e1e"; }
   $("outline_color").disabled = $("outline_auto_color").checked;
@@ -3631,6 +3644,8 @@ function setupZones() {
   };
   $("zoneDest").addEventListener("change", () => destChange($("zoneDest"), (s, v) => { zCur(s).dest = v; }));
   $("silDest").addEventListener("change", () => destChange($("silDest"), (s, v) => { s.sil_dest = v; }));
+  $("zoneExcl").addEventListener("change", () => { const s = zState(); zCur(s).excl = $("zoneExcl").value; zSave(s); schedule(); });
+  $("layering").addEventListener("change", syncZoneExcl);
   $("zoneDel").onclick = zoneDelete;
   // rename (inline form)
   const form = $("zoneNameForm"), input = $("zoneName");
@@ -5525,6 +5540,11 @@ const TARGET_HINTS = {
   nearest: "Découpés dans la couche de teinte la plus proche de celle du trait.",
 };
 const LAYER_HINT = "Découpés dans cette couche, sauf là où une couche peinte après la recouvrirait (au-delà de la dernière couche : la dernière).";
+// "excluded from the other layers": only for a zone cut into a colour layer, in exclusive stacking
+function syncZoneExcl() {
+  const z = zCur(zState());
+  $("zoneExclBox").hidden = isGroup(z.dest) || val("layering") === "cumulative";
+}
 function syncOutlineTarget() {
   const t = $("outline_target").value;
   $("outline_target_hint").textContent = TARGET_HINTS[t] || (isLayerDest(t) ? LAYER_HINT : "");
