@@ -1503,8 +1503,8 @@
       <input type="range" id="spray_mm" min="0" max="3" step="0.1" value="0.4"></label>
     <label class="row" for="px_per_mm">Résolution de calcul (px/mm) <span class="v" id="px_per_mm_v"></span></label>
     <div style="display:flex; gap:6px; align-items:center; margin:-2px 0 6px">
-      <button type="button" id="ppmAuto" class="vt-opt" aria-pressed="false" title="Résolution automatique : enfoncé, la résolution suit les limites du matériau (au moins 6 px sur la plus petite des deux largeurs minimales, ouverture ou bande de matière ; entre 6 et 12 px/mm). Relâché (clic ou curseur bougé), elle reste celle du curseur">Auto</button>
-      <input type="checkbox" id="px_per_mm_auto" hidden>
+      <button type="button" id="ppmAuto" class="vt-opt" aria-pressed="true" title="Résolution automatique : enfoncé, la résolution suit les limites du matériau (au moins 6 px sur la plus petite des deux largeurs minimales, ouverture ou bande de matière ; entre 6 et 12 px/mm). Relâché (clic ou curseur bougé), elle reste celle du curseur">Auto</button>
+      <input type="checkbox" id="px_per_mm_auto" hidden checked>
       <input type="range" id="px_per_mm" min="3" max="12" step="1" value="6" aria-label="Résolution de calcul (px/mm)" style="flex:1; min-width:0"></div>
     <p class="hint">Plus haut = plus précis mais plus lent.</p>
   </fieldset>
@@ -2629,6 +2629,8 @@ const SUPPORT_FIELDS = ["support_w_mm", "support_h_mm", "support_color", "inner_
 function setVals(o) {
   // settings saved before the key-detail zones: the zones are rebuilt from the outline_* fields
   if (o && "outline_method" in o && !("outline_zones" in o) && $("outline_zones")) $("outline_zones").value = "";
+  // settings saved before the automatic resolution (on by default): their resolution stays as saved
+  if (o && "px_per_mm" in o && !("px_per_mm_auto" in o)) o = { ...o, px_per_mm_auto: false };
   for (const [k, v] of Object.entries(o || {})) {
     const e = $(k); if (!e) continue;
     if (e.type === "checkbox") e.checked = !!v; else e.value = v;
@@ -4347,6 +4349,8 @@ function applyProjectSettings(info) {
   // values, not the ones of the current session
   // (not the key-detail zones of a project saved before them: setVals rebuilds them from its outline_* fields)
   const legacyZones = "outline_method" in vals && !("outline_zones" in vals);
+  // (nor the automatic resolution, on by default: a project saved before it keeps its resolution)
+  if ("px_per_mm" in vals && !("px_per_mm_auto" in vals)) vals.px_per_mm_auto = false;
   if (DEFAULTS) PARAMS.forEach(k => {
     if (!(k in vals) && k in DEFAULTS && !(legacyZones && k === "outline_zones")) vals[k] = DEFAULTS[k];
   });

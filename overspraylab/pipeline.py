@@ -60,8 +60,9 @@ class Params:
     image_pos_y: float = 50.0      # image centre, as % of the support height
     px_per_mm: float = 6.0
     # "Auto" button of the interface: px_per_mm follows the material limits (computed by the
-    # client, autoPpm in index.html); kept here so that it is saved with the project
-    px_per_mm_auto: bool = False
+    # client, autoPpm in index.html); kept here so that it is saved with the project. On by
+    # default; settings saved before it existed are read as off (setVals in index.html)
+    px_per_mm_auto: bool = True
     # Image preprocessing (before simplification)
     pre_auto_levels: bool = False  # automatic levels stretch (luminance)
     pre_clahe: float = 0.0         # local contrast (CLAHE), 0..100
