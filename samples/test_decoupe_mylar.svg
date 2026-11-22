@@ -1,0 +1,43 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- Mylar cut test, 50 x 50 mm. All shapes are cut lines (no fill, 0.1 mm stroke). -->
+<svg xmlns="http://www.w3.org/2000/svg" width="50mm" height="50mm" viewBox="0 0 50 50">
+  <g id="frame" fill="none" stroke="#000" stroke-width="0.1">
+    <!-- sheet outline -->
+    <rect x="0.05" y="0.05" width="49.9" height="49.9"/>
+    <!-- inner frame (3 mm border) -->
+    <rect x="3" y="3" width="44" height="44"/>
+  </g>
+  <g id="tests" fill="none" stroke="#000" stroke-width="0.1">
+    <!-- row 1: circles, diameter 1, 2, 3, 5, 8 mm + 5-point star (sharp angles) -->
+    <circle cx="7" cy="9" r="0.5"/>
+    <circle cx="10.5" cy="9" r="1"/>
+    <circle cx="15" cy="9" r="1.5"/>
+    <circle cx="22" cy="9" r="2.5"/>
+    <circle cx="31" cy="9" r="4"/>
+    <path d="M41,5 L41.88,7.79 L44.80,7.76 L42.43,9.46 L43.35,12.24 L41,10.5 L38.65,12.24 L39.57,9.46 L37.20,7.76 L40.12,7.79 Z"/>
+
+    <!-- row 2: slots 12 mm long, width 0.3, 0.5, 0.75, 1, 1.5, 2, 3 mm + ring (island) -->
+    <rect x="6" y="17" width="0.3" height="12"/>
+    <rect x="10" y="17" width="0.5" height="12"/>
+    <rect x="14" y="17" width="0.75" height="12"/>
+    <rect x="18" y="17" width="1" height="12"/>
+    <rect x="22" y="17" width="1.5" height="12"/>
+    <rect x="26.5" y="17" width="2" height="12"/>
+    <rect x="31.5" y="17" width="3" height="12"/>
+    <circle cx="41" cy="23" r="3.5"/>
+    <circle cx="41" cy="23" r="2"/>
+
+    <!-- row 3: openings separated by bridges of 0.5, 1, 1.5 mm -->
+    <rect x="6" y="33" width="3" height="10"/>
+    <rect x="9.5" y="33" width="3" height="10"/>
+    <rect x="13.5" y="33" width="3" height="10"/>
+    <rect x="18" y="33" width="3" height="10"/>
+    <!-- squares 1, 2, 3, 5 mm -->
+    <rect x="24" y="37.5" width="1" height="1"/>
+    <rect x="26.5" y="37" width="2" height="2"/>
+    <rect x="30" y="36.5" width="3" height="3"/>
+    <rect x="35" y="35.5" width="5" height="5"/>
+    <!-- narrow triangle (~17 deg tip) -->
+    <path d="M42,43 L45,43 L43.5,33 Z"/>
+  </g>
+</svg>
