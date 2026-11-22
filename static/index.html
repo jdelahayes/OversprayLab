@@ -507,6 +507,8 @@
   .weakov { position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none; overflow: visible; z-index: 5; }
   .weakov circle { fill: none; stroke: #e11d48; stroke-width: 2.5px; stroke-dasharray: 5 3; vector-effect: non-scaling-stroke; }
   .weakov circle.c { fill: #e11d48; stroke: #fff; stroke-width: 1.5px; stroke-dasharray: none; }
+  .weakov g { transition: opacity .15s; }
+  .weakov g.near { opacity: 0; }   /* pointer inside it with the bridge tool: out of the way */
   body.no-support .lv .weakov { display: none; }
   .card .weaklink { color: #d97706; cursor: pointer; text-decoration: underline dotted; }
   body.no-bridges .lv .ov-bridges, body.no-lost .lv .ov-lost, body.no-merged .lv .ov-merged, body.no-flat .lv .ov-flat, body.no-support .lv .ov-support { display: none; }
@@ -6641,7 +6643,7 @@ function renderBridgeTools() {
 }
 function setBridgeTool(on) {
   BR.on = on; BR.draft = null;
-  if (!on) { BR.sel = null; BR.autoSeg = null; }
+  if (!on) { BR.sel = null; BR.autoSeg = null; document.querySelectorAll(".weakov g.near").forEach(g => g.classList.remove("near")); }
   renderManualBridges(); renderBridgeTools();
 }
 const nextBridgeId = list => "m" + (list.reduce((a, b) => Math.max(a, parseInt(String(b.id).slice(1)) || 0), 0) + 1);
@@ -6743,6 +6745,19 @@ function setupManualBridges() {
     // captured by the layer view (not the whole view area): its cross cursor stays while drawing
     e.target.closest(".lv").setPointerCapture(e.pointerId);
   });
+  // circles of the weak parts (support map): hidden while the pointer is inside one with the
+  // bridge tool, so that the bridge can be drawn where it is needed (kept hidden while drawing
+  // from inside it)
+  const nearWeak = e => {
+    const lv = bridgeTool() && LAST && e.target.closest && e.target.closest(".lv");
+    const [x, y] = lv ? toMm(e) : [NaN, NaN];
+    st.querySelectorAll(".weakov g").forEach(g => {
+      const inside = (px, py) => Math.hypot(px - g.dataset.x, py - g.dataset.y) <= +g.dataset.r;
+      g.classList.toggle("near", !!lv && (inside(x, y) || !!(drag && inside(drag.x, drag.y))));
+    });
+  };
+  st.addEventListener("pointermove", nearWeak);
+  st.addEventListener("pointerleave", nearWeak);
   st.addEventListener("pointermove", e => {
     if (!drag || e.pointerId !== drag.id) return;
     const [x, y] = toMm(e);
@@ -6786,7 +6801,7 @@ function setupManualBridges() {
 // sheet mm): circled on the support map, so that they can be found on the layer
 function weakSVG(pts) {
   const f = v => Math.round(v * 100) / 100, [w, h] = LAST.sheet_mm;
-  const body = pts.map(([x, y, r]) => `<circle cx="${f(x)}" cy="${f(y)}" r="${f(Math.max(3, r))}"/><circle class="c" cx="${f(x)}" cy="${f(y)}" r="1.5"/>`).join("");
+  const body = pts.map(([x, y, r]) => `<g data-x="${f(x)}" data-y="${f(y)}" data-r="${f(Math.max(3, r))}"><circle cx="${f(x)}" cy="${f(y)}" r="${f(Math.max(3, r))}"/><circle class="c" cx="${f(x)}" cy="${f(y)}" r="1.5"/></g>`).join("");
   return `<svg class="weakov" viewBox="0 0 ${f(w)} ${f(h)}" preserveAspectRatio="none" aria-hidden="true">${body}</svg>`;
 }
 function setOverlay(btn, cls, on) {
