@@ -4792,7 +4792,9 @@ function setupProjects() {
   $("projDirBtn").onclick = () => { hideProjects(); $("projectDir").click(); };
   setupAllProjects();
   $("projectDir").onchange = e => { const fs = [...e.target.files]; e.target.value = ""; if (fs.length) openFolder(fs); };
-  document.addEventListener("pointerdown", e => { if (!pop.hidden && !pop.contains(e.target) && e.target !== btn) hideProjects(); });
+  // a click anywhere else closes it (capture: before any handler that stops the event); the button
+  // itself toggles it (its icon is the target of the click, hence contains)
+  document.addEventListener("pointerdown", e => { if (!pop.hidden && !pop.contains(e.target) && !btn.contains(e.target)) hideProjects(); }, true);
   document.addEventListener("keydown", e => { if (e.key === "Escape" && !pop.hidden) { hideProjects(); btn.focus(); } });
   $("snapBtn").onclick = () => createSnapshot();
   $("snapLabel").addEventListener("keydown", e => { if (e.key === "Enter") { e.preventDefault(); createSnapshot(); } });
