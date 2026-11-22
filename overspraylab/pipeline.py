@@ -2561,6 +2561,9 @@ class Layer:
     sources: tuple = ()      # line stencils of the "line" style: details:<group> | silhouette | zones | tone<n>
     group: str = ""          # outline stencil: key of its outline layer (A, B...)
     manual_bridges: int = 0  # manual bridges drawn (included in `bridges`), see apply_manual_bridges
+    # opening pixels the bridges (manual and automatic) cut (whole sheet, bool), so that
+    # opening_without_bridges puts back exactly those; None in results saved before it existed
+    bridge_cut: np.ndarray | None = None
 
 
 @dataclass
@@ -2629,12 +2632,30 @@ def layer_job(job):
     run in another process). `protect`: areas no merge may change (lines added to the layer);
     `weight`: see merge_zones; `manual`: manual bridges of the layer (see apply_manual_bridges)."""
     opening, hidden, p, weight, protect, manual = job
+    s = opening.copy()
     m_drawn, m_states, forbid = apply_manual_bridges(opening, manual, p)
+    cut = _cut_by(s, opening)
     merged, n_merged = merge_zones(opening, p, hidden, weight, protect)
-    pre = opening.copy() if needs_pre(manual) else None
+    s = opening.copy()
+    pre = s if needs_pre(manual) else None
     held = hold_material(opening, p, hidden, forbid, m_drawn)
     held, l_drawn, l_states = late_manual(opening, pre, held, manual, p)   # automatic bridges kept
-    return opening, held, vectorize(opening, p), merged, n_merged, (m_drawn + l_drawn, m_states + l_states)
+    cut = _bridge_cut(cut | _cut_by(s, opening), opening, merged)
+    return (opening, held, vectorize(opening, p), merged, n_merged, (m_drawn + l_drawn, m_states + l_states),
+            cut)
+
+
+def _cut_by(before: np.ndarray, opening: np.ndarray) -> np.ndarray:
+    """Opening pixels of `before` that are material in `opening` (cut by the bridges drawn since)."""
+    return (before > 0) & (opening == 0)
+
+
+def _bridge_cut(cut: np.ndarray, opening: np.ndarray, merged) -> np.ndarray | None:
+    """Layer.bridge_cut: what the bridges cut and is still material, minus the merged areas."""
+    cut &= opening == 0
+    if merged is not None:
+        cut &= ~(np.asarray(merged) > 0)
+    return cut if cut.any() else None
 
 
 # Parallelism between layers: "thread" (default), "process" (separate processes), or "none" (serial)
@@ -2894,14 +2915,15 @@ def build(prep: Prepared, p: Params, outline_region: np.ndarray | None = None,
     layers = []
     for li, ci in enumerate(color_ids):
         (opening, (bridges, n_isl, n_short, n_struct, n_weak), paths, merged, n_merged,
-         (m_drawn, m_states)) = results[li]
+         (m_drawn, m_states), cut) = results[li]
         manual.record(li + 1, m_states)
         target, cleaned = targets[li], cleaned_all[li]
         layers.append(Layer(index=li + 1, color=colors[li], target=target,
                             opening=opening, lost=cv2.bitwise_xor(pre_fx[li] if li + 1 in fx else cleaned, target),
                             bridges=list(m_drawn) + bridges, paths=paths,
                             islands=n_isl, short_islands=n_short, struct_bridges=n_struct, weak_spots=len(n_weak), weak_points=_weak_mm(n_weak, p),
-                            merged=merged, n_merged=n_merged, tone=ci, manual_bridges=len(m_drawn)))
+                            merged=merged, n_merged=n_merged, tone=ci, manual_bridges=len(m_drawn),
+                            bridge_cut=cut))
     res = make_result(layers, detect_sim=detect_sim, detect_painted=detect_painted, lines_added=lines_added,
                       detect_sim_pre=detect_sim_pre, zone_lines=_zone_lines(entries))
 
@@ -2941,18 +2963,22 @@ def build(prep: Prepared, p: Params, outline_region: np.ndarray | None = None,
             out_masks.append(cleaned)
             opening = place(cleaned)
             mine = manual.assign("outline", [(n_out, g)]).get(n_out, [])
+            s = opening.copy()
             m_drawn, forbid = manual.apply(opening, n_out, mine)
+            cut = _cut_by(s, opening)
             merged, n_merged = merge_line_islands(opening, p, color, support)
-            pre = opening.copy() if needs_pre(manual.segments(mine)) else None
+            s = opening.copy()
+            pre = s if needs_pre(manual.segments(mine)) else None
             held = hold_material(opening, p, None, forbid, m_drawn)
             held, l_drawn = manual.late(opening, pre, n_out, mine, held)
+            cut = _bridge_cut(cut | _cut_by(s, opening), opening, merged)
             bridges, n_isl, n_short, n_struct, n_weak = held
             m_drawn = m_drawn + l_drawn
             layers.append(Layer(index=n_out, color=color, target=target, opening=opening,
                                 lost=lost, bridges=m_drawn + bridges, paths=vectorize(opening, p),
                                 islands=n_isl, short_islands=n_short, struct_bridges=n_struct, weak_spots=len(n_weak), weak_points=_weak_mm(n_weak, p),
                                 merged=merged, n_merged=n_merged,
-                                kind="outline", group=g, manual_bridges=len(m_drawn)))
+                                kind="outline", group=g, manual_bridges=len(m_drawn), bridge_cut=cut))
     res.zone_lines = _zone_lines(entries)       # counted once every zone has been searched
     res.manual = manual.report()                # with the outline stencils
     return res
@@ -3583,20 +3609,24 @@ def line_stencils(prep: Prepared, p: Params, entries: list, groups: dict, suppor
         done.append(cleaned)
         opening = place(cleaned)
         mine = by_layer.get(i + 1, [])
+        s = opening.copy()
         m_drawn, forbid = manual.apply(opening, i + 1, mine) if manual else ([], None)
+        cut = _cut_by(s, opening)
         merged, n_merged = merge_line_islands(opening, p, c, support)
-        pre = opening.copy() if manual and needs_pre(manual.segments(mine)) else None
+        s = opening.copy()
+        pre = s if manual and needs_pre(manual.segments(mine)) else None
         held = hold_material(opening, p, None, forbid, m_drawn)
         if manual:
             held, l_drawn = manual.late(opening, pre, i + 1, mine, held)
             m_drawn = m_drawn + l_drawn
+        cut = _bridge_cut(cut | _cut_by(s, opening), opening, merged)
         bridges, n_isl, n_short, n_struct, n_weak = held
         layers.append(Layer(index=i + 1, color=c, target=target, opening=opening,
                             lost=lost, bridges=m_drawn + bridges,
                             paths=vectorize(opening, p), islands=n_isl, short_islands=n_short,
                             struct_bridges=n_struct, weak_spots=len(n_weak), weak_points=_weak_mm(n_weak, p),
                             merged=merged, n_merged=n_merged, kind="outline", sources=tuple(srcs),
-                            manual_bridges=len(m_drawn)))
+                            manual_bridges=len(m_drawn), bridge_cut=cut))
     return layers
 
 
@@ -4398,11 +4428,15 @@ def _draw_bridges(img: np.ndarray, res: Result, L: Layer, color) -> None:
 
 
 def opening_without_bridges(res: Result, L: Layer) -> np.ndarray:
-    """Openings of a layer with its bridges painted over, as after retouching them: the bridge
-    strokes, limited to the gaps they cut in the opening (closing of the opening at the bridge
-    width), are added back to the opening."""
+    """Openings of a layer with its bridges painted over, as after retouching them: the opening
+    pixels the bridges cut (Layer.bridge_cut) are put back. Results saved before it existed: the
+    bridge strokes limited to a closing of the opening at the bridge width (this missed the base
+    of the bridges, where a disk of the closing fits across the bridge and the material it joins)."""
     if not L.bridges:
         return L.opening
+    cut = getattr(L, "bridge_cut", None)
+    if cut is not None:
+        return np.where(cut, np.uint8(255), L.opening)
     a = np.zeros(L.opening.shape, np.uint8)
     _draw_bridges(a, res, L, 255)
     bw = max(1, int(round(res.params.bridge_width_mm * res.params.px_per_mm)))
