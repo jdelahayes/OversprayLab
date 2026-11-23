@@ -23,6 +23,7 @@ import numpy as np
 
 from . import effects as fxmod
 from . import teed
+from . import timings
 from .cancel import Cancelled, cancellable, check_cancel  # noqa: F401  (used through this module by app.py)
 
 
@@ -4280,10 +4281,12 @@ def _prefetch_lines(prep: Prepared, p: Params, entries: list, groups: dict, supp
     # local contrast of the original photo, which every detection compares the render with
     orig = prep.raw if prep.raw is not None else prep.resized
     ppm = p.px_per_mm
+    rec = timings.current()             # computation timed: the prefetch reports to it too
 
     def contrast():
         try:
-            _image_grad(orig, ppm, lambda: _lab_grad(_lab01(orig), ppm))
+            with timings.use(rec):
+                _image_grad(orig, ppm, lambda: _lab_grad(_lab01(orig), ppm))
         except Exception:
             pass
     _thread_pool().submit(contrast)
@@ -4304,7 +4307,8 @@ def _prefetch_lines(prep: Prepared, p: Params, entries: list, groups: dict, supp
 
         def run(pe=pe, reg=reg, dark=dark):
             try:
-                _line_candidates(prep, pe, dark, reg)
+                with timings.use(rec):
+                    _line_candidates(prep, pe, dark, reg)
             except Exception:
                 pass
         _thread_pool().submit(run)

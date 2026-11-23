@@ -34,6 +34,10 @@
                    box-shadow: 0 0 0 0 rgba(249,115,22,.6); animation: calcpulse 1.6s ease-out infinite; }
   @keyframes calcpulse { 70% { box-shadow: 0 0 0 8px rgba(249,115,22,0); } 100% { box-shadow: 0 0 0 0 rgba(249,115,22,0); } }
   @media (prefers-reduced-motion: reduce) { .calcbtn.dirty { animation: none; } }
+  .brpause { display: inline-flex; align-items: center; padding: 3px 8px; border-radius: 999px; color: var(--muted); margin-left: -6px; }
+  .brpause[aria-pressed="true"] { background: var(--accent); color: var(--accent-ink); border-color: var(--accent); }
+  .brpause[aria-pressed="true"].held { background: #16a34a; color: #fff; border-color: #16a34a; }   /* paused, result complete */
+  .brpause .ico { display: block; }
   /* Computing: coloured header, animated stripes */
   header { transition: background-color .25s, color .25s; }
   header.busy { background-color: #b45309; color: #fff;
@@ -763,6 +767,7 @@
   <label class="autocalc" title="Coché : chaque modification relance le calcul. Décoché : le calcul ne se fait qu'à la demande (bouton à côté, ou Ctrl + Entrée).">
     <input type="checkbox" id="auto_calc" checked> Calcul auto</label>
   <button type="button" id="calcBtn" class="calcbtn" hidden>À jour ✓</button>
+  <button type="button" id="brPause" class="brpause" aria-pressed="false" hidden aria-label="Ponts en pause"><svg class="ico" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M2 8h20"/><path d="M5 8v11"/><path d="M19 8v11"/><path d="M5 19c0-4.5 3-7 7-7s7 2.5 7 7"/></svg></button>
   <button type="button" class="gear" id="prefsBtn" aria-haspopup="dialog" aria-expanded="false" aria-controls="prefPop"
     title="Préférences (langue, chargement des images)" aria-label="Préférences">⚙</button>
 </header>
@@ -779,6 +784,8 @@
   <div class="check"><input type="checkbox" id="show_hints" checked><label for="show_hints">Afficher les indications sous les réglages</label></div>
   <p class="hint">Décoché : seuls restent les états (tient sur le tapis, sujet peint…).</p>
   <div class="check"><input type="checkbox" id="show_tips" checked><label for="show_tips">Afficher les infobulles au survol</label></div>
+  <div class="check"><input type="checkbox" id="log_timings"><label for="log_timings">Enregistrer les temps de calcul (débogage)</label></div>
+  <p class="hint">Chaque calcul ajoute le temps passé dans chaque fonction au fichier timings.jsonl du dossier du projet (gardé en mémoire jusqu'à la première snapshot).</p>
 </div>
 <div class="projpop" id="projPop" role="dialog" aria-label="Projets récents" hidden>
   <h4>Projets récents</h4>
@@ -3815,6 +3822,17 @@ async function init() {
   ["margin_mm", ...MAT_FIELDS].forEach(k => $(k).addEventListener("input", schedule));
   $("n_layers").addEventListener("input", renderReco);
   $("calcBtn").onclick = () => process();
+  $("brPause").onclick = () => {
+    BR_PAUSE = !BR_PAUSE; savePref("bridges_paused", BR_PAUSE);
+    if (BR_PAUSE) {          // what keeps the bridges computed is closed (they can be shown again)
+      if ($("lgSupport").getAttribute("aria-pressed") === "true") $("lgSupport").click();
+      if (BR.on) setBridgeTool(false);
+    }
+    syncBridgePause();
+    // pausing keeps the result shown (it has its bridges): the next change computes without them
+    if (!BR_PAUSE && LAST && LAST.bridges_paused) schedule();
+  };
+  $("bridges").addEventListener("change", syncBridgePause);
   $("auto_calc").addEventListener("change", () => {
     if (autoCalc() && DIRTY) process();            // back to auto mode: catch up with the changes
     updateCalcBtn(); rememberSettings();
@@ -3994,7 +4012,12 @@ async function init() {
   $("lgLost").onclick = () => { setOverlay("lgLost", "no-lost", $("lgLost").getAttribute("aria-pressed") !== "true"); saveOverlays(); };
   $("lgMerged").onclick = () => { setOverlay("lgMerged", "no-merged", $("lgMerged").getAttribute("aria-pressed") !== "true"); saveOverlays(); };
   $("lgFlat").onclick = () => { setOverlay("lgFlat", "no-flat", $("lgFlat").getAttribute("aria-pressed") !== "true"); saveOverlays(); };
-  $("lgSupport").onclick = () => { setOverlay("lgSupport", "no-support", $("lgSupport").getAttribute("aria-pressed") !== "true"); saveOverlays(); loadSupportMaps(); };
+  $("lgSupport").onclick = () => {
+    const on = $("lgSupport").getAttribute("aria-pressed") !== "true";
+    setOverlay("lgSupport", "no-support", on); saveOverlays();
+    if (on) needBridges();
+    loadSupportMaps();
+  };
   $("optPre").onclick = () => { SHOW_PRE = !SHOW_PRE; render(); };
   $("show_reg").addEventListener("change", () => { render(); rememberSettings(); });
   const setViewBg = () => {                        // display preference, not part of the project
@@ -4176,6 +4199,8 @@ async function init() {
   $("tabs").querySelectorAll("button[data-v]").forEach(b => b.onclick = () => { VIEW = b.dataset.v; SEL = null; render(); });
   $("export").onclick = async () => {
     if (!SID) return;
+    if ((bridgesPaused() || (LAST && LAST.bridges_paused)) && !(await settle()))
+      return status("Export impossible : le calcul n'a pas abouti", true);
     // a current version not saved yet becomes a snapshot first (the first export of a project
     // creates its folder and its snapshot v0)
     if (!isSaved() && !(await createSnapshot())) return;
@@ -4227,6 +4252,8 @@ function setupPrefs() {
   $("show_hints").checked = prefs().show_hints !== false;
   $("show_tips").checked = prefs().show_tips !== false;
   ["show_hints", "show_tips"].forEach(k => $(k).addEventListener("change", () => { savePref(k, $(k).checked); applyHelpPrefs(); }));
+  $("log_timings").checked = prefs().log_timings === true;
+  $("log_timings").addEventListener("change", () => savePref("log_timings", $("log_timings").checked));
   setupTipsSwitch(); applyHelpPrefs();
   const show = on => { pop.hidden = !on; btn.setAttribute("aria-expanded", String(on)); if (on) $("lang").focus(); };
   btn.onclick = e => { e.stopPropagation(); show(pop.hidden); };
@@ -4638,12 +4665,15 @@ async function settle() {
   const sid = SID, wait = async () => { while (busy) await new Promise(ok => setTimeout(ok, 100)); };
   await wait();
   if (SID !== sid) return false;
-  if (DIRTY || !LAST || LAST.sid !== SID || CALC_KEY !== snapKey()) {
-    clearTimeout(timer);
-    await process();
-    await wait();
-  }
-  return SID === sid && !!LAST && LAST.sid === SID && !DIRTY;
+  BR_FORCE = true;          // a snapshot or an export needs the bridges: computed, the pause stays
+  try {
+    if (DIRTY || !LAST || LAST.sid !== SID || CALC_KEY !== calcKey() || LAST.bridges_paused) {
+      clearTimeout(timer);
+      await process();
+      await wait();
+    }
+  } finally { BR_FORCE = false; }
+  return SID === sid && !!LAST && LAST.sid === SID && !DIRTY && !LAST.bridges_paused;
 }
 async function createSnapshot() {
   if (!SID || SNAP_BUSY) return false;
@@ -4973,7 +5003,37 @@ function historyGo(step) {
   status(step < 0 ? "Annulé" : "Rétabli");
   render(); schedule();
 }
+// ---------------- Bridges paused ----------------
+// Header button: the computations skip the automatic bridges while composing (faster). A working
+// option, not a setting (not saved, not part of snapKey). What needs the bridges gets them without
+// leaving the pause: a snapshot or an export (BR_FORCE, one computation), the support map and the
+// manual bridge tool (every computation while they are shown). The server refuses to export or
+// save a paused result. Button: orange = paused, result without bridges; green = paused, but the
+// result shown has its bridges (last computation made them for one of these needs).
+let BR_PAUSE = prefs().bridges_paused === true, BR_FORCE = false;   // the pause is remembered by the browser
+// what makes a computation keep the bridges during the pause (also written in the timings log)
+const bridgesKeptBy = () => [BR_FORCE && "snapshot_or_export", !document.body.classList.contains("no-support") && "support_map",
+                             bridgeTool() && "bridge_tool"].filter(Boolean);
+const bridgesWanted = () => bridgesKeptBy().length > 0;
+const bridgesPaused = () => BR_PAUSE && $("bridges").checked && !bridgesWanted();   // sent with a computation
+const calcKey = () => snapKey() + (bridgesPaused() ? "|bridges paused" : "");
+function syncBridgePause() {
+  const b = $("brPause"), off = !$("bridges").checked, held = BR_PAUSE && !off && !!LAST && !LAST.bridges_paused;
+  b.hidden = !SID;
+  b.disabled = off;
+  b.setAttribute("aria-pressed", String(BR_PAUSE && !off));
+  b.classList.toggle("held", held);
+  b.title = off ? "Ponts automatiques désactivés dans les réglages"
+    : held ? "Ponts en pause, mais le résultat affiché a ses ponts : le dernier calcul les a faits pour une snapshot, un export, la carte des appuis ou l'outil Ponts manuels. Les calculs suivants se font sans eux, sauf tant que la carte des appuis ou l'outil Ponts manuels est affiché. Cliquer pour quitter la pause"
+    : BR_PAUSE ? "Ponts en pause : le calcul se fait sans les ponts automatiques. Cliquer pour les recalculer"
+    : "Mettre les ponts en pause pendant la composition : le calcul se fait sans les ponts automatiques (plus rapide) ; la carte des appuis et l'outil Ponts manuels sont fermés. Une snapshot, un export, la carte des appuis ou l'outil Ponts manuels rouverts les calculent quand même, sans quitter la pause";
+}
+// the support map or the manual bridge tool was just shown: a result without bridges is recomputed
+function needBridges() {
+  if (LAST && LAST.bridges_paused) process();
+}
 function updateCalcBtn() {
+  syncBridgePause();
   const b = $("calcBtn");
   b.hidden = !SID;
   const running = busy && GEN === CALC_GEN;   // settings changed since it started: it can be replaced
@@ -5002,10 +5062,10 @@ async function process() {
   historyRecord();
   if (busy) {
     again = true;
-    if (CALC_RUN && (CALC_RUN.sid !== SID || CALC_KEY !== snapKey())) cancelCalc();   // same state: it goes on
+    if (CALC_RUN && (CALC_RUN.sid !== SID || CALC_KEY !== calcKey())) cancelCalc();   // same state: it goes on
     return;
   }
-  CALC_KEY = snapKey();       // state being computed (a snapshot needs an up-to-date result)
+  CALC_KEY = calcKey();       // state being computed (a snapshot needs an up-to-date result)
   busy = true; status("Calcul en cours…");
   document.querySelector("header").classList.add("busy");
   const gen = CALC_GEN = GEN; updateCalcBtn();
@@ -5013,7 +5073,9 @@ async function process() {
   CALC_RUN = { sid, id: `${Date.now()}.${++CALC_N}`, cancelled: false };
   try {
     const r = await fetch("/api/process", { method: "POST", headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ id: SID, run: CALC_RUN.id, params: params(), material: material(), ui: uiState() }) });
+      body: JSON.stringify({ id: SID, run: CALC_RUN.id, params: params(), material: material(), ui: uiState(), pause_bridges: bridgesPaused(),
+        timings: prefs().log_timings === true, pause_asked: BR_PAUSE && $("bridges").checked,
+        bridges_kept_by: BR_PAUSE ? bridgesKeptBy() : [] }) });
     const j = await r.json();
     if (!r.ok) throw new Error(j.error || "Erreur");
     if (!j.cancelled) {
@@ -6416,7 +6478,7 @@ function render() {
     <span>Feuille du pochoir : <b>${LAST.sheet_mm[0]} × ${LAST.sheet_mm[1]} mm</b></span>
     <span>Image : <b>${LAST.image_mm[0]} × ${LAST.image_mm[1]} mm</b></span>
     <span>Écart à l'original (ΔE moyen) : <b>${LAST.delta_e}</b> <small>(plus bas = plus fidèle)</small></span>
-    <span>Ponts : <b>${tot.b}</b></span>
+    <span>Ponts : <b>${tot.b}</b>${LAST.bridges_paused ? ` <small>(automatiques en pause)</small>` : ""}</span>
     <span>Longueur de coupe totale : <b>${tot.c.toFixed(2)} m</b></span>`;
 
   renderCalage();
@@ -6434,6 +6496,7 @@ function render() {
           ${L.kind !== "outline" && L.tone != null ? `<button type="button" class="lflat${FLAT_COVS["t" + L.tone] > 0 ? " on" : ""}" data-tone="${L.tone}" title="Peindre un aplat dans cette couche : les zones peintes (ou objets sélectionnés) prennent la couleur de cette couche, les détails francs restent (onglet Masques, masque Aplats)" aria-label="Peindre un aplat dans cette couche">${ICO_FLAT}</button>` : ""}
           <button type="button" class="eye" aria-pressed="${!HIDDEN.has(L.index)}" title="Afficher / masquer dans la prévisualisation" aria-label="Afficher / masquer dans la prévisualisation">${eyeIcon(!HIDDEN.has(L.index))}</button></div>
         ${L.paths} tracés · ${L.nodes} nœuds · ${L.islands} îlot${L.islands > 1 ? "s" : ""} · ${L.bridges} ponts${L.merged ? ` · ${L.merged} fusion${L.merged > 1 ? "s" : ""}` : ""}<br>
+        ${LAST.bridges_paused ? `<span style="color:#d97706">Ponts automatiques en pause</span><br>` : ""}
         ${L.short_islands ? `<span style="color:#d97706">⚠ ${L.short_islands} îlot(s) sans place pour ${val("min_bridges")} ponts</span><br>` : ""}
         ${L.struct_bridges ? `dont ${L.struct_bridges} pont(s) structurel(s)<br>` : ""}
         ${L.manual_bridges ? `dont ${L.manual_bridges} pont(s) manuel(s)<br>` : ""}
@@ -6503,7 +6566,7 @@ function layerStack(L, attrs = "") {
 let SUPPORT_REQ = null;
 async function loadSupportMaps() {
   const last = LAST;
-  if (!last || !SID || document.body.classList.contains("no-support") || SUPPORT_REQ === last) return;
+  if (!last || !SID || last.bridges_paused || document.body.classList.contains("no-support") || SUPPORT_REQ === last) return;
   const want = last.layers.filter(L => L.img_support === undefined).map(L => L.index);
   if (!want.length) return;
   SUPPORT_REQ = last;
@@ -6675,6 +6738,7 @@ function setupManualBridges() {
       return;
     }
     setBridgeTool(!BR.on);
+    if (BR.on) needBridges();         // the automatic bridges are shown and can be picked
   };
   $("brDelete").onclick = deleteSelectedBridge;
   BR.keep = !!prefs().bridge_keep_auto;

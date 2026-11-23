@@ -9,6 +9,11 @@ are not obvious from the code.
 - Restart the server after any Python change (`app.py`, `overspraylab/*.py`); `static/` is served live.
 - `OVERSPRAYLAB_PORT=5001` runs a second instance; tests go there, 5000 is the author's own instance.
 - Layer computation is parallel; `OVERSPRAYLAB_PARALLEL=thread|process|none` (`none` helps debugging).
+- Slow computation: the preference "Log computation times" (⚙) appends one JSON line per computation
+  to `timings.jsonl` in the project folder (per function: calls, summed seconds, first start, last
+  end; settings changed; overlapping computations; bridges pause asked and what kept the bridges).
+  Functions timed: `timings.instrument` calls at the end of `app.py` (`overspraylab/timings.py`);
+  add new heavy functions there.
 
 ## Translations (main pitfall)
 

@@ -43,6 +43,22 @@ try {
     "À jour ✓": "Up to date ✓",
     "Recalculer ●": "Recompute ●",
     "Recalculer ↻": "Recompute ↻",
+    "Ponts en pause": "Bridges paused",
+    "Enregistrer les temps de calcul (débogage)": "Log computation times (debugging)",
+    "Chaque calcul ajoute le temps passé dans chaque fonction au fichier timings.jsonl du dossier du projet (gardé en mémoire jusqu'à la première snapshot).":
+      "Each computation adds the time spent in each function to the timings.jsonl file of the project folder (kept in memory until the first snapshot).",
+    "Ponts automatiques désactivés dans les réglages": "Automatic bridges turned off in the settings",
+    "Ponts en pause : le calcul se fait sans les ponts automatiques. Cliquer pour les recalculer":
+      "Bridges paused: the computation skips the automatic bridges. Click to compute them again",
+    "Mettre les ponts en pause pendant la composition : le calcul se fait sans les ponts automatiques (plus rapide) ; la carte des appuis et l'outil Ponts manuels sont fermés. Une snapshot, un export, la carte des appuis ou l'outil Ponts manuels rouverts les calculent quand même, sans quitter la pause":
+      "Pause the bridges while composing: the computation skips the automatic bridges (faster); the support map and the Manual bridges tool are closed. A snapshot, an export, or the support map or Manual bridges tool shown again still compute them, without leaving the pause",
+    "Ponts en pause, mais le résultat affiché a ses ponts : le dernier calcul les a faits pour une snapshot, un export, la carte des appuis ou l'outil Ponts manuels. Les calculs suivants se font sans eux, sauf tant que la carte des appuis ou l'outil Ponts manuels est affiché. Cliquer pour quitter la pause":
+      "Bridges paused, but the result shown has its bridges: the last computation made them for a snapshot, an export, the support map or the Manual bridges tool. The next computations skip them, except while the support map or the Manual bridges tool is shown. Click to leave the pause",
+    "Ponts automatiques en pause": "Automatic bridges paused",
+    "(automatiques en pause)": "(automatic ones paused)",
+    "Export impossible : le calcul n'a pas abouti": "Export impossible: the computation did not complete",
+    "Ponts en pause : recalculez avec les ponts avant d'enregistrer": "Bridges paused: compute again with the bridges before saving",
+    "Ponts en pause : recalculez avec les ponts avant d'exporter": "Bridges paused: compute again with the bridges before exporting",
     "Relance le calcul avec les réglages actuels, par exemple pour mettre à jour un résultat restauré à l'ouverture d'un projet (Ctrl + Entrée)":
       "Runs the computation again with the current settings, for example to update a result restored when a project was opened (Ctrl + Enter)",
     "Calcul en cours…": "Computing…",

@@ -21,6 +21,7 @@ from overspraylab import effects as fxmod
 from overspraylab import semantic
 from overspraylab import teed
 from overspraylab import projects
+from overspraylab import timings
 from overspraylab.svg_export import _LANG, export_zip, project_files
 
 ROOT = Path(__file__).parent
@@ -556,11 +557,95 @@ def api_process():
     if not sess:
         return jsonify(error="Session inconnue, rechargez l'image"), 404
     run = data.get("run")
+    with timings.recording(data.get("timings") is True) as rec, running_computation() as overlap:
+        try:
+            with pl.cancellable(None if run is None else lambda: sess.get("calc_cancel") == run):
+                out = compute(sess, data)
+        except pl.Cancelled:
+            out = jsonify(cancelled=True)
+        if rec is not None:
+            log_timings(sess, data, rec, out, overlap)
+    return out
+
+
+# ---- Computation times (preference "Log computation times", debugging) ----
+# Each computation timed adds one JSON line to TIMINGS_FILE in the project folder: when, total
+# seconds, outcome, settings changed since the session's previous computation, other computations
+# running on the server at the same time, and per function (overspraylab.timings): calls, summed
+# seconds, first start and last end (seconds from the start). A session without a project folder
+# yet keeps its lines in memory until its first snapshot creates the folder.
+TIMINGS_FILE = "timings.jsonl"
+TIMINGS_MAX_BYTES = 4 << 20          # beyond: the older half of the lines is dropped
+TIMINGS_PENDING_MAX = 200
+_RUNNING: list = []                  # [others seen] of the computations running now
+_RUNNING_LOCK = threading.Lock()
+
+
+class running_computation:
+    """Context of a computation: the largest number of other computations that ran at the same
+    time (a cancelled computation may go on until its next check)."""
+    def __enter__(self):
+        self.box = [0]
+        with _RUNNING_LOCK:
+            for b in _RUNNING:
+                b[0] = max(b[0], len(_RUNNING))
+            self.box[0] = len(_RUNNING)
+            _RUNNING.append(self.box)
+        return self.box
+
+    def __exit__(self, *exc):
+        with _RUNNING_LOCK:
+            _RUNNING.remove(self.box)
+        return False
+
+
+def log_timings(sess, data, rec, out, overlap) -> None:
+    resp, code = (out if isinstance(out, tuple) else (out, 200))
+    j = resp.get_json(silent=True) or {}
+    params = data.get("params") or {}
+    last = sess.get("timings_params")
+    changed = sorted(k for k in set(params) | set(last or {}) if last is not None and params.get(k) != last.get(k))
+    sess["timings_params"] = params
+    entry = {
+        "at": time.strftime("%Y-%m-%dT%H:%M:%S"),
+        "seconds": round(rec.elapsed(), 3),
+        "outcome": "cancelled" if j.get("cancelled") else ("error" if code >= 400 or "error" in j else "ok"),
+        "snapshot": sess.get("snap"),
+        # asked for (the answer of a cancelled computation does not say)
+        "bridges_paused": bool(j["bridges_paused"]) if "bridges_paused" in j
+        else bool(data.get("pause_bridges")) and params.get("bridges") is not False,
+        "recolored": bool(j.get("recolored")),
+        # pause asked in the browser, and what made this computation keep the bridges anyway
+        "pause_asked": data.get("pause_asked") is True,
+        "bridges_kept_by": [str(v)[:40] for v in (data.get("bridges_kept_by") or [])][:5]
+        if isinstance(data.get("bridges_kept_by"), list) else [],
+        "changed": changed[:40],
+        "overlapping_computations": overlap[0],
+        "functions": rec.result(),
+    }
+    pend = sess.setdefault("timings_pending", [])
+    pend.append(entry)
+    del pend[:-TIMINGS_PENDING_MAX]
+    flush_timings(sess)
+
+
+def flush_timings(sess) -> None:
+    """Writes the timing lines kept by the session into its project folder (if it has one)."""
+    pend, d = sess.get("timings_pending"), sess.get("proj_dir")
+    if not pend or d is None or not d.is_dir():
+        return
+    f = d / TIMINGS_FILE
     try:
-        with pl.cancellable(None if run is None else lambda: sess.get("calc_cancel") == run):
-            return compute(sess, data)
-    except pl.Cancelled:
-        return jsonify(cancelled=True)
+        with LOCK:
+            with open(f, "a", encoding="utf-8", newline="\n") as fh:
+                for e in pend:
+                    fh.write(json.dumps(e, ensure_ascii=False, separators=(",", ":")) + "\n")
+            pend.clear()
+            if f.stat().st_size > TIMINGS_MAX_BYTES:
+                lines = f.read_text(encoding="utf-8").splitlines(keepends=True)
+                f.write_text("".join(lines[len(lines) // 2:]), encoding="utf-8", newline="")
+    except OSError:
+        pass                          # a debugging aid: never fails the computation
 
 
 @app.post("/api/process/cancel")
@@ -582,6 +667,11 @@ def support_png(res, L) -> str | None:
 
 def compute(sess, data):
     p = pl.Params.from_dict(data.get("params", {}))
+    # "bridges paused" (header button, not a setting): no automatic bridges while composing, which
+    # saves their computation; such a result is neither exported nor saved (bridges_paused)
+    paused = bool(data.get("pause_bridges")) and p.bridges
+    if paused:
+        p.bridges = False
     lay, warnings = pl.resolve_layout(p, sess["img"].shape)
     t0 = time.perf_counter()
     key = (tuple(getattr(p, k) for k in PREP_KEYS) + (lay.src_rect, tuple(round(v, 3) for v in lay.vis_mm))
@@ -746,12 +836,14 @@ def compute(sess, data):
         lines_added=res.lines_added,
         zone_lines={k: list(v) for k, v in res.zone_lines.items()},   # whole lines: kept, detected, steps
         recolored=recolored,     # colours only: the cut of the previous computation was kept
+        bridges_paused=paused,   # computed without the automatic bridges (see compute)
         seconds=round(time.perf_counter() - t0, 2),
     )
     pl.check_cancel()
     # stored only now: a cancelled computation leaves the previous result whole
     sess["geom"] = geom
     sess["result"] = res
+    sess["paused_result"] = res if paused else None
     sess["png_cache"] = cache
     sess["material"] = data.get("material")
     sess["ui"] = data.get("ui")  # full interface state, for the project file
@@ -881,6 +973,8 @@ def api_export(sid):
     sess = SESSIONS.get(sid)
     if not sess or "result" not in sess:
         return jsonify(error="Rien à exporter"), 404
+    if bridges_paused(sess):
+        return jsonify(error="Ponts en pause : recalculez avec les ponts avant d'exporter"), 409
     name = project_name(request.args.get("name"), sess["name"])
     d = sess.get("proj_dir")
     folder = projects.folder_files(d) if d and d.is_dir() else None
@@ -1286,6 +1380,12 @@ def api_snapshot_open():
     return answer(open_snapshot(d, str(data.get("snap", ""))))
 
 
+def bridges_paused(sess) -> bool:
+    """The session's result was computed with the automatic bridges paused: not a stencil to
+    export or save (the client computes them again first)."""
+    return sess.get("result") is not None and sess.get("paused_result") is sess["result"]
+
+
 def snapshot_session(data):
     """(session, error answer) of a snapshot request: the session must hold a computation."""
     sess = SESSIONS.get(data.get("id", ""))
@@ -1293,6 +1393,8 @@ def snapshot_session(data):
         return None, (jsonify(error="Session inconnue, rechargez l'image"), 404)
     if sess.get("result") is None:
         return None, (jsonify(error="Snapshot : lancez d'abord un calcul"), 409)
+    if bridges_paused(sess):
+        return None, (jsonify(error="Ponts en pause : recalculez avec les ponts avant d'enregistrer"), 409)
     if isinstance(data.get("ui"), dict):
         sess["ui"] = data["ui"]          # view options and palette may have changed since the computation
     return sess, None
@@ -1340,6 +1442,7 @@ def api_snapshot():
             projects.rename_project(d, name)
     snap = projects.write_snapshot(d, *snapshot_content(sess, name, label, data.get("lang")))
     sess["snap"] = snap
+    flush_timings(sess)               # timings kept until the project folder existed
     return jsonify({**project_state(d, snap), "snap": snap})
 
 
@@ -1403,6 +1506,18 @@ def running_here(port: int) -> bool:
             return b"<title>OversprayLab</title>" in r.read(4096)
     except Exception:
         return False
+
+
+# Functions timed when the preference "Log computation times" is on (see overspraylab.timings)
+timings.instrument(vars(pl), (
+    "prepare", "preprocess_image", "flatten_auto", "majority_filter", "tone_histogram", "resolve_layout",
+    "build", "recolor", "clean_mask", "exclusive_layers", "trim_taken", "fill_gaps", "outline_entries",
+    "lines_into_layers", "merge_line_islands", "subject_silhouette", "detect_key_details", "_line_candidates",
+    "_compute_candidates", "_image_grad", "_line_response", "_along_contours", "_crest", "_fdog_strength",
+    "run_layer_jobs", "layer_job", "apply_manual_bridges", "merge_zones", "hold_material", "add_bridges",
+    "add_struct_bridges", "late_manual", "vectorize", "image_sim", "simulate_sheet", "delta_e",
+    "layer_view", "layer_overlays", "opening_without_bridges", "registration_shapes", "positioning"))
+timings.instrument(globals(), ("compute", "pre_view", "png_b64", "rgba_b64", "zone_regions", "subject_area"))
 
 
 def main() -> None:
