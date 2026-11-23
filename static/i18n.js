@@ -346,8 +346,8 @@ try {
     "Résolution automatique : enfoncé, la résolution suit les limites du matériau (au moins 6 px sur la plus petite des deux largeurs minimales, ouverture ou bande de matière ; entre 6 et 12 px/mm). Relâché (clic ou curseur bougé), elle reste celle du curseur":
       "Automatic resolution: pressed, the resolution follows the material limits (at least 6 px across the smaller of the two minimum widths, opening or material strip; between 6 and 12 px/mm). Released (click or slider moved), it stays at the slider's value",
     "Résolution réglée à la main": "Resolution set by hand",
-    "Tolérance générale : enfoncé, cet aplat suit la tolérance de l'aplat Générale. Relâché (clic ou curseur bougé), il garde sa propre tolérance, celle du curseur ; recliquer le ramène à la tolérance générale":
-      "General tolerance: pressed, this flat area follows the tolerance of the General flat area. Released (click or slider moved), it keeps its own tolerance, the slider's; clicking again brings it back to the general tolerance",
+    "Tolérance générale : enfoncé, cet aplat suit la tolérance de l'aplat Générale (curseur grisé). Relâché (clic), il garde sa propre tolérance, réglée au curseur ; recliquer le ramène à la tolérance générale":
+      "General tolerance: pressed, this flat area follows the tolerance of the General flat area (slider greyed out). Released (click), it keeps its own tolerance, set with the slider; clicking again brings it back to the general tolerance",
     "Générale": "General",
     "Masque d'aplat dont la tolérance est réglée : Générale ou la couche où l'aplat est forcé (chaque masque garde sa tolérance ; sans réglage propre, une couche prend la tolérance générale)":
       "Flat mask whose tolerance is set: General or the layer the flat area is forced into (each mask keeps its tolerance; without its own setting, a layer takes the general tolerance)",

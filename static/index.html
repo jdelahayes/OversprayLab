@@ -107,6 +107,7 @@
   label.row span.v { color: var(--muted); font-variant-numeric: tabular-nums; min-width: 44px; text-align: right; }
   label.full { display: block; margin: 6px 0 2px; }
   input[type=range] { grid-column: 1 / -1; width: 100%; accent-color: var(--accent); }
+  input[type=range]:disabled { opacity: .4; cursor: default; }
   input[type=number], select { width: 100%; padding: 5px 6px; border: 1px solid var(--line); border-radius: 6px;
           background: var(--soft); color: var(--ink); font: inherit; }
   input[type=number] { width: 84px; }
@@ -1130,7 +1131,7 @@
       <div class="zonebar" id="flatTolFor" role="group" aria-label="Zone d'aplat forcé" title="Masque d'aplat dont la tolérance est réglée : Générale ou la couche où l'aplat est forcé (chaque masque garde sa tolérance ; sans réglage propre, une couche prend la tolérance générale)"></div>
       <label class="row" for="flat_tolerance">Tolérance de la zone sélectionnée <span class="v" id="flat_tolerance_v"></span></label>
       <div style="display:flex; gap:6px; align-items:center; margin:-2px 0 6px">
-        <button type="button" id="flatTolAuto" class="vt-opt" aria-pressed="true" title="Tolérance générale : enfoncé, cet aplat suit la tolérance de l'aplat Générale. Relâché (clic ou curseur bougé), il garde sa propre tolérance, celle du curseur ; recliquer le ramène à la tolérance générale">Auto</button>
+        <button type="button" id="flatTolAuto" class="vt-opt" aria-pressed="true" title="Tolérance générale : enfoncé, cet aplat suit la tolérance de l'aplat Générale (curseur grisé). Relâché (clic), il garde sa propre tolérance, réglée au curseur ; recliquer le ramène à la tolérance générale">Auto</button>
         <input type="range" id="flat_tolerance" min="0" max="100" step="5" value="50" aria-label="Tolérance de la zone sélectionnée" style="flex:1; min-width:0"></div>
       <input type="hidden" id="flat_tolerances" value="">
       <div style="margin:2px 0 0">
@@ -5317,6 +5318,7 @@ function flatTolToField() {
     const follows = FLAT_CUR === "auto" || !Number.isFinite(+s[FLAT_CUR]);
     $("flatTolAuto").setAttribute("aria-pressed", String(follows));
     $("flatTolAuto").disabled = FLAT_CUR === "auto";
+    $("flat_tolerance").disabled = FLAT_CUR !== "auto" && follows;   // follows Auto: release it to set its own
   }
   showValues();
 }
