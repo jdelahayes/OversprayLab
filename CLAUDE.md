@@ -59,6 +59,10 @@ Hard-won constraints, verified by the author in Silhouette Studio – do not "cl
   flow (2 mm, 2 px steps); needs only 4 mm of following. Slow (~3 s on a 3 Mpx zone), so its
   strength map is cached (LRU of 4, keyed by a hash of the channels). An iterative ETF flow gave
   the same lines, rounded T-junctions and was 3x slower: not used.
+- Step 1 of `detect_key_details` (candidate lines + strength, image only) is cached and started in
+  the background at the start of `build` (`_line_candidates`, `_prefetch_lines`), keyed by the
+  identity of `prep.resized` and the zone settings it uses (`_cand_key`): a new setting that
+  changes the candidates must be added to that key.
 - TEED (`teed`, `overspraylab/teed.py`): strength = network logits (not the sigmoid, which
   saturates at 1 on every line and leaves the sensitivity without effect); lines = crest of the
   smoothed logits (a skeleton gave the same lines 5x slower). Uses `outline_follow_mm`

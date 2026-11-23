@@ -14,7 +14,7 @@ import re
 import os
 import threading
 from collections import OrderedDict
-from concurrent.futures import wait as wait_futures
+from concurrent.futures import Future, wait as wait_futures
 from hashlib import blake2b
 from dataclasses import dataclass, field, fields, replace
 
@@ -862,9 +862,18 @@ def prepare(img: np.ndarray, p: Params, lay: Layout, fg_src: np.ndarray | None =
         # Assign every pixel to the nearest centre
         best = np.full(len(X), np.inf, np.float32)
         labels = np.zeros(len(X), np.int32)
+        chans = [np.ascontiguousarray(X[:, j]) for j in range(X.shape[1])]
+        dist, part = np.empty(len(X), np.float32), np.empty(len(X), np.float32)
         for i, c in enumerate(centers):
             check_cancel()
-            dist = ((X - c) ** 2).sum(axis=1)
+            # squared distance, channel by channel (same float32 sums, in the same order, as
+            # ((X - c) ** 2).sum(axis=1), without its large temporary arrays)
+            np.subtract(chans[0], c[0], out=dist)
+            np.square(dist, out=dist)
+            for j in range(1, len(chans)):
+                np.subtract(chans[j], c[j], out=part)
+                np.square(part, out=part)
+                dist += part
             upd = dist < best
             best[upd] = dist[upd]
             labels[upd] = i
@@ -1047,7 +1056,8 @@ def _tone_gap(labels: np.ndarray, k: int, lab: np.ndarray, inside: np.ndarray | 
     flat = labels.ravel() if inside is None else labels[inside]
     pix = lab.reshape(-1, 3) if inside is None else lab[inside]
     cnt = np.bincount(flat, minlength=k)[:k]
-    sums = np.stack([np.bincount(flat, weights=pix[:, c], minlength=k)[:k] for c in range(3)], 1)
+    sums = np.stack([np.bincount(flat, weights=pix[:, c].astype(np.float64), minlength=k)[:k]
+                     for c in range(3)], 1)
     present = cnt > 0
     means = sums[present] / cnt[present, None]
     if len(means) < 2:
@@ -1062,12 +1072,13 @@ def _components(labels: np.ndarray, k: int) -> tuple[np.ndarray, int, np.ndarray
     tones = [0]
     n = 0
     for t in range(k):
-        m = (labels == t).astype(np.uint8)
-        if not m.any():
-            continue
+        m = (labels == t).view(np.uint8)
         c, cl = cv2.connectedComponents(m, connectivity=4)
-        sel = cl > 0
-        comp[sel] = cl[sel] + n
+        if c < 2:                       # tone absent
+            continue
+        if n:
+            cv2.add(cl, n, dst=cl, mask=m)  # ids after those of the tones before
+        cv2.add(comp, cl, dst=comp)     # the tones do not overlap: a sum places each one
         tones += [t] * (c - 1)
         n += c - 1
     return comp, n, np.array(tones, np.int32)
@@ -1080,24 +1091,28 @@ def _borders(comp: np.ndarray, n: int, lab: np.ndarray, reach: int):
     mean colour of the neighbour along the border."""
     H, W = comp.shape
     P = np.pad(lab, ((reach, reach), (reach, reach), (0, 0)), mode="edge")
+    WP = W + 2 * reach
+    flat_c, flat_l, flat_p = comp.ravel(), np.ascontiguousarray(lab).reshape(-1, 3), P.reshape(-1, 3)
     srcs, dsts, conts, nbs = [], [], [], []
+    # the pixel pairs across a border are gathered by flat index (same values and order as
+    # boolean indexing of the shifted views, much faster on these 3-channel images)
     for axis in (1, 0):
         if axis == 1:       # horizontal neighbours (x, x+1)
-            a, b = comp[:, :-1], comp[:, 1:]
-            la, lb = lab[:, :-1], lab[:, 1:]
-            fa, fb = P[reach:reach + H, 0:W - 1], P[reach:reach + H, 2 * reach + 1:2 * reach + W]
+            ys, xs = np.nonzero(comp[:, :-1] != comp[:, 1:])
+            ia, ib = ys * W + xs, ys * W + xs + 1
+            pa, pb = (ys + reach) * WP + xs, (ys + reach) * WP + xs + 2 * reach + 1
         else:               # vertical neighbours (y, y+1)
-            a, b = comp[:-1, :], comp[1:, :]
-            la, lb = lab[:-1, :], lab[1:, :]
-            fa, fb = P[0:H - 1, reach:reach + W], P[2 * reach + 1:2 * reach + H, reach:reach + W]
-        d = a != b
-        if not d.any():
+            ys, xs = np.nonzero(comp[:-1, :] != comp[1:, :])
+            ia, ib = ys * W + xs, (ys + 1) * W + xs
+            pa, pb = ys * WP + xs + reach, (ys + 2 * reach + 1) * WP + xs + reach
+        if not len(ys):
             continue
-        c = np.linalg.norm(fa[d] - fb[d], axis=1)
-        srcs += [a[d], b[d]]
-        dsts += [b[d], a[d]]
+        a, b = flat_c[ia], flat_c[ib]
+        c = np.linalg.norm(flat_p[pa] - flat_p[pb], axis=1)
+        srcs += [a, b]
+        dsts += [b, a]
         conts += [c, c]
-        nbs += [lb[d], la[d]]
+        nbs += [flat_l[ib], flat_l[ia]]
     if not srcs:
         e = np.zeros(0, np.int64)
         return e, e, np.zeros(0), np.zeros(0), np.zeros((0, 3))
@@ -1125,6 +1140,8 @@ def flatten_auto(labels: np.ndarray, k: int, lab: np.ndarray, strength: float,
     max_area = total * 0.03 * s * s
     reach = max(1, int(round(0.6 * ppm)))
     blur = cv2.GaussianBlur(lab, (0, 0), max(0.6, reach / 2))
+    # channels as the weights bincount uses (float64, contiguous): converted once, not at each pass
+    lab_ch = [lab[..., ch].astype(np.float64).ravel() for ch in range(3)]
     out = labels.copy()
     for _ in range(4):
         comp, n, tone = _components(out, k)
@@ -1138,7 +1155,7 @@ def flatten_auto(labels: np.ndarray, k: int, lab: np.ndarray, strength: float,
         # contrast of an area with a neighbour: across their border (a real edge) and between the
         # mean colour of the area and that of the neighbour along the border (a thin line is
         # thinner than the reach: only its mean colour shows it)
-        mean = np.stack([np.bincount(flat_c, weights=lab[..., ch].ravel(), minlength=n + 1)
+        mean = np.stack([np.bincount(flat_c, weights=lab_ch[ch], minlength=n + 1)
                          for ch in range(3)], 1) / np.maximum(area, 1)[:, None]
         ct = np.maximum(ct, np.linalg.norm(mean[src] - nb_mean, axis=1))
         ok = (ct < max_contrast) & (area[src] < area[dst]) & (area[src] <= max_area)
@@ -1430,21 +1447,39 @@ def merge_zones(opening: np.ndarray, p: Params, hidden: np.ndarray | None = None
     if amax <= 0 or not (p.merge_channels or p.merge_islands):
         return merged, 0
     material = opening == 0
-    n, lab = cv2.connectedComponents(material.astype(np.uint8), connectivity=4)
+    mat8 = material.astype(np.uint8)
+    n, lab, lab_stats, _ = cv2.connectedComponentsWithStats(mat8, connectivity=4)
     main = int(lab[0, 0])
     if n <= 2:                          # no island
         return merged, 0
-    visible = np.ones(opening.shape, np.float64) if hidden is None else (~hidden).astype(np.float64)
     w = max(float(weight), 0.05)
+
+    def points(m8: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
+        """(ys, xs) of the non-zero pixels of a uint8 mask (the islands and channels are small:
+        working on their pixels only is much faster than on the whole sheet)."""
+        pts = cv2.findNonZero(m8)
+        if pts is None:
+            return np.zeros(0, np.intp), np.zeros(0, np.intp)
+        pts = pts.reshape(-1, 2)                  # (N, 1, 2) up to OpenCV 4, (N, 2) since 5
+        return pts[:, 1].astype(np.intp), pts[:, 0].astype(np.intp)
+
+    def vis_area(labels: np.ndarray, ys: np.ndarray, xs: np.ndarray, nl: int) -> np.ndarray:
+        """Visible area (pixels not `hidden`) x w of each label, from all the pixels (ys, xs) of
+        the labels needed (sums of 0 / 1: the same values as over the whole sheet)."""
+        wts = None if hidden is None else (~hidden[ys, xs]).astype(np.float64)
+        return np.bincount(labels[ys, xs], wts, minlength=nl).astype(np.float64) * w
+
     actions = []                        # (cost, kind, index, material labels linked)
     if p.merge_islands:
-        vis_lab = np.bincount(lab.ravel(), visible.ravel(), minlength=n) * w
+        iy, ix = points(cv2.bitwise_and(cv2.compare(lab, main, cv2.CMP_NE), mat8))   # every island pixel
+        vis_lab = vis_area(lab, iy, ix, n)
+        # islands kept (only the islands matter: the loop below skips the frame `main`)
         ring = set()
         if protect is not None and not p.merge_line_islands:   # islands bordering a protected line are kept
-            near = (cv2.dilate(protect.astype(np.uint8), np.ones((3, 3), np.uint8)) > 0) & material
-            ring = set(np.unique(lab[near]).tolist())
+            near = cv2.dilate(protect.astype(np.uint8), np.ones((3, 3), np.uint8)) > 0
+            ring = set(np.unique(lab[iy, ix][near[iy, ix]]).tolist())
         if others is not None:              # island over another layer's paint: kept
-            ring |= set(np.unique(lab[others & material]).tolist())
+            ring |= set(np.unique(lab[iy, ix][others[iy, ix]]).tolist())
         for i in range(1, n):
             if i in ring:
                 continue
@@ -1456,25 +1491,29 @@ def merge_zones(opening: np.ndarray, p: Params, hidden: np.ndarray | None = None
     # fewer merges than a narrower one)
     wmax = p.merge_channel_mm
     widths = sorted({wmax} | {wmax * 0.6 ** k for k in range(1, 6) if wmax * 0.6 ** k >= p.min_opening_mm})
+    pad = None
+    open8 = np.ascontiguousarray(~material).view(np.uint8)       # where the channels may be filled
+    if protect is not None:
+        open8 = cv2.bitwise_and(open8, np.ascontiguousarray(~protect).view(np.uint8))
     for wd in (widths if p.merge_channels else []):
         r = wd * p.px_per_mm / 2
         if r >= 0.5:
-            closed = cv2.morphologyEx(material.astype(np.uint8), cv2.MORPH_CLOSE, disk(r)) > 0
-            fill = closed & ~material
-            if protect is not None:
-                fill &= ~protect
-            nf, flab, fstats, _ = cv2.connectedComponentsWithStats(fill.astype(np.uint8), connectivity=8)
+            fill = cv2.bitwise_and(cv2.morphologyEx(mat8, cv2.MORPH_CLOSE, disk(r)), open8)
+            nf, flab, fstats, _ = cv2.connectedComponentsWithStats(fill, connectivity=8)
             fi = len(fills)
             fills.append((flab, fstats))
             if nf > 1:
-                vis_f = np.bincount(flab.ravel(), visible.ravel(), minlength=nf) * w
+                fy, fx = points(fill)
+                vis_f = vis_area(flab, fy, fx, nf)
                 # material labels touching each filled part (4-neighbours)
-                pad = np.pad(lab, 1)
+                if pad is None:
+                    pad = np.pad(lab, 1)
+                fl = flab[fy, fx].astype(np.int64)
                 codes = []
                 for dy, dx in ((0, 1), (0, -1), (1, 0), (-1, 0)):
-                    nb = pad[1 + dy:1 + dy + lab.shape[0], 1 + dx:1 + dx + lab.shape[1]]
-                    m = (flab > 0) & (nb > 0)
-                    codes.append(flab[m].astype(np.int64) * n + nb[m])
+                    nb = pad[fy + 1 + dy, fx + 1 + dx]
+                    m = nb > 0
+                    codes.append(fl[m] * n + nb[m])
                 codes = np.unique(np.concatenate(codes))
                 touch: dict[int, list] = {}
                 for c in codes.tolist():
@@ -1531,7 +1570,7 @@ def merge_zones(opening: np.ndarray, p: Params, hidden: np.ndarray | None = None
             i = labs[0]
             if i in removed or find(i) != i or size[i] != 1 or find(i) == find(main):
                 continue
-            x, y, bw, bh = cv2.boundingRect((lab == i).astype(np.uint8))
+            x, y, bw, bh = lab_stats[i, :4]
             sub = lab[y:y + bh, x:x + bw] == i
             opening[y:y + bh, x:x + bw][sub] = 255
             merged[y:y + bh, x:x + bw] |= sub
@@ -1867,31 +1906,56 @@ _K8 = np.ones((3, 3), np.uint8)
 _K4 = cv2.getStructuringElement(cv2.MORPH_CROSS, (3, 3))
 
 
+def _box_union(a: tuple, b: tuple) -> tuple:
+    """Box (x, y, w, h) around two boxes (an empty box, w = 0, is ignored)."""
+    if not b[2]:
+        return a
+    if not a[2]:
+        return b
+    x0, y0 = min(a[0], b[0]), min(a[1], b[1])
+    return x0, y0, max(a[0] + a[2], b[0] + b[2]) - x0, max(a[1] + a[3], b[1] + b[3]) - y0
+
+
 def _geodesic(src: np.ndarray, mat: np.ndarray, limit: float) -> np.ndarray:
     """Geodesic distance (px, octagonal approximation) from `src` through `mat`, up to `limit` px;
     inf beyond it or where unreachable.
     Grows the reached area one step at a time; instead of writing the distance of the new pixels
     at each step (slow full-image numpy passes), counts in how many steps each pixel was reached
-    (saturating uint8 counter flushed every 255 steps): first step = steps - count."""
+    (saturating uint8 counter flushed every 255 steps): first step = steps - count.
+    Each step only works in the box of the pixels reached at the two steps before (plus 1 px): a
+    pixel reached earlier has had a K8 and a K4 step since, so it can reach nothing new (from a
+    small source, e.g. a bridge, the box grows with the front instead of covering the window);
+    the counter only covers the box of the pixels reached so far."""
     m = (np.asarray(mat) != 0).astype(np.uint8)
     cur = cv2.bitwise_and((np.asarray(src) != 0).astype(np.uint8), m)
+    H, W = m.shape
     acc = np.zeros(m.shape, np.int32)
     cnt = cur.copy()
-    last = cv2.countNonZero(cur)
-    nxt = np.empty_like(cur)
+    new = np.empty_like(cur)
+    last, before = cv2.boundingRect(cur), (0, 0, 0, 0)      # boxes (x, y, w, h) of the last two steps
+    reached = last
     states, in_cnt = 1, 1
     for it in range(1, int(limit / 1.08) + 2):
-        cv2.dilate(cur, _K8 if it % 2 else _K4, dst=nxt)
-        cv2.bitwise_and(nxt, m, dst=nxt)
-        c = cv2.countNonZero(nxt)
-        if c == last:                       # the area only grows: same count = nothing new
+        x, y, w, h = _box_union(last, before)
+        if not w:
             break
-        cur, nxt, last = nxt, cur, c
+        x0, y0, x1, y1 = max(0, x - 1), max(0, y - 1), min(W, x + w + 1), min(H, y + h + 1)
+        c, nw = cur[y0:y1, x0:x1], new[y0:y1, x0:x1]
+        cv2.dilate(c, _K8 if it % 2 else _K4, dst=nw)
+        cv2.bitwise_and(nw, m[y0:y1, x0:x1], dst=nw)
+        cv2.subtract(nw, c, dst=nw)                          # pixels reached at this step
+        bx, by, bw, bh = cv2.boundingRect(nw)
+        if not bw:                          # nothing new: the area stops growing
+            break
+        cv2.bitwise_or(c, nw, dst=c)
+        before, last = last, (bx + x0, by + y0, bw, bh)
+        reached = _box_union(reached, last)
         if in_cnt == 255:
             acc += cnt
             cnt[:] = 0
             in_cnt = 0
-        cv2.add(cnt, cur, dst=cnt)
+        rx, ry, rw, rh = reached
+        cv2.add(cnt[ry:ry + rh, rx:rx + rw], cur[ry:ry + rh, rx:rx + rw], dst=cnt[ry:ry + rh, rx:rx + rw])
         states += 1
         in_cnt += 1
     acc += cnt
@@ -1921,7 +1985,10 @@ def _ray_bridge(work, xs, ys, maxlen, land_ok, hidden, bw, away=None, n_ang=48, 
     px = np.rint(xs[:, None, None] + dx[None, :, None] * steps).astype(np.int32)
     py = np.rint(ys[:, None, None] + dy[None, :, None] * steps).astype(np.int32)
     inb = (px >= 0) & (px < W) & (py >= 0) & (py < H)
-    m = work[py.clip(0, H - 1), px.clip(0, W - 1)] > 0
+    flat = np.clip(py, 0, H - 1, out=np.empty_like(py))
+    flat *= W
+    flat += np.clip(px, 0, W - 1)
+    m = np.take(np.ascontiguousarray(work).ravel(), flat) > 0    # (one flat take: faster than 2-D indexing)
     empty = ~m & inb
     solid = m & inb
     g0 = np.argmax(empty, axis=2)
@@ -2071,10 +2138,12 @@ def add_struct_bridges(opening: np.ndarray, p: Params, hidden: np.ndarray | None
     mat0 = mat.copy()                      # without the structural bridges (see _prune_struct)
     cap = 3 * span
     D = np.minimum(_geodesic(seeds, mat, cap), cap)
+    D0 = D.copy()                          # distances without the structural bridges (_prune_struct)
     bridges, weak = [], []
     groups, reach = [], []                 # bridges placed together, and where they hold
+    known = []                             # (material, distances) of each window, see _prune_struct
     given = np.zeros((h, w), bool)
-    yy, xx = np.mgrid[0:h, 0:w]
+    rr = int(span / 2) + 1                 # window of the region around the farthest edge
 
     def lo(x, y):
         return (np.clip((np.asarray(y) * s).astype(int), 0, h - 1),
@@ -2115,7 +2184,11 @@ def add_struct_bridges(opening: np.ndarray, p: Params, hidden: np.ndarray | None
         if far <= span:
             break
         fy, fx = np.unravel_index(int(np.argmax(Dm)), Dm.shape)
-        reg = (Dm >= far - span / 2) & ((yy - fy) ** 2 + (xx - fx) ** 2 <= (span / 2) ** 2)
+        # region: within span / 2 of the farthest point (computed in its window only)
+        ya, yb, xa, xb = max(0, fy - rr), min(h, fy + rr + 1), max(0, fx - rr), min(w, fx + rr + 1)
+        wy, wx = np.ogrid[ya:yb, xa:xb]
+        reg = np.zeros((h, w), bool)
+        reg[ya:yb, xa:xb] = (Dm[ya:yb, xa:xb] >= far - span / 2) & ((wy - fy) ** 2 + (wx - fx) ** 2 <= (span / 2) ** 2)
         ex, ey = edge_points(reg)
         b = _ray_bridge(work, ex, ey, maxlen, gain(span / 2, D), hidden, bw,
                         avoid=(bridges, min(p.bridge_spacing_mm / 4, 10.0) * ppm), focus=(fx / s, fy / s),
@@ -2152,11 +2225,13 @@ def add_struct_bridges(opening: np.ndarray, p: Params, hidden: np.ndarray | None
             cv2.line(nb, (int(a[0] * s) - x0, int(a[1] * s) - y0), (int(q[0] * s) - x0, int(q[1] * s) - y0),
                      1, thickness=bwl)
         mat[y0:y1, x0:x1] |= nb > 0
-        D[y0:y1, x0:x1] = np.minimum(D[y0:y1, x0:x1], np.minimum(_geodesic(nb > 0, mat[y0:y1, x0:x1], cap), cap))
+        G = np.minimum(_geodesic(nb > 0, mat[y0:y1, x0:x1], cap), cap)
+        D[y0:y1, x0:x1] = np.minimum(D[y0:y1, x0:x1], G)
         reach.append(((y0, y1, x0, x1), nb))
+        known.append((mat[y0:y1, x0:x1].copy(), G))
     if len(groups) > 1:
-        keep = _prune_struct(reach, seeds, mat0, measured & ~given, span, cap, [
-            sum(math.hypot(q[0] - a[0], q[1] - a[1]) for a, q in g) for g in groups])
+        keep = _prune_struct(reach, D0, mat0, measured & ~given, span, cap, [
+            sum(math.hypot(q[0] - a[0], q[1] - a[1]) for a, q in g) for g in groups], known)
         if len(keep) < len(groups):
             opening[:] = orig
             bridges = []
@@ -2166,7 +2241,8 @@ def add_struct_bridges(opening: np.ndarray, p: Params, hidden: np.ndarray | None
     return bridges, weak
 
 
-def _prune_struct(reach: list, solid, mat0, measured, span: float, cap: float, length: list) -> list:
+def _prune_struct(reach: list, base, mat0, measured, span: float, cap: float, length: list,
+                  known: list | None = None) -> list:
     """Indices of the structural bridges to keep: the greedy placement (farthest edge first) never
     revisits a bridge that later ones made useless (e.g. one at the tip of a piece, then one nearer
     that also covers the tip). Removes them one at a time, the longest first, as long as every
@@ -2174,12 +2250,18 @@ def _prune_struct(reach: list, solid, mat0, measured, span: float, cap: float, l
     cut, which stay). One entry per group of bridges placed together
     (a bridge and the one on the opposite edge of its strip): `reach` = (window, its bridges drawn in
     it), `length` = their length. Distances go through the material without the structural bridges
-    (`mat0`), each group adding only its own: a removed bridge is no longer a path either."""
-    base = np.minimum(_geodesic(solid, mat0, cap), cap)
+    (`mat0`), each group adding only its own: a removed bridge is no longer a path either.
+    `base`: distances (capped) to the supports that stay, through `mat0`. `known`: (material,
+    distances) of each window when its group was placed, reused when that material is the same
+    (no other structural bridge in the window, e.g. the first group)."""
     dist = []
-    for (y0, y1, x0, x1), nb in reach:
+    for g, ((y0, y1, x0, x1), nb) in enumerate(reach):
         src = nb > 0
-        dist.append(np.minimum(_geodesic(src, mat0[y0:y1, x0:x1] | src, cap), cap))
+        m = mat0[y0:y1, x0:x1] | src
+        if known is not None and np.array_equal(known[g][0], m):
+            dist.append(known[g][1])
+        else:
+            dist.append(np.minimum(_geodesic(src, m, cap), cap))
     alive = list(range(len(reach)))
     while len(alive) > 0:
         check_cancel()
@@ -2569,13 +2651,22 @@ def _edge_field(opening: np.ndarray) -> tuple:
     return f, cv2.Sobel(f, cv2.CV_32F, 1, 0, ksize=3), cv2.Sobel(f, cv2.CV_32F, 0, 1, ksize=3)
 
 
+_REMAP_ROWS = 16384        # points sampled per cv2.remap call (its maps must stay under 32767 rows)
+
+
 def _subpixel_edge(pts: np.ndarray, f: np.ndarray, gx: np.ndarray, gy: np.ndarray) -> np.ndarray:
     """Outline points moved onto the edge of the pixels. `findContours` gives the centres of the
     opening's border pixels, half a pixel inside the edge (and on a staircase): the openings came out
     ~1 px narrower than computed. Each point moves along the normal (gradient of the blurred mask)
     to where the blurred mask crosses 0.5; where there is none (strand 1 px wide, no clear normal),
     it moves half a pixel, or stays when the normal is undefined."""
-    sx = lambda img, x, y: cv2.remap(img, x, y, cv2.INTER_LINEAR, borderMode=cv2.BORDER_CONSTANT, borderValue=0)
+    def sx(img, x, y):
+        # one map row per point: OpenCV refuses maps of SHRT_MAX (32767) rows or more (a long
+        # outline, e.g. zone limits of the line style), so long outlines are sampled in slices
+        # (each point is interpolated on its own: same values)
+        return np.concatenate([cv2.remap(img, x[i:i + _REMAP_ROWS], y[i:i + _REMAP_ROWS], cv2.INTER_LINEAR,
+                                         borderMode=cv2.BORDER_CONSTANT, borderValue=0)
+                               for i in range(0, max(1, len(x)), _REMAP_ROWS)])
     x, y = pts[:, :1].copy(), pts[:, 1:].copy()
     nx, ny = -sx(gx, x, y), -sx(gy, x, y)              # outwards: the mask decreases
     n = np.hypot(nx, ny)
@@ -2766,24 +2857,6 @@ def run_threads(funcs: list) -> list:
     return [f.result() for f in futures]
 
 
-def _prefetch_teed(prep: Prepared, entries: list) -> None:
-    """Starts the TEED network of the zones that use it in the background, as soon as the
-    computation starts: it runs while the layers are cleaned and rendered, and the detection then
-    finds its logits in the cache (teed.logits). Errors are left to the detection itself."""
-    if PARALLEL == "none":
-        return
-    for pe, *_ in entries:
-        if pe.outline and pe.outline_method == "teed":
-            ref = detail_image(prep, pe)
-
-            def run(ref=ref):
-                try:
-                    teed.logits(ref)
-                except Exception:
-                    pass
-            _thread_pool().submit(run)
-
-
 # Results of the last layer jobs, by content of their inputs: a change that leaves a layer as it
 # was (e.g. an effect of another layer) does not recompute its merges, bridges and paths.
 _JOB_CACHE: dict = {}
@@ -2881,7 +2954,7 @@ def build(prep: Prepared, p: Params, outline_region: np.ndarray | None = None,
     # Lines: key-detail zones (`outline`) and/or silhouette (`outline_subject`), each can be on
     # without the other; each one goes to an outline layer or into the colour layers.
     entries, groups = outline_entries(p, prep, zone_regions, outline_region)
-    _prefetch_teed(prep, entries)
+    _prefetch_lines(prep, p, entries, groups, support)
 
     targets, cleaned_all = [], []
     if p.stencil_style == "line":
@@ -2893,9 +2966,9 @@ def build(prep: Prepared, p: Params, outline_region: np.ndarray | None = None,
             t = labels == ci
         if prep.fg is not None:            # removed background: left as bare support
             t &= prep.fg
-        t = np.where(t, 255, 0).astype(np.uint8)
-        targets.append(t)
-        cleaned_all.append(clean_mask(t, p, extra_area))
+        targets.append(np.where(t, 255, 0).astype(np.uint8))
+    # the layers are cleaned independently of each other: in parallel
+    cleaned_all = run_threads([(lambda t=t: clean_mask(t, p, extra_area)) for t in targets])
     if p.fill_gaps and p.layering == "exclusive" and cleaned_all:   # cumulative: the layer below shows
         cleaned_all, targets = fill_gaps(cleaned_all, targets, labels, prep.palette, color_ids, p)
 
@@ -3046,7 +3119,7 @@ def build(prep: Prepared, p: Params, outline_region: np.ndarray | None = None,
     for g in order:
         check_cancel()
         if sim is None:
-            sim = res.detect_sim = image_sim(res)
+            sim = res.detect_sim = image_sim(res, keep=True)    # the outline stencils come on top
             if need_pre:           # same render (lines added to the layers included), effects left out
                 pre = [base_masks[li] | strokes[li] if li in strokes else base_masks[li] for li in range(len(base_masks))]
                 sim_pre = res.detect_sim_pre = render(pre)
@@ -4075,56 +4148,53 @@ def _image_grad(img: np.ndarray, ppm: float, make) -> np.ndarray:
     return g
 
 
-def detect_key_details(prep: Prepared, sim: np.ndarray, p: Params,
-                       region: np.ndarray | None = None, dark: bool = True,
-                       stages: bool = False):
-    """Key details of the image that the flat render (simplification + airbrush blur) makes disappear.
+def _lab01(img: np.ndarray) -> np.ndarray:
+    """CIE L*a*b* (float) of a BGR 8-bit image."""
+    return cv2.cvtColor(img.astype(np.float32) / 255.0, cv2.COLOR_BGR2LAB)
 
-    1. Candidate lines of the original, by the chosen method (`p.outline_method`):
-       canny = sharp edges (thresholds on L*, a*, b*); xdog = drawn line (difference of Gaussians);
-       fdog = drawn line averaged along the flow of the contours; ridge = centre line of thin
-       strokes (Hessian); teed = learned edges (TEED network). `dark`: polarity of the lines
-       for xdog / fdog / ridge.
-    2. Only those where the local contrast of the simulated render is clearly lower than the
-       original's are kept (lost or faded detail).
-    3. Lines that are too short are removed, then thickened to the line width.
-    Returns a mask (image area) of the outline stencil openings; with `stages`, a dict of the
-    intermediate masks (for the detection preview): detected, selected, kept, short, stroke.
-    """
-    ppm = p.px_per_mm
-    ref = detail_image(prep, p)
+
+def _lab_grad(labimg: np.ndarray, ppm: float) -> np.ndarray:
+    """Gradient magnitude of a L*a*b* image (local contrast, the three channels together)."""
+    sig = max(0.7, 0.12 * ppm)
+    g2 = np.zeros(labimg.shape[:2], np.float32)
+    for c in range(3):
+        ch = cv2.GaussianBlur(labimg[..., c], (0, 0), sig)
+        gx = cv2.Sobel(ch, cv2.CV_32F, 1, 0, ksize=3)
+        gy = cv2.Sobel(ch, cv2.CV_32F, 0, 1, ksize=3)
+        g2 += gx * gx + gy * gy
+    return np.sqrt(g2)
+
+
+# Candidate lines of the last zones (step 1 of detect_key_details, from the image alone): computed
+# in advance while the colour layers are made (_prefetch_lines), and kept for the next computations
+# (most changes leave the image and the zone's method as they are). Keyed by the identity of the
+# prepared image (kept alive by the entry, so the id cannot be reused) and the settings involved.
+_CAND_CACHE: OrderedDict = OrderedDict()     # key -> (prepared image, Future of (ref, strength, edges))
+_CAND_LOCK = threading.Lock()
+_CAND_MAX = 3
+
+
+def _cand_key(prep: Prepared, p: Params, dark: bool, region: np.ndarray | None) -> tuple:
     method = p.outline_method
+    rkey = None
+    if method in ("xdog", "fdog") and region is not None:   # their noise floor is measured in the zone
+        h = blake2b(digest_size=16)
+        h.update(np.ascontiguousarray(region).tobytes())
+        rkey = (h.hexdigest(), region.shape)
+    return (id(prep.resized), round(p.px_per_mm, 3), float(p.outline_clahe), method,
+            None if method == "teed" else p.outline_channel,
+            bool(dark) if method in ("xdog", "fdog", "ridge") else None, rkey)
 
-    def lab(img):
-        return cv2.cvtColor(img.astype(np.float32) / 255.0, cv2.COLOR_BGR2LAB)
 
-    def grad(labimg):
-        sig = max(0.7, 0.12 * ppm)
-        g2 = np.zeros(labimg.shape[:2], np.float32)
-        for c in range(3):
-            ch = cv2.GaussianBlur(labimg[..., c], (0, 0), sig)
-            gx = cv2.Sobel(ch, cv2.CV_32F, 1, 0, ksize=3)
-            gy = cv2.Sobel(ch, cv2.CV_32F, 0, 1, ksize=3)
-            g2 += gx * gx + gy * gy
-        return np.sqrt(g2)
-
+def _compute_candidates(prep: Prepared, p: Params, dark: bool, region: np.ndarray | None) -> tuple:
+    """(image searched, line strength, candidate line points) of a zone, by its method (see
+    detect_key_details); read-only arrays."""
+    ppm = p.px_per_mm
+    method = p.outline_method
+    ref = detail_image(prep, p)
+    lab_ref = None if method == "teed" else _lab01(ref)
     check_cancel()
-    lab_ref = lab(ref)
-    g_ref = _image_grad(ref, ppm, lambda: grad(lab_ref))
-    check_cancel()
-    g_sim = _image_grad(sim, ppm, lambda: grad(lab(sim)))
-    check_cancel()
-    # the paints reproduce the original photo: the loss of contrast is measured against it
-    # (lines are still detected on the preprocessed image, sharper and more contrasted)
-    orig = prep.raw if prep.raw is not None else prep.resized
-    g_orig = g_ref if orig is ref else _image_grad(orig, ppm, lambda: grad(lab(orig)))
-    check_cancel()
-
-    # 1. Candidate lines (none when only the silhouette is drawn)
-    if not p.outline:
-        edges = np.zeros(ref.shape[:2], bool)
-        strength = g_ref
-    elif method == "teed":
+    if method == "teed":
         # learned edges (TEED): one centre line per edge (crest of the network's smoothed
         # logits; a skeleton of its lines gave the same lines 5x slower); the strength is the
         # network's confidence, so the sensitivity keeps the surest lines first. The channel
@@ -4143,9 +4213,9 @@ def detect_key_details(prep: Prepared, sim: np.ndarray, p: Params,
                 edges |= cv2.Canny(lab8[..., c], lo, hi, L2gradient=True) > 0
         if p.outline_channel == "colour":
             g_ab = lab_ref.copy(); g_ab[..., 0] = 0
-            strength = grad(g_ab)
+            strength = _lab_grad(g_ab, ppm)
         else:
-            strength = g_ref
+            strength = _image_grad(ref, ppm, lambda: _lab_grad(lab_ref, ppm))
     else:
         # chroma (C*): a black / grey line is a low-chroma line on coloured areas, whatever the
         # lighting, while the edge of a shadow over a colour is weak in it
@@ -4156,11 +4226,125 @@ def detect_key_details(prep: Prepared, sim: np.ndarray, p: Params,
         else:
             strength = _line_response(chans[0], ppm, method, dark)
             for ch in chans[1:]:
+                check_cancel()
                 strength = np.maximum(strength, _line_response(ch, ppm, method, dark))
         floor = _LINE_FLOOR[method]
         if method in ("xdog", "fdog"):   # faint lines of a low-contrast image stay candidates
             floor *= _contrast_factor(lab_ref[..., 0], region)
         edges = _crest(strength, floor)
+    edges.setflags(write=False)          # shared by the zones and computations (copied to change)
+    return ref, strength, edges
+
+
+def _line_candidates(prep: Prepared, p: Params, dark: bool, region: np.ndarray | None) -> tuple:
+    """Cached _compute_candidates: a computation already running (e.g. started in advance) is
+    waited for instead of being run twice."""
+    key = _cand_key(prep, p, dark, region)
+    for _ in range(3):
+        with _CAND_LOCK:
+            ent = _CAND_CACHE.get(key)
+            if ent is not None and ent[0] is prep.resized:
+                _CAND_CACHE.move_to_end(key)
+                fut, mine = ent[1], False
+            else:
+                fut, mine = Future(), True
+                _CAND_CACHE[key] = (prep.resized, fut)
+                while len(_CAND_CACHE) > _CAND_MAX:
+                    _CAND_CACHE.popitem(last=False)
+        if mine:
+            try:
+                fut.set_result(_compute_candidates(prep, p, dark, region))
+            except BaseException as e:
+                fut.set_exception(e)
+                with _CAND_LOCK:
+                    if _CAND_CACHE.get(key, (None, None))[1] is fut:
+                        del _CAND_CACHE[key]
+                raise
+            return fut.result()
+        try:
+            return fut.result()
+        except Cancelled:                # another computation, cancelled while making it: again
+            continue
+    return _compute_candidates(prep, p, dark, region)
+
+
+def _prefetch_lines(prep: Prepared, p: Params, entries: list, groups: dict, support: np.ndarray) -> None:
+    """Starts the candidate lines of the key-detail zones and the local contrast of the original
+    in the background as soon as the computation starts (they depend on the image only): they are
+    found while the colour layers are cleaned and cut, and the detection then finds them in the
+    caches (_line_candidates, _image_grad).
+    Not cancelled with the computation (the next one usually needs the same); errors are left to
+    the detection itself."""
+    if PARALLEL == "none" or not entries:
+        return
+    # local contrast of the original photo, which every detection compares the render with
+    orig = prep.raw if prep.raw is not None else prep.resized
+    ppm = p.px_per_mm
+
+    def contrast():
+        try:
+            _image_grad(orig, ppm, lambda: _lab_grad(_lab01(orig), ppm))
+        except Exception:
+            pass
+    _thread_pool().submit(contrast)
+    for pe, reg, dest, _is_sil in entries:
+        if not pe.outline:
+            continue
+        # polarity of the lines looked for, as the detection will ask for it (see build)
+        if p.stencil_style == "line":
+            g = dest if dest in groups else next(iter(groups), None)
+            pg = group_params(p, groups[g]) if g else p
+        elif into_layers(dest):
+            pg = None                   # lines cut into the colour layers: dark lines
+        elif dest in groups:
+            pg = group_params(p, groups[dest])
+        else:
+            continue
+        dark = True if pg is None else outline_is_dark(outline_color(prep, support, pg), support)
+
+        def run(pe=pe, reg=reg, dark=dark):
+            try:
+                _line_candidates(prep, pe, dark, reg)
+            except Exception:
+                pass
+        _thread_pool().submit(run)
+
+
+def detect_key_details(prep: Prepared, sim: np.ndarray, p: Params,
+                       region: np.ndarray | None = None, dark: bool = True,
+                       stages: bool = False):
+    """Key details of the image that the flat render (simplification + airbrush blur) makes disappear.
+
+    1. Candidate lines of the original, by the chosen method (`p.outline_method`):
+       canny = sharp edges (thresholds on L*, a*, b*); xdog = drawn line (difference of Gaussians);
+       fdog = drawn line averaged along the flow of the contours; ridge = centre line of thin
+       strokes (Hessian); teed = learned edges (TEED network). `dark`: polarity of the lines
+       for xdog / fdog / ridge.
+    2. Only those where the local contrast of the simulated render is clearly lower than the
+       original's are kept (lost or faded detail).
+    3. Lines that are too short are removed, then thickened to the line width.
+    Returns a mask (image area) of the outline stencil openings; with `stages`, a dict of the
+    intermediate masks (for the detection preview): detected, selected, kept, short, stroke.
+    """
+    ppm = p.px_per_mm
+    method = p.outline_method
+    check_cancel()
+    # 1. Candidate lines (none when only the silhouette is drawn): from the image alone, cached
+    #    (and usually computed in advance, see _prefetch_lines)
+    if p.outline:
+        ref, strength, edges = _line_candidates(prep, p, dark, region)
+        edges = edges.copy()
+    else:
+        ref = detail_image(prep, p)
+        strength = _image_grad(ref, ppm, lambda: _lab_grad(_lab01(ref), ppm))
+        edges = np.zeros(ref.shape[:2], bool)
+    check_cancel()
+    g_sim = _image_grad(sim, ppm, lambda: _lab_grad(_lab01(sim), ppm))
+    check_cancel()
+    # the paints reproduce the original photo: the loss of contrast is measured against it
+    # (lines are still detected on the preprocessed image, sharper and more contrasted)
+    orig = prep.raw if prep.raw is not None else prep.resized
+    g_orig = _image_grad(orig, ppm, lambda: _lab_grad(_lab01(orig), ppm))
     check_cancel()
     b = max(2, int(round(0.5 * ppm)))   # no line on the edge of the image itself
     edges[:b, :] = False; edges[-b:, :] = False; edges[:, :b] = False; edges[:, -b:] = False
@@ -4203,12 +4387,17 @@ def detect_key_details(prep: Prepared, sim: np.ndarray, p: Params,
     # selected in dashes that the minimum length removes. Canny and ridges start from fewer
     # points (`hyst_seed_share`), which sets how much line a sensitivity keeps.
     weak = edges & (loss >= HYST_LOSS * loss_min) & (score >= HYST_SCORE * thr)
+    # (0 / 1 masks with OpenCV: the selection only grows, so the same count = nothing new)
     k3 = np.ones((3, 3), np.uint8)
+    s8, w8 = sel.view(np.uint8), np.ascontiguousarray(weak).view(np.uint8)
+    n_sel = cv2.countNonZero(s8)
     for _ in range(int(round((p.outline_follow_mm if method in FOLLOW_METHODS else HYST_MM) * ppm))):
-        grown = ((cv2.dilate(sel.astype(np.uint8), k3) > 0) & weak) | sel
-        if np.array_equal(grown, sel):
+        grown = cv2.bitwise_or(cv2.bitwise_and(cv2.dilate(s8, k3), w8), s8)
+        n = cv2.countNonZero(grown)
+        if n == n_sel:
             break
-        sel = grown
+        s8, n_sel = grown, n
+    sel = s8.view(bool)
     if p.outline_whole_lines:
         # whole lines: their own detection sensitivity, a minimum mark measured against the most
         # marked lines of the zone
@@ -4414,22 +4603,45 @@ def positioning(res: Result) -> dict:
 # 6. Previews
 # --------------------------------------------------------------------------
 
-def simulate_sheet(res: Result) -> np.ndarray:
-    """Airbrush render simulation on the sheet (the only place paint goes through)."""
+# Render of the colour layers on the sheet (float canvas) kept from the detection of the outline
+# stencils, which are painted last: the render of the whole result (ΔE) only adds them to it.
+# One entry, taken (removed) by the render that uses it; it holds the openings it was made from,
+# so their ids cannot be reused while it lives.
+_SIM_PREFIX: list = []
+_SIM_LOCK = threading.Lock()
+
+
+def simulate_sheet(res: Result, keep: bool = False) -> np.ndarray:
+    """Airbrush render simulation on the sheet (the only place paint goes through).
+    `keep`: the float render is kept for a later render of the same layers plus others painted
+    after them (see _SIM_PREFIX)."""
     p = res.params
     first = res.layers[0].opening if res.layers else None
     shape = first.shape if first is not None else (int(round(res.sheet_mm[1] * p.px_per_mm)),
                                                    int(round(res.sheet_mm[0] * p.px_per_mm)))
-    canvas = np.empty(shape + (3,), np.float32)
-    canvas[:] = res.support_color
     sig = max(0.3, p.spray_mm * p.px_per_mm)
+    setting = (shape, sig, tuple(np.asarray(res.support_color, np.float64).tolist()))
+    layers = list(res.layers)
+    start = 0
+    canvas = None
+    with _SIM_LOCK:
+        if _SIM_PREFIX:
+            pre_set, pre_layers, pre_canvas = _SIM_PREFIX[0]
+            n = len(pre_layers)
+            if (pre_set == setting and 0 < n <= len(layers)
+                    and all(a[0] is L.opening and np.array_equal(a[1], L.color) for a, L in zip(pre_layers, layers))):
+                _SIM_PREFIX.clear()
+                canvas, start = pre_canvas, n
+    if canvas is None:
+        canvas = np.empty(shape + (3,), np.float32)
+        canvas[:] = res.support_color
     # Only around the openings of each layer: the blur is zero farther than its kernel radius
     # (OpenCV: ksize = round(8 sigma + 1) | 1 for float images), and with a margin at least that
     # wide the blur inside the window is the same as on the whole sheet. Same arithmetic as
     # canvas * (1 - a) + colour * a, in place.
     r = (int(round(sig * 8 + 1)) | 1) // 2 + 2
     H, W = shape
-    for L in res.layers:
+    for L in layers[start:]:
         check_cancel()
         x, y, w, h = cv2.boundingRect(L.opening)
         if w == 0 or h == 0:
@@ -4437,11 +4649,26 @@ def simulate_sheet(res: Result) -> np.ndarray:
         x0, y0, x1, y1 = max(0, x - r), max(0, y - r), min(W, x + w + r), min(H, y + h + r)
         mask = cv2.GaussianBlur(L.opening[y0:y1, x0:x1].astype(np.float32) / 255.0, (0, 0), sig)
         check_cancel()
-        a = (0.97 * mask)[..., None]
+        # canvas * (1 - a) + colour * a with OpenCV on 3-channel copies of a: the same float32
+        # operations as numpy, without its slow broadcast of a over the 3 channels
+        a = 0.97 * mask
         sub = canvas[y0:y1, x0:x1]
-        np.multiply(sub, 1 - a, out=sub)
-        sub += L.color.astype(np.float32) * a
-    return np.clip(canvas, 0, 255).astype(np.uint8)
+        cv2.multiply(sub, cv2.merge([1 - a] * 3), dst=sub)
+        col = tuple(float(c) for c in np.asarray(L.color, np.float32)) + (0.0,)
+        cv2.add(sub, cv2.multiply(cv2.merge([a] * 3), col), dst=sub)
+    out = np.clip(canvas, 0, 255).astype(np.uint8)
+    if keep and layers:
+        with _SIM_LOCK:
+            _SIM_PREFIX[:] = [(setting, [(L.opening, np.array(L.color)) for L in layers], canvas)]
+    return out
+
+
+def image_sim(res: Result, sheet_sim: np.ndarray | None = None, keep: bool = False) -> np.ndarray:
+    """Simulated render of the image area only (`keep`: see simulate_sheet)."""
+    sim = simulate_sheet(res, keep) if sheet_sim is None else sheet_sim
+    H, W = res.prepared.labels.shape
+    X0, Y0 = res.img_off_px
+    return sim[Y0:Y0 + H, X0:X0 + W]
 
 
 def support_overlap(res: Result) -> tuple[tuple, tuple]:
@@ -4471,14 +4698,6 @@ def sheet_to_support(res: Result, arr: np.ndarray, fill=0) -> np.ndarray:
 def simulate(res: Result) -> np.ndarray:
     """Airbrush render simulation over the whole support."""
     return sheet_to_support(res, simulate_sheet(res), res.support_color.astype(np.uint8))
-
-
-def image_sim(res: Result, sheet_sim: np.ndarray | None = None) -> np.ndarray:
-    """Simulated render of the image area only."""
-    sim = simulate_sheet(res) if sheet_sim is None else sheet_sim
-    H, W = res.prepared.labels.shape
-    X0, Y0 = res.img_off_px
-    return sim[Y0:Y0 + H, X0:X0 + W]
 
 
 def image_crop(res: Result, sim: np.ndarray) -> np.ndarray:

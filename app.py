@@ -134,7 +134,8 @@ def rgba_b64(color_bgr, alpha: np.ndarray) -> str:
     img = np.empty((h, w, 4), np.uint8)
     img[..., :3] = np.asarray(color_bgr, np.uint8)
     img[..., 3] = np.clip(alpha * 255 + 0.5, 0, 255).astype(np.uint8)
-    ok, buf = cv2.imencode(".png", img, [cv2.IMWRITE_PNG_COMPRESSION, 6])
+    # level 3: about twice as fast as 6 for 15-25 % more bytes (4 of these per layer, sent locally)
+    ok, buf = cv2.imencode(".png", img, [cv2.IMWRITE_PNG_COMPRESSION, 3])
     return "data:image/png;base64," + base64.b64encode(buf.tobytes()).decode()
 
 
