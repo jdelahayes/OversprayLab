@@ -68,6 +68,11 @@ Hard-won constraints, verified by the author in Silhouette Studio – do not "cl
   the background at the start of `build` (`_line_candidates`, `_prefetch_lines`), keyed by the
   identity of `prep.resized` and the zone settings it uses (`_cand_key`): a new setting that
   changes the candidates must be added to that key.
+- An outline stencil excluded from the colour layers (exclusive stacking) makes `build` compute the
+  colour layers twice: the first time without the automatic bridges (`FIRST_PASS_BRIDGES`, author's
+  choice: the lines are searched on the render once the bridges are retouched), the second time
+  with them, while the outline stencils get their own bridges in parallel (checked afterwards, the
+  colour layers are computed again if those bridges change what the stencils paint).
 - TEED (`teed`, `overspraylab/teed.py`): strength = network logits (not the sigmoid, which
   saturates at 1 on every line and leaves the sensitivity without effect); lines = crest of the
   smoothed logits (a skeleton gave the same lines 5x slower). Uses `outline_follow_mm`

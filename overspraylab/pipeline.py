@@ -2822,6 +2822,19 @@ def _bridge_cut(cut: np.ndarray, opening: np.ndarray, merged) -> np.ndarray | No
     return cut if cut.any() else None
 
 
+def _outline_paints(cut0: np.ndarray, s: np.ndarray, opening: np.ndarray, merged) -> np.ndarray:
+    """What an outline stencil paints once its bridges are retouched, its merges included: `cut0`
+    cut by its manual bridges, `s` its opening before the automatic bridges, `opening` after."""
+    cut = _bridge_cut(cut0 | _cut_by(s, opening), opening, merged)
+    return (opening > 0) if cut is None else ((opening > 0) | cut)
+
+
+# True: the first computation of the colour layers keeps its bridges when an exclusive outline
+# stencil makes them computed twice (former behaviour: the outline stencil is then searched on the
+# render with the bridges; about 1.5 s slower on a large sheet)
+FIRST_PASS_BRIDGES = False
+
+
 # Parallelism between layers: "thread" (default), "process" (separate processes), or "none" (serial)
 PARALLEL = os.environ.get("OVERSPRAYLAB_PARALLEL", "thread")
 _POOL = None
@@ -3106,16 +3119,25 @@ def build(prep: Prepared, p: Params, outline_region: np.ndarray | None = None,
                      merged=merged, n_merged=n_merged, tone=ci, manual_bridges=len(m_drawn),
                      bridge_cut=cut)
 
-    results = run_layer_jobs([layer_job_of(li, ci) for li, ci in enumerate(color_ids)])
+    # Outline stencils, painted last, above all layers: one per outline layer (A, B...), made of
+    # the zones (and silhouette) sent to it
+    order = [g for g in groups if any(e[2] == g for e in entries)]
+    # An outline stencil excluded from the colour layers (exclusive stacking) makes them computed
+    # twice: first for the render it is searched on, then without its lines (below). The first
+    # computation skips the automatic bridges (render of the sheet once they are retouched): they
+    # are computed once, in the second one, which every colour layer then goes through.
+    two_pass = bool(excl and color_ids and any(group_exclusive(p, groups[g]) for g in order))
+    p_first = replace(p, bridges=False) if two_pass and p.bridges and not FIRST_PASS_BRIDGES else None
+    jobs1 = [layer_job_of(li, ci) for li, ci in enumerate(color_ids)]
+    # layer_job changes the opening of its job: jobs1 kept as is for the second computation
+    results = run_layer_jobs([(j[0].copy(), j[1], p_first or p, *j[3:]) for j in jobs1])
     layers = [color_layer(li, ci, r) for (li, ci), r in zip(enumerate(color_ids), results)]
     res = make_result(layers, detect_sim=detect_sim, detect_painted=detect_painted, lines_added=lines_added,
                       detect_sim_pre=detect_sim_pre, zone_lines=_zone_lines(entries))
 
-    # Outline stencils, painted last, above all layers: one per outline layer (A, B...), made of
-    # the zones (and silhouette) sent to it
-    order = [g for g in groups if any(e[2] == g for e in entries)]
     out_masks = []                         # outline stencils done (image area), for their effects
     excluded = None                        # outline stencils excluded from the colour layers (image area)
+    pending = []                           # (index in layers, bridges + paths of an outline stencil)
     sim = sim_pre = None
     for g in order:
         check_cancel()
@@ -3150,44 +3172,89 @@ def build(prep: Prepared, p: Params, outline_region: np.ndarray | None = None,
             mine = manual.assign("outline", [(n_out, g)]).get(n_out, [])
             s = opening.copy()
             m_drawn, forbid = manual.apply(opening, n_out, mine)
-            cut = _cut_by(s, opening)
+            cut0 = _cut_by(s, opening)
             merged, n_merged = merge_line_islands(opening, p, color, support)
             s = opening.copy()
-            pre = s if needs_pre(manual.segments(mine)) else None
-            held = hold_material(opening, p, None, forbid, m_drawn)
-            held, l_drawn = manual.late(opening, pre, n_out, mine, held)
-            cut = _bridge_cut(cut | _cut_by(s, opening), opening, merged)
-            bridges, n_isl, n_short, n_struct, n_weak = held
-            m_drawn = m_drawn + l_drawn
-            if excl and color_ids and group_exclusive(p, groups[g]):
-                # what the stencil paints once its bridges are retouched (its merges included)
-                cut_all = (opening > 0) if cut is None else ((opening > 0) | cut)
-                part = cut_all[Y0:Y0 + H, X0:X0 + W]
+            exclusive = bool(excl and color_ids and group_exclusive(p, groups[g]))
+            if exclusive:
+                # what the stencil paints once its bridges are retouched (its merges included),
+                # taken before they are cut: checked once they are (_outline_paints)
+                part = _outline_paints(cut0, s, s, merged)[Y0:Y0 + H, X0:X0 + W]
                 excluded = part if excluded is None else (excluded | part)
-            layers.append(Layer(index=n_out, color=color, target=target, opening=opening,
-                                lost=lost, bridges=m_drawn + bridges, paths=vectorize(opening, p),
-                                islands=n_isl, short_islands=n_short, struct_bridges=n_struct, weak_spots=len(n_weak), weak_points=_weak_mm(n_weak, p),
-                                merged=merged, n_merged=n_merged,
-                                kind="outline", group=g, manual_bridges=len(m_drawn), bridge_cut=cut))
-    if excluded is not None:
-        # Outline stencils excluded from the colour layers (exclusive stacking): only they paint
-        # their lines. The stencils are searched on the finished colour layers (detection unchanged),
-        # then the colour layers painting under them are computed again without them (bridges,
-        # merges and paths), their merges kept off the lines.
-        ex_sheet = place(excluded.astype(np.uint8) * 255) > 0
-        redo = []
-        for li in range(len(color_ids)):
-            img_part = layers[li].opening[Y0:Y0 + H, X0:X0 + W] > 0
-            if (img_part & excluded).any() or (cleaned_all[li][excluded] > 0).any():
-                redo.append(li)
-        for li in redo:
-            cleaned_all[li] = trim_taken(cleaned_all[li], excluded, p, extra_area)
-            targets[li] = np.where(excluded, np.uint8(0), targets[li])
-            pre_fx[li] = np.where(excluded, np.uint8(0), pre_fx[li])
-        if redo:
-            again = run_layer_jobs([layer_job_of(li, color_ids[li], ex_sheet) for li in redo])
-            for li, r in zip(redo, again):
-                layers[li] = color_layer(li, color_ids[li], r)
+
+            def finish(opening=opening, s=s, cut0=cut0, mine=mine, m_drawn=m_drawn, forbid=forbid,
+                       merged=merged, n_merged=n_merged, n_out=n_out, color=color, target=target,
+                       lost=lost, g=g, exclusive=exclusive):
+                """Bridges and paths of the outline stencil: (Layer, what it paints if exclusive)."""
+                pre = s if needs_pre(manual.segments(mine)) else None
+                held = hold_material(opening, p, None, forbid, m_drawn)
+                held, l_drawn = manual.late(opening, pre, n_out, mine, held)
+                cut = _bridge_cut(cut0 | _cut_by(s, opening), opening, merged)
+                bridges, n_isl, n_short, n_struct, n_weak = held
+                drawn = m_drawn + l_drawn
+                paints = (_outline_paints(cut0, s, opening, merged)[Y0:Y0 + H, X0:X0 + W]
+                          if exclusive else None)
+                return Layer(index=n_out, color=color, target=target, opening=opening,
+                             lost=lost, bridges=drawn + bridges, paths=vectorize(opening, p),
+                             islands=n_isl, short_islands=n_short, struct_bridges=n_struct, weak_spots=len(n_weak), weak_points=_weak_mm(n_weak, p),
+                             merged=merged, n_merged=n_merged,
+                             kind="outline", group=g, manual_bridges=len(drawn), bridge_cut=cut), paints
+            pending.append((len(layers), finish))
+            layers.append(None)            # filled below
+
+    saved = (list(cleaned_all), list(targets), list(pre_fx))
+
+    def second_jobs(excluded):
+        """(colour layers computed again, their jobs). Outline stencils `excluded` (image area): only
+        they paint their lines, so the colour layers painting under them are computed without them
+        (bridges, merges and paths), their merges kept off the lines. A first computation without
+        the bridges: every colour layer, the others with the same masks as the first time."""
+        cleaned_all[:], targets[:], pre_fx[:] = (list(v) for v in saved)
+        redo, ex_sheet = [], None
+        if excluded is not None:
+            ex_sheet = place(excluded.astype(np.uint8) * 255) > 0
+            for li in range(len(color_ids)):
+                img_part = layers[li].opening[Y0:Y0 + H, X0:X0 + W] > 0
+                if (img_part & excluded).any() or (cleaned_all[li][excluded] > 0).any():
+                    redo.append(li)
+            for li in redo:
+                cleaned_all[li] = trim_taken(cleaned_all[li], excluded, p, extra_area)
+                targets[li] = np.where(excluded, np.uint8(0), targets[li])
+                pre_fx[li] = np.where(excluded, np.uint8(0), pre_fx[li])
+        todo = list(range(len(color_ids))) if p_first is not None else redo
+        return todo, [layer_job_of(li, color_ids[li], ex_sheet) if li in redo
+                      else (jobs1[li][0].copy(), *jobs1[li][1:]) for li in todo]
+
+    def outlines():
+        return [(i, *fin()) for i, fin in pending]
+
+    def exact(done):
+        out = None
+        for _, _, part in done:
+            if part is not None:
+                out = part if out is None else (out | part)
+        return out
+
+    if pending and PARALLEL != "none":
+        # The bridges and paths of the outline stencils are made while the colour layers are
+        # computed again without them, from what they paint before their bridges. If a bridge
+        # changes it (one crossing a merged area), the colour layers are computed once more.
+        job = _thread_pool().submit(contextvars.copy_context().run, outlines)
+        todo, jobs = second_jobs(excluded)
+        again = run_layer_jobs(jobs) if jobs else []
+        done = job.result()
+        ex = exact(done)
+        if not (ex is None and excluded is None) and (ex is None or excluded is None or not np.array_equal(ex, excluded)):
+            todo, jobs = second_jobs(ex)
+            again = run_layer_jobs(jobs) if jobs else []
+    else:
+        done = outlines()
+        todo, jobs = second_jobs(exact(done))
+        again = run_layer_jobs(jobs) if jobs else []
+    for i, L, _ in done:
+        layers[i] = L
+    for li, r in zip(todo, again):
+        layers[li] = color_layer(li, color_ids[li], r)
     res.zone_lines = _zone_lines(entries)       # counted once every zone has been searched
     res.manual = manual.report()                # with the outline stencils
     return res
