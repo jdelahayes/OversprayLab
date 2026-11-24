@@ -371,6 +371,11 @@
   .colorpop .acts { display: flex; gap: 6px; margin-top: 10px; }
   .colorpop .acts button { flex: 1; font-size: 12px; padding: 4px 6px; }
   .colorpop .cpnone { color: var(--muted); font-style: italic; }
+  .colorpop .cpsrc { display: flex; flex-wrap: wrap; gap: 4px; }
+  .colorpop .cpsrc button { display: inline-flex; align-items: center; gap: 4px; font-size: 11px; padding: 2px 6px; border-radius: 5px; }
+  .colorpop .cpsrc button.on { outline: 2px solid var(--accent); outline-offset: 0; }
+  .colorpop .cpsrc i { width: 10px; height: 10px; border-radius: 2px; border: 1px solid rgba(127,127,127,.45); flex: none; }
+  .colorpop .cphint { margin: 4px 0 0; color: var(--muted); font-size: 11px; }
   .cpick canvas.sv { width: 216px; height: 110px; display: block; border-radius: 6px; cursor: crosshair; touch-action: none; }
   .cpick .cprow { display: flex; gap: 6px; align-items: center; }
   .cpick .cpprev { width: 26px; height: 26px; border-radius: 6px; border: 1px solid rgba(127,127,127,.45); flex: none; }
@@ -4424,6 +4429,9 @@ function setSession(j, name) {
   IMG = { w: j.width, h: j.height, src: j.original, name, gray: j.gray };
   CROP = { x: 0, y: 0, w: 1, h: 1 };
   $("manual_bridges").value = ""; BR.sel = null; BR.autoSeg = null; BR.draft = null;   // drawn on the former image
+  // paints chosen per layer / tone: they matched the tones of the former image (a project
+  // opened puts its own back afterwards)
+  $("layer_colors").value = ""; showPaletteChoice(""); PAL_LAST = "";
   createMask(); createSubj(); createSil(); createFlat();
   $("crop_ratio").value = "free";
   $("image_scale").value = 100; $("image_pos_x").value = 50; $("image_pos_y").value = 50;
@@ -8591,20 +8599,32 @@ function startEyedrop() {
   window.addEventListener("keydown", key, true);
   window.addEventListener("contextmenu", ctx, true);
 }
-function closeColorPop() { $("colorPop").hidden = true; POP_IDX = null; }
+function closeColorPop() { $("colorPop").hidden = true; POP_IDX = null; POP_SRC = ""; }
+// Line style: name of a source of a stencil (tone of the colouring book, key-detail layer, ...)
+const srcLabel = s => s.startsWith("tone") ? `Teinte ${s.slice(4)}` : s.startsWith("details") ? `Détails ${s.split(":")[1] || "A"}`
+  : s === "silhouette" ? "Silhouette" : s === "zones" ? "Contour de coloriage" : s;
+let POP_SRC = "";                 // part of the stencil the colour applies to ("" = all of it)
 // Colour choice window of a layer: applied palette (or all layer tones),
 // computed image tones, 6 recently used colours, custom colour (system picker)
 function openColorPop(btn) {
   const idx = +btn.dataset.idx, pop = $("colorPop");
   if (!pop.hidden && POP_IDX === idx) return closeColorPop();
-  POP_IDX = idx;
+  POP_IDX = idx; POP_SRC = "";
   const L = LAST.layers.find(x => x.index === idx), cur = (L ? L.color : "").toLowerCase();
+  // line style, stencil made of several sources sharing a paint: each can get its own colour
+  // (another colour makes it a stencil of its own)
+  const srcs = L && L.sources && L.sources.length > 1 ? L.sources : [];
+  const sw = s => s.startsWith("tone") && (LAST.palette || [])[+s.slice(4)] ? `<i style="background:${LAST.palette[+s.slice(4)]}"></i>` : "";
+  const srcRow = srcs.length ? `<h4>Appliquer à</h4><div class="cpsrc" role="group" aria-label="Appliquer à">
+      <button type="button" data-src="" class="on" aria-pressed="true">Tout le pochoir</button>${srcs.map(s =>
+        `<button type="button" data-src="${s}" aria-pressed="false" title="${s.startsWith("tone") ? "Teinte calculée de la zone" : ""}">${sw(s)}<span>${srcLabel(s)}</span></button>`).join("")}</div>
+      <p class="cphint">Une autre couleur en fait un pochoir à part.</p>` : "";
   const row = (cols, empty) => cols.length
     ? `<div class="sws">${cols.map(c => `<button type="button" data-c="${c}" class="${c.toLowerCase() === cur ? "cur" : ""}" style="background:${c}" title="${c}"></button>`).join("")}</div>`
     : `<div class="cpnone">${empty}</div>`;
   const pal = palDef(PAL_LAST || PAL_CUR);
   const inUse = [...new Set(LAST.layers.filter(x => x.kind !== "outline").map(x => x.color.toLowerCase()))];
-  pop.innerHTML = `<strong>Couche ${idx}</strong>
+  pop.innerHTML = `<strong>Couche ${idx}</strong>${srcRow}
     <h4>${pal ? `Palette « ${pal[0]} »` : "Couleurs des couches"}</h4>${row(pal ? pal[1] : inUse, "—")}
     <h4>Teintes de l'image (calculées)</h4>${row((LAST.palette || []).slice(), "—")}
     <h4>Dernières couleurs utilisées</h4>${row(recentColors(), "Aucune pour l'instant")}
@@ -8624,13 +8644,17 @@ function setupColorPop() {
   pop.onclick = e => {
     const b = e.target.closest("button");
     if (!b || POP_IDX === null) return;
-    const idx = POP_IDX;
-    if (b.dataset.c) { closeColorPop(); setLayerColor(idx, b.dataset.c); }
-    else if (b.dataset.act === "auto") { closeColorPop(); setLayerColor(idx, null); }
+    const idx = POP_IDX, src = POP_SRC;
+    if (b.dataset.src !== undefined) {           // part of the stencil chosen
+      POP_SRC = b.dataset.src;
+      pop.querySelectorAll(".cpsrc button").forEach(x => { x.classList.toggle("on", x === b); x.setAttribute("aria-pressed", String(x === b)); });
+    }
+    else if (b.dataset.c) { closeColorPop(); setLayerColor(idx, b.dataset.c, src); }
+    else if (b.dataset.act === "auto") { closeColorPop(); setLayerColor(idx, null, src); }
     else if (b.dataset.act === "eyedrop") startEyedrop();
     else if (b.dataset.act === "apply") {
       const hex = PICK.hex();
-      closeColorPop(); setLayerColor(idx, hex);
+      closeColorPop(); setLayerColor(idx, hex, src);
     }
   };
   pop.onkeydown = e => {
@@ -8648,23 +8672,25 @@ function customColor(L) {
       : s === "zones" ? !!val("line_zones_color") : !!layerColors()[s.replace("tone", "t")]);
   return L && (L.kind === "outline" ? !groupAuto(L.group || "A") : !!layerColors()[L.index]);
 }
-function setLayerColor(idx, color) {
+function setLayerColor(idx, color, only = "") {
   const L = LAST && LAST.layers.find(x => x.index === idx);
   if (L && L.sources && L.sources.length) {   // line style: the colour of each source of this stencil
     const c = color ? color.toLowerCase() : "", m = layerColors();
-    L.sources.forEach(s => {
+    const srcs = only ? L.sources.filter(s => s === only) : L.sources;   // or of one of them
+    srcs.forEach(s => {
       if (s.startsWith("details")) setGroupColor(s.split(":")[1] || "A", c);
       else if (s === "silhouette") $("line_sil_color").value = c;
       else if (s === "zones") $("line_zones_color").value = c;
       else if (c) m[s.replace("tone", "t")] = c; else delete m[s.replace("tone", "t")];
     });
     const key = PAL_CUR || PAL_LAST, def = palDef(key);
-    if (L.sources.some(s => s.startsWith("tone")))
+    if (srcs.some(s => s.startsWith("tone")))
       showPaletteChoice(c && def && def[1].some(x => x.toLowerCase() === c) ? key : "");
     $("layer_colors").value = Object.entries(m).map(([k, v]) => `${k}=${v}`).join(";");
     if (c) rememberColor(color);
     syncSilhouetteSource(); updateSummaries(); detectPreview();
-    status(c ? `Pochoir ${idx} (traits) : peinture ${c}` : `Pochoir ${idx} (traits) : couleur automatique`);
+    const what = only ? `Pochoir ${idx} (traits), ${srcLabel(only)}` : `Pochoir ${idx} (traits)`;
+    status(c ? `${what} : peinture ${c}` : `${what} : couleur automatique`);
     schedule();
     return;
   }

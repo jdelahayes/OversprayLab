@@ -568,6 +568,9 @@ try {
     "Place du trait par rapport au contour du masque : centré dessus, juste à l'extérieur ou juste à l'intérieur.": "Where the stroke lies against the outline of the mask: centred on it, just outside or just inside.",
     "Interrompre tous les (mm)": "Interrupt every (mm)",
     "Variation de la distance (%)": "Distance variation (%)",
+    "Appliquer à": "Apply to", "Tout le pochoir": "The whole stencil", "Contour de coloriage": "Colouring-book outline",
+    "Teinte calculée de la zone": "Computed tone of the zone",
+    "Une autre couleur en fait un pochoir à part.": "Another colour makes it a separate stencil.",
     "0 = limites continues. Les interruptions tiennent les zones fermées comme des ponts.": "0 = continuous limits. The interruptions hold the closed zones like bridges.",
     "Trait seul : coupe les traits de la zone à intervalles réguliers : chaque interruption laisse un peu de matière qui tient les traits fermés (yeux, boucles), comme un pont. 0 = traits continus.":
       "Lines only: cuts the lines of the zone at regular intervals: each interruption leaves a little material that holds the closed lines (eyes, loops), like a bridge. 0 = continuous lines.",
@@ -1313,6 +1316,9 @@ try {
     : w.replace(/^couche (\d+)$/, "layer $1").replace(/^teinte (\d+) \(absente\)$/, "tone $1 (absent)");
   const flatNameEn = w => w === "Support nu" ? "Bare support"
     : w.replace(/^Couche (\d+)$/, "Layer $1").replace(/^Teinte (\d+) \(absente\)$/, "Tone $1 (absent)");
+  // a part of a line-style stencil (see srcLabel in index.html)
+  const SRC_EN = w => w.replace(/^Teinte (\d+)$/, "Tone $1").replace(/^Détails ([A-Z])$/, "Key details $1")
+    .replace(/^Contour de coloriage$/, "Colouring-book outline");
   const MASK_EN = { "contours": "outline", "sujet": "subject", "silhouette": "silhouette", "aplats": "flat areas", "contours (détails clés)": "outline (key details)" };
   const decEN = x => x.replace(/(\d),(\d)/g, "$1.$2");
   const P = [
@@ -1354,6 +1360,9 @@ try {
     [/^(\d+) pochoirs? de traits · dans l'ordre$/, (m, n) => `${plural(n, "line stencil")} · in order`],
     [/^Pochoir (\d+) \(traits\) : peinture (#[0-9a-f]{6})$/i, (m, n, c) => `Stencil ${n} (lines): paint ${c}`],
     [/^Pochoir (\d+) \(traits\) : couleur automatique$/, (m, n) => `Stencil ${n} (lines): automatic colour`],
+    [/^Pochoir (\d+) \(traits\), (.+) : peinture (#[0-9a-f]{6})$/i, (m, n, w, c) => `Stencil ${n} (lines), ${SRC_EN(w)}: paint ${c}`],
+    [/^Pochoir (\d+) \(traits\), (.+) : couleur automatique$/, (m, n, w) => `Stencil ${n} (lines), ${SRC_EN(w)}: automatic colour`],
+    [/^Détails ([A-Z])$/, (m, g) => `Key details ${g}`],
     [/^(\d+) couches?( \+ contours)? · dans l'ordre$/, (m, n, c) => `${plural(n, "layer")}${c ? " + outline" : ""} · in order`],
     [/^trait seul · (\d+) teintes? · détail (\d+)(?: · teinte (\d+) %)?(?: · vivacité (\d+) %)?(?: · aplats (\d+))?( · zones d'aplat)?$/, (m, n, d, h, v, f, z) =>
       `lines only · ${plural(n, "tone")} · detail ${d}${h ? ` · hue ${h} %` : ""}${v ? ` · vividness ${v} %` : ""}${f ? ` · flat areas ${f}` : ""}${z ? " · flat zones" : ""}`],
