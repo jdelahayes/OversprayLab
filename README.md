@@ -60,7 +60,7 @@ python -m venv .venv
 
 Everything runs locally; your images never leave your computer. The **Object** selection tool
 downloads its model once on first use (MobileSAM, ~45 MB, checked by SHA-256). The interface is in
-English or French (**⚙ Preferences**).
+English or French (**Preferences**, sliders icon under the project buttons).
 
 ## Quick start
 
@@ -202,7 +202,7 @@ difference (ΔE).
 | Two colours end up in one tone | Raise the hue weight or the saturation, add a stencil, or set manual thresholds. |
 | The subject does not stand out | Select it with the Object tool and tick *Silhouette*. |
 | Dull colours | Raise *Colour vividness*, or pick a palette with *Closest*. |
-| Computing is slow | Untick *Auto compute* and recompute with **Ctrl + Enter**. |
+| Computing is slow | Turn off *Auto compute* (lightning icon next to the full-screen button) and recompute with **Ctrl + Enter**. |
 
 Hover any setting for a tooltip explaining it.
 

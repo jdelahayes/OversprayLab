@@ -27,14 +27,21 @@
   header .brand { color: inherit; text-decoration: none; border-radius: 6px; }
   header .brand:focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; }
   header.busy h1 .lab { color: #fff; }
-  header .autocalc { display: inline-flex; align-items: center; gap: 5px; font-size: 12px; color: var(--muted); cursor: pointer; margin-left: 10px; }
+  /* computation controls, next to the full-screen button (reachable in full screen) */
+  .calcbar { display: inline-flex; align-items: center; gap: 4px; }
+  .tog { position: absolute; opacity: 0; width: 1px; height: 1px; margin: 0; pointer-events: none; }   /* checkbox shown as its label */
+  .togbtn { display: inline-flex; align-items: center; padding: 3px 7px; border: 1px solid var(--line); border-radius: 999px;
+            background: var(--soft); color: var(--muted); cursor: pointer; }
+  .togbtn .ico { display: block; }
+  .tog:checked + .togbtn { background: var(--accent); color: var(--accent-ink); border-color: var(--accent); }
+  .tog:focus-visible + .togbtn { outline: 2px solid var(--accent); outline-offset: 2px; }
   .calcbtn { font-size: 12px; padding: 4px 12px; border-radius: 999px; }
   .calcbtn:not(.dirty) { color: var(--muted); }
   .calcbtn.dirty { background: var(--accent); color: var(--accent-ink); border-color: var(--accent); font-weight: 600;
                    box-shadow: 0 0 0 0 rgba(249,115,22,.6); animation: calcpulse 1.6s ease-out infinite; }
   @keyframes calcpulse { 70% { box-shadow: 0 0 0 8px rgba(249,115,22,0); } 100% { box-shadow: 0 0 0 0 rgba(249,115,22,0); } }
   @media (prefers-reduced-motion: reduce) { .calcbtn.dirty { animation: none; } }
-  .brpause { display: inline-flex; align-items: center; padding: 3px 8px; border-radius: 999px; color: var(--muted); margin-left: -6px; }
+  .brpause { display: inline-flex; align-items: center; padding: 3px 8px; border-radius: 999px; color: var(--muted); }
   .brpause[aria-pressed="true"] { background: var(--accent); color: var(--accent-ink); border-color: var(--accent); }
   .brpause[aria-pressed="true"].held { background: #16a34a; color: #fff; border-color: #16a34a; }   /* paused, result complete */
   .brpause .ico { display: block; }
@@ -274,11 +281,7 @@
   .card img { width: 100%; display: block; background: #ddd; }
   .card .meta { padding: 8px 10px; font-size: 12px; color: var(--muted); }
   .lcolor { width: 22px; height: 22px; padding: 0; border: 1px solid var(--line); border-radius: 5px; cursor: pointer; flex: none; }
-  header .gear { margin-left: 8px; background: none; border: 1px solid transparent; font-size: 18px; line-height: 1;
-                 padding: 2px 6px; color: var(--muted); cursor: pointer; }
-  header .gear:hover, header .gear[aria-expanded="true"] { border-color: var(--line); color: var(--ink); background: var(--soft); }
-  header.busy .gear { color: #fff; }
-  .prefpop { position: fixed; z-index: 60; top: 48px; right: 12px; width: 300px; max-width: calc(100vw - 24px);
+  .prefpop { position: fixed; z-index: 60; width: 300px; max-width: calc(100vw - 24px);
              background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 8px 12px 10px;
              box-shadow: 0 10px 28px rgba(0,0,0,.4); font-size: 13px; }
   .prefpop h4 { margin: 4px 0 6px; font-size: 13px; }
@@ -780,12 +783,6 @@
   <a class="brand" href="https://github.com/jdelahayes/OversprayLab" target="_blank" rel="noopener"
      title="Le projet OversprayLab sur GitHub"><h1 data-noi18n><img src="/static/logo-mark.png" alt=""><span>Overspray<span class="lab">Lab</span></span></h1></a>
   <span class="status" id="status">Chargez une image pour commencer</span>
-  <label class="autocalc" title="Coché : chaque modification relance le calcul. Décoché : le calcul ne se fait qu'à la demande (bouton à côté, ou Ctrl + Entrée).">
-    <input type="checkbox" id="auto_calc" checked> Calcul auto</label>
-  <button type="button" id="calcBtn" class="calcbtn" hidden>À jour ✓</button>
-  <button type="button" id="brPause" class="brpause" aria-pressed="false" hidden aria-label="Ponts en pause"><svg class="ico" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M2 8h20"/><path d="M5 8v11"/><path d="M19 8v11"/><path d="M5 19c0-4.5 3-7 7-7s7 2.5 7 7"/></svg></button>
-  <button type="button" class="gear" id="prefsBtn" aria-haspopup="dialog" aria-expanded="false" aria-controls="prefPop"
-    title="Préférences (langue, chargement des images)" aria-label="Préférences">⚙</button>
 </header>
 <div id="fsBusy" aria-hidden="true">Calcul en cours…</div>
 <div class="prefpop" id="prefPop" role="dialog" aria-label="Préférences" hidden>
@@ -862,10 +859,11 @@
     <button type="button" class="ibtn" id="newProject" aria-label="Nouveau projet" title="Nouveau projet : tous les réglages par défaut, sans image ; il ne reste qu'à charger une image. Une version courante non enregistrée d'un projet peut d'abord être enregistrée"><svg class="ico" viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z"/><path d="M14 3v5h5"/><path d="M12 11v6"/><path d="M9 14h6"/></svg></button>
     <button type="button" class="ibtn" id="openProject" aria-label="Ouvrir un projet…" aria-haspopup="dialog" aria-expanded="false" aria-controls="projPop" title="Ouvrir un projet : un projet récent à sa dernière snapshot, un dossier de projet ou un zip exporté par OversprayLab"><svg class="ico" viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m6 14 1.5-2.9A2 2 0 0 1 9.24 10H20a2 2 0 0 1 1.94 2.5l-1.54 6a2 2 0 0 1-1.95 1.5H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h3.9a2 2 0 0 1 1.69.9l.81 1.2a2 2 0 0 0 1.67.9H18a2 2 0 0 1 2 2v2"/></svg></button>
     <button type="button" class="ibtn" id="allProjects" aria-label="Tous les projets…" aria-haspopup="dialog" aria-controls="projAll" title="Tous les projets : ceux du dossier des projets, avec recherche par nom (ouverture et suppression)"><svg class="ico" viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></svg></button>
+    <button type="button" class="ibtn" id="applySettings" aria-label="Appliquer les réglages d'un projet…" title="Appliquer les réglages d'un projet (support, matériau, couches, couleurs, cadrage…) à l'image chargée, qui garde ses masques : zip exporté par OversprayLab, ou fichier infos.json (celui d'un export ou d'une snapshot)"><svg class="ico" viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 22h14a2 2 0 0 0 2-2V7l-5-5H6a2 2 0 0 0-2 2v4"/><path d="M14 2v4a2 2 0 0 0 2 2h4"/><path d="M2 15h10"/><path d="m9 18 3-3-3-3"/></svg></button>
     <button type="button" class="ibtn primary" id="export" disabled aria-label="Exporter le projet" title="Exporter le projet : pochoirs SVG + projet rechargeable (image d'origine, masques, réglages et snapshots). Une version courante non enregistrée devient d'abord une snapshot."><svg class="ico" viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3v12"/><path d="m7 10 5 5 5-5"/><path d="M5 21h14"/></svg></button>
     <span class="sep" aria-hidden="true"></span>
     <button type="button" class="ibtn" id="resetAll" aria-label="Réglages par défaut" title="Réglages par défaut : rétablit tous les réglages par défaut ; l'image chargée et ses masques sont conservés, ainsi que les réglages enregistrés"><svg class="ico" viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/></svg></button>
-    <button type="button" class="ibtn" id="applySettings" aria-label="Appliquer les réglages d'un projet…" title="Appliquer les réglages d'un projet (support, matériau, couches, couleurs, cadrage…) à l'image chargée, qui garde ses masques : zip exporté par OversprayLab, ou fichier infos.json (celui d'un export ou d'une snapshot)"><svg class="ico" viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 4h-7"/><path d="M10 4H3"/><path d="M21 12h-9"/><path d="M8 12H3"/><path d="M21 20h-5"/><path d="M12 20H3"/><path d="M14 2v4"/><path d="M8 10v4"/><path d="M16 18v4"/></svg></button>
+    <button type="button" class="ibtn" id="prefsBtn" aria-haspopup="dialog" aria-expanded="false" aria-controls="prefPop" aria-label="Préférences" title="Préférences (langue, chargement des images)"><svg class="ico" viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 4h-7"/><path d="M10 4H3"/><path d="M21 12h-9"/><path d="M8 12H3"/><path d="M21 20h-5"/><path d="M12 20H3"/><path d="M14 2v4"/><path d="M8 10v4"/><path d="M16 18v4"/></svg></button>
     <input type="file" id="projectFile" accept=".zip,application/zip" hidden>
     <input type="file" id="settingsFile" accept=".zip,.json,application/zip,application/json" hidden>
   </div>
@@ -1672,6 +1670,12 @@
       <button type="button" class="ibtn" id="panelsBtn" aria-pressed="false" aria-label="Masquer les panneaux" title="Masquer les panneaux latéraux (Tab)"><svg class="ico" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M8 4v16"/><path d="M16 4v16"/></svg></button>
       <button type="button" class="ibtn" id="fullBtn" aria-pressed="false" aria-label="Plein écran" title="Vue en plein écran ; Échap pour sortir"><svg class="ico" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 9V4h5"/><path d="M20 9V4h-5"/><path d="M4 15v5h5"/><path d="M20 15v5h-5"/></svg></button>
     </span>
+    <span class="calcbar">
+      <input type="checkbox" id="auto_calc" class="tog" checked aria-label="Calcul auto">
+      <label for="auto_calc" class="togbtn" title="Calcul auto. Activé : chaque modification relance le calcul. Désactivé : le calcul ne se fait qu'à la demande (bouton « Recalculer », ou Ctrl + Entrée)."><svg class="ico" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M13 2 3 14h9l-1 8 10-12h-9l1-8z"/></svg></label>
+      <button type="button" id="calcBtn" class="calcbtn" hidden>À jour ✓</button>
+      <button type="button" id="brPause" class="brpause" aria-pressed="false" hidden aria-label="Ponts en pause"><svg class="ico" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M2 8h20"/><path d="M5 8v11"/><path d="M19 8v11"/><path d="M5 19c0-4.5 3-7 7-7s7 2.5 7 7"/></svg></button>
+    </span>
   </div>
   <div class="viewtools" id="viewtools" hidden>
     <button type="button" class="vt-opt vt-pre" id="optPre" aria-pressed="true" hidden
@@ -1819,7 +1823,6 @@
 <div class="layercol" aria-label="Pochoirs">
   <div class="layercol-head">
     <h2>Pochoirs</h2>
-    <span class="hint" id="layerCount"></span>
   </div>
   <div class="palbar">
     <div class="paldd" id="palDD">
@@ -4355,9 +4358,18 @@ function setupPrefs() {
   $("log_timings").checked = prefs().log_timings === true;
   $("log_timings").addEventListener("change", () => savePref("log_timings", $("log_timings").checked));
   setupTipsSwitch(); applyHelpPrefs();
-  const show = on => { pop.hidden = !on; btn.setAttribute("aria-expanded", String(on)); if (on) $("lang").focus(); };
+  const show = on => {
+    if (on) {                       // next to the button (left panel), kept inside the window
+      const r = btn.getBoundingClientRect();
+      pop.hidden = false;
+      const w = pop.offsetWidth, h = pop.offsetHeight;
+      Object.assign(pop.style, { left: Math.max(8, Math.min(r.right + 8, innerWidth - w - 8)) + "px",
+                                 top: Math.max(8, Math.min(r.top, innerHeight - h - 8)) + "px" });
+    }
+    pop.hidden = !on; btn.setAttribute("aria-expanded", String(on)); if (on) $("lang").focus();
+  };
   btn.onclick = e => { e.stopPropagation(); show(pop.hidden); };
-  document.addEventListener("pointerdown", e => { if (!pop.hidden && !pop.contains(e.target) && e.target !== btn) show(false); });
+  document.addEventListener("pointerdown", e => { if (!pop.hidden && !pop.contains(e.target) && !btn.contains(e.target)) show(false); });
   document.addEventListener("keydown", e => { if (e.key === "Escape" && !pop.hidden) { show(false); btn.focus(); } });
 }
 async function upload(file) {
@@ -6694,10 +6706,6 @@ function render() {
   renderFlatChips(); flatInfo();
   syncLineSens();
   renderFx();
-  const nOut = LAST.layers.filter(L => L.kind === "outline").length;
-  $("layerCount").textContent = LAST.layers.length && nOut === LAST.layers.length
-    ? `${nOut} pochoir${nOut > 1 ? "s" : ""} de traits · dans l'ordre`
-    : `${LAST.layers.length - nOut} couche${LAST.layers.length - nOut > 1 ? "s" : ""}${nOut ? " + contours" : ""} · dans l'ordre`;
   $("layers").querySelectorAll(".card").forEach(c => c.onclick = e => {
     if (e.target.closest(".eye")) { toggleLayer(+c.dataset.idx); return; }
     if (e.target.closest(".fxbadge")) { showFxLayer(+e.target.closest(".fxbadge").dataset.idx); return; }

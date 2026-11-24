@@ -39,7 +39,7 @@ try {
     "Au chargement d'une image, l'ajuster au mieux dans le pochoir": "When an image is loaded, fit it best in the stencil",
     "Même effet que l'icône « Ajuster au pochoir » (section « Position de l'image »). Ne s'applique pas à l'ouverture d'un projet.": "Same effect as the “Fit to stencil” icon (“Image position” section). Not applied when opening a project.",
     "Au chargement d'une image, la taille et la position sont choisies pour que l'image soit la plus grande possible dans le pochoir (support, feuille ou tapis selon la mise en page).": "When an image is loaded, its size and position are chosen so that it is as large as possible in the stencil (support, sheet or mat depending on the layout).",
-    "Coché : chaque modification relance le calcul. Décoché : le calcul ne se fait qu'à la demande (bouton à côté, ou Ctrl + Entrée).": "Checked: every change recomputes. Unchecked: compute only on demand (button next to it, or Ctrl + Enter).",
+    "Calcul auto. Activé : chaque modification relance le calcul. Désactivé : le calcul ne se fait qu'à la demande (bouton « Recalculer », ou Ctrl + Entrée).": "Auto compute. On: every change recomputes. Off: compute only on demand (“Recompute” button, or Ctrl + Enter).",
     "À jour ✓": "Up to date ✓",
     "Recalculer ●": "Recompute ●",
     "Recalculer ↻": "Recompute ↻",
@@ -1360,13 +1360,11 @@ try {
     [/^Couleurs mises à jour en ([\d.,]+) s \(découpe inchangée\)$/, (m, s) => `Colours updated in ${s} s (cut unchanged)`],
     [/^Pochoir (\d+)$/, (m, n) => `Stencil ${n}`],
     [/^(★ .+) \(perso\)$/, (m, n) => `${n} (custom)`],
-    [/^(\d+) pochoirs? de traits · dans l'ordre$/, (m, n) => `${plural(n, "line stencil")} · in order`],
     [/^Pochoir (\d+) \(traits\) : peinture (#[0-9a-f]{6})$/i, (m, n, c) => `Stencil ${n} (lines): paint ${c}`],
     [/^Pochoir (\d+) \(traits\) : couleur automatique$/, (m, n) => `Stencil ${n} (lines): automatic colour`],
     [/^Pochoir (\d+) \(traits\), (.+) : peinture (#[0-9a-f]{6})$/i, (m, n, w, c) => `Stencil ${n} (lines), ${SRC_EN(w)}: paint ${c}`],
     [/^Pochoir (\d+) \(traits\), (.+) : couleur automatique$/, (m, n, w) => `Stencil ${n} (lines), ${SRC_EN(w)}: automatic colour`],
     [/^Détails ([A-Z])$/, (m, g) => `Key details ${g}`],
-    [/^(\d+) couches?( \+ contours)? · dans l'ordre$/, (m, n, c) => `${plural(n, "layer")}${c ? " + outline" : ""} · in order`],
     [/^trait seul · (\d+) teintes? · détail (\d+)(?: · teinte (\d+) %)?(?: · vivacité (\d+) %)?(?: · aplats (\d+))?( · zones d'aplat)?$/, (m, n, d, h, v, f, z) =>
       `lines only · ${plural(n, "tone")} · detail ${d}${h ? ` · hue ${h} %` : ""}${v ? ` · vividness ${v} %` : ""}${f ? ` · flat areas ${f}` : ""}${z ? " · flat zones" : ""}`],
     [/^(trait seul · )?(\d+) pochoirs? · détail (\d+)(?: · teinte (\d+) %)?(?: · vivacité (\d+) %)?(?: · aplats (\d+))?( · zones d'aplat)?$/, (m, l, n, d, h, v, f, z) =>
