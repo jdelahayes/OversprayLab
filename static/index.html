@@ -216,6 +216,13 @@
   .vt-size input { width: 120px; accent-color: var(--accent); }
   .card .eye { margin-left: auto; padding: 2px 5px; line-height: 0; border-radius: 999px; }
   .card .eye[aria-pressed="false"] { color: var(--muted); }
+  .card .linfo { margin-left: auto; padding: 2px 5px; line-height: 0; border-radius: 999px; color: var(--muted); cursor: help; }
+  .card .linfo:hover, .card .linfo:focus-visible { color: var(--ink); }
+  .card .linfo + .eye { margin-left: 0; }
+  #layerTip { position: fixed; z-index: 70; max-width: 320px; padding: 7px 10px; font-size: 12px; line-height: 1.5;
+              color: var(--ink); background: var(--panel); border: 1px solid var(--line); border-radius: 8px;
+              box-shadow: 0 4px 14px rgba(0,0,0,.18); pointer-events: none; }
+  #layerTip[hidden] { display: none; }
   .card .lcreset { padding: 2px 4px; line-height: 0; }
   .card .lcreset .ico { width: 13px; height: 13px; }
   /* icon buttons (stencil column) */
@@ -498,6 +505,7 @@
   .paledit #peMsg.err { color: #dc2626; }
   .lcreset { font-size: 11px; padding: 0 5px; border-radius: 4px; line-height: 18px; }
   .card .meta .t { display: flex; gap: 8px; align-items: center; color: var(--ink); font-weight: 600; font-size: 13px; margin-bottom: 3px; }
+  .card .meta .t:last-child { margin-bottom: 0; }
   .legend { display: flex; gap: 14px; flex-wrap: wrap; font-size: 12px; color: var(--muted); margin-top: 8px; }
   .lgbtn { font: inherit; font-size: 12px; color: inherit; background: none; border: 1px solid var(--line);
            border-radius: 999px; padding: 1px 8px 1px 5px; cursor: pointer; }
@@ -6388,7 +6396,22 @@ function toggleLayer(i) {
 // Icons of the stencil cards (stroke, currentColor)
 const ICO_FLAT = `<svg class="ico" viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 13 11 6l7 7-7 7z" fill="currentColor" fill-opacity=".35"/><path d="M8 3l3 3"/><path d="M19.5 15.5s1.5 2 1.5 3a1.5 1.5 0 0 1-3 0c0-1 1.5-3 1.5-3z" fill="currentColor"/></svg>`;
 const ICO_RESET = `<svg class="ico" viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 12a9 9 0 1 0 3-6.7L3 8"/><path d="M3 3v5h5"/></svg>`;
-const eyeIcon = on => `<svg class="ico" viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${on ? `<path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7-10-7-10-7z"/><circle cx="12" cy="12" r="3"/>` : `<path d="M3 3l18 18"/><path d="M10.6 5.1A10.4 10.4 0 0 1 12 5c6.5 0 10 7 10 7a17 17 0 0 1-3.2 4.2"/><path d="M6.6 6.6C3.9 8.4 2 12 2 12s3.5 7 10 7c1.8 0 3.4-.5 4.8-1.3"/><path d="M9.9 9.9a3 3 0 0 0 4.2 4.2"/>`}</svg>`;
+const ICO_INFO = `<svg class="ico" viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="9.5"/><path d="M12 11v6"/><circle cx="12" cy="7.5" r=".6" fill="currentColor"/></svg>`;
+// Layer details (paths, nodes, islands…): hover / focus tooltip of the "i" icon of a card. The text is
+// kept hidden in the card (so that i18n translates it) and copied into a fixed element, which the
+// card's overflow cannot clip.
+function showLayerInfo(btn) {
+  let tip = $("layerTip");
+  if (!tip) { tip = document.createElement("div"); tip.id = "layerTip"; tip.setAttribute("role", "tooltip"); document.body.appendChild(tip); }
+  tip.innerHTML = btn.querySelector(".linfo-body").innerHTML;
+  tip.hidden = false;
+  const r = btn.getBoundingClientRect(), w = tip.offsetWidth, h = tip.offsetHeight;
+  const left = Math.max(8, Math.min(r.right - w, innerWidth - w - 8));
+  const top = r.bottom + 6 + h <= innerHeight - 8 ? r.bottom + 6 : Math.max(8, r.top - 6 - h);
+  tip.style.left = left + "px"; tip.style.top = top + "px";
+}
+function hideLayerInfo() { const tip = $("layerTip"); if (tip) tip.hidden = true; }
+const eyeIcon = on =>`<svg class="ico" viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${on ? `<path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7-10-7-10-7z"/><circle cx="12" cy="12" r="3"/>` : `<path d="M3 3l18 18"/><path d="M10.6 5.1A10.4 10.4 0 0 1 12 5c6.5 0 10 7 10 7a17 17 0 0 1-3.2 4.2"/><path d="M6.6 6.6C3.9 8.4 2 12 2 12s3.5 7 10 7c1.8 0 3.4-.5 4.8-1.3"/><path d="M9.9 9.9a3 3 0 0 0 4.2 4.2"/>`}</svg>`;
 function refreshPreviewOnly() {
   renderToolbar();
   document.querySelectorAll("#layers .card").forEach(c => {
@@ -6486,27 +6509,33 @@ function render() {
 
   $("layers").innerHTML = LAST.layers.map((L, i) => `
     <div class="card ${SEL === i ? "sel" : ""} ${HIDDEN.has(L.index) ? "hidden-layer" : ""}" data-i="${i}" data-idx="${L.index}">
-      ${layerStack(L)}
       <div class="meta">
         <div class="t">${L.kind === "outline"
           ? `<button type="button" class="lcolor" data-idx="${L.index}" style="background:${L.color}" aria-haspopup="dialog" title="Couleur du trait des contours${groupAuto(L.group || "A") ? " (automatique)" : " (choisie)"} — cliquer pour changer"></button>`
-          : `<button type="button" class="lcolor" data-idx="${L.index}" style="background:${L.color}" aria-haspopup="dialog" title="Couleur de la peinture de la couche ${L.index}${layerColors()[L.index] ? " (choisie)" : " (calculée)"} — cliquer pour changer"></button>`}Couche ${L.index}${L.kind === "outline" ? ` — contours${L.group ? " " + L.group : ""} ✎` : ""} — ${L.color}${customColor(L)
+          : `<button type="button" class="lcolor" data-idx="${L.index}" style="background:${L.color}" aria-haspopup="dialog" title="Couleur de la peinture de la couche ${L.index}${layerColors()[L.index] ? " (choisie)" : " (calculée)"} — cliquer pour changer"></button>`}${L.index}${L.kind === "outline" ? ` (contours${L.group ? " " + L.group : ""}) ✎` : ""}${customColor(L)
           ? ` <button type="button" class="lcreset" data-idx="${L.index}" title="Revenir à la teinte calculée" aria-label="Revenir à la teinte calculée">${ICO_RESET}</button>` : ""}
           ${fxBadge(L)}
           ${L.kind !== "outline" && L.tone != null ? `<button type="button" class="lflat${FLAT_COVS["t" + L.tone] > 0 ? " on" : ""}" data-tone="${L.tone}" title="Peindre un aplat dans cette couche : les zones peintes (ou objets sélectionnés) prennent la couleur de cette couche, les détails francs restent (onglet Masques, masque Aplats)" aria-label="Peindre un aplat dans cette couche">${ICO_FLAT}</button>` : ""}
+          <button type="button" class="linfo" aria-label="Informations sur la couche">${ICO_INFO}<span class="linfo-body" hidden>
+            ${L.paths} tracés · ${L.nodes} nœuds · ${L.islands} îlot${L.islands > 1 ? "s" : ""} · ${L.bridges} ponts${L.merged ? ` · ${L.merged} fusion${L.merged > 1 ? "s" : ""}` : ""}<br>
+            ${L.struct_bridges ? `dont ${L.struct_bridges} pont(s) structurel(s)<br>` : ""}
+            ${L.manual_bridges ? `dont ${L.manual_bridges} pont(s) manuel(s)<br>` : ""}
+            ${(n => n ? `${n} pont(s) automatique(s) supprimé(s) à la main<br>` : "")(manualBlocked(L))}
+            Coupe : ${L.cut_length_m} m · détails supprimés : ${L.lost_pct} %</span></button>
           <button type="button" class="eye" aria-pressed="${!HIDDEN.has(L.index)}" title="Afficher / masquer dans la prévisualisation" aria-label="Afficher / masquer dans la prévisualisation">${eyeIcon(!HIDDEN.has(L.index))}</button></div>
-        ${L.paths} tracés · ${L.nodes} nœuds · ${L.islands} îlot${L.islands > 1 ? "s" : ""} · ${L.bridges} ponts${L.merged ? ` · ${L.merged} fusion${L.merged > 1 ? "s" : ""}` : ""}<br>
         ${LAST.bridges_paused ? `<span style="color:#d97706">Ponts automatiques en pause</span><br>` : ""}
         ${L.short_islands ? `<span style="color:#d97706">⚠ ${L.short_islands} îlot(s) sans place pour ${val("min_bridges")} ponts</span><br>` : ""}
-        ${L.struct_bridges ? `dont ${L.struct_bridges} pont(s) structurel(s)<br>` : ""}
-        ${L.manual_bridges ? `dont ${L.manual_bridges} pont(s) manuel(s)<br>` : ""}
-        ${(n => n ? `${n} pont(s) automatique(s) supprimé(s) à la main<br>` : "")(manualBlocked(L))}
         ${(n => n ? `<span style="color:#d97706">⚠ ${n} pont(s) manuel(s) ignoré(s) : extrémité hors de la matière ou de la feuille</span><br>` : "")(manualIgnored(L))}
-        ${L.weak_spots ? `<span class="weaklink" title="Afficher ces parties sur la couche (cerclées en rouge sur la carte du maintien)">⚠ ${L.weak_spots} partie(s) tenue(s) d'un seul côté, sans place pour un pont</span><br>` : ""}
-        Coupe : ${L.cut_length_m} m · détails supprimés : ${L.lost_pct} %
+        ${L.weak_spots ? `<span class="weaklink" title="Parties tenues d'un seul côté, sans place pour un pont. Cliquer pour les afficher sur la couche (cerclées en rouge sur la carte du maintien).">⚠ ${L.weak_spots} partie(s) fragile(s)</span><br>` : ""}
       </div>
+      ${layerStack(L)}
     </div>`).join("");
   $("layers").querySelectorAll(".lcolor").forEach(b => b.onclick = () => openColorPop(b));
+  hideLayerInfo();                                                 // its card was just replaced
+  $("layers").querySelectorAll(".linfo").forEach(b => {
+    b.onmouseenter = b.onfocus = () => showLayerInfo(b);
+    b.onmouseleave = b.onblur = hideLayerInfo;
+  });
   renderFlatChips(); flatInfo();
   syncLineSens();
   renderFx();
@@ -6519,6 +6548,7 @@ function render() {
     if (e.target.closest(".fxbadge")) { showFxLayer(+e.target.closest(".fxbadge").dataset.idx); return; }
     if (e.target.closest(".lflat")) { flatOpen("t" + e.target.closest(".lflat").dataset.tone); return; }
     if (e.target.closest(".lcolor")) return;                       // colour picker: no selection
+    if (e.target.closest(".linfo")) return;                        // details tooltip: no selection
     if (e.target.closest(".weaklink")) {                          // weak parts: the layer with its support map
       SEL = +c.dataset.i; BR.sel = null; BR.autoSeg = null;
       if ($("lgSupport").getAttribute("aria-pressed") !== "true") $("lgSupport").click();   // shown (remembered)
