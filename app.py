@@ -615,6 +615,7 @@ def log_timings(sess, data, rec, out, overlap) -> None:
         "bridges_paused": bool(j["bridges_paused"]) if "bridges_paused" in j
         else bool(data.get("pause_bridges")) and params.get("bridges") is not False,
         "recolored": bool(j.get("recolored")),
+        "rebridged": bool(j.get("rebridged")),
         # pause asked in the browser, and what made this computation keep the bridges anyway
         "pause_asked": data.get("pause_asked") is True,
         "bridges_kept_by": [str(v)[:40] for v in (data.get("bridges_kept_by") or [])][:5]
@@ -691,12 +692,25 @@ def compute(sess, data):
             (sess["prep"], sess.get("mask"), sess.get("silmask"), sess.get("fg"),
              *[m for _, m in sorted((sess.get("zmasks") or {}).items())]))
     old = sess.get("geom")
-    recolored = (sess.get("result") is not None and old is not None and pl.colors_only(p)
-                 and old[0] == geom[0] and all(a is b for a, b in zip(old[1], geom[1])))
+    same_masks = (old is not None and len(old[1]) == len(geom[1]) and all(a is b for a, b in zip(old[1], geom[1])))
+    recolored = (sess.get("result") is not None and same_masks and pl.colors_only(p) and old[0] == geom[0])
+    # Only the manual bridges changed: only the layers whose manual bridges changed are computed
+    # again (pl.rebridge), from what the build of the current result kept (sess["rebridge"])
+    no_manual = lambda g: {k: v for k, v in g.items() if k != "manual_bridges"}
+    rb = sess.get("rebridge")
+    rebridged = None
     try:
         src_map = (lay.src_rect, (sess["img"].shape[1], sess["img"].shape[0]))
-        res = (pl.recolor(sess["result"], p) if recolored
-               else pl.build(sess["prep"], p, zone_regions=regions, src_map=src_map))
+        if (not recolored and same_masks and rb is not None and rb[0] is sess.get("result")
+                and no_manual(old[0]) == no_manual(geom[0])):
+            rebridged = pl.rebridge(sess["result"], p, rb[1])
+        if rebridged is not None:
+            res, keep = rebridged
+        elif recolored:
+            res, keep = pl.recolor(sess["result"], p), None
+        else:
+            keep = {}
+            res = pl.build(sess["prep"], p, zone_regions=regions, src_map=src_map, keep=keep)
     except teed.TeedError as e:          # learned edges: model missing or unreadable
         return jsonify(error=str(e)), 503
     if p.stencil_style == "line" and not res.layers:
@@ -722,7 +736,11 @@ def compute(sess, data):
 
     # Images of the previous answer reused when only paints changed: overlays and blurred masks
     # do not depend on the colour, a layer view only on its own colour (kept: entries used now)
+    # (manual bridges only: those of the layers kept as they were)
     old_cache = sess.get("png_cache", {}) if recolored else {}
+    if rebridged is not None:
+        kept = {L.index for L, O in zip(res.layers, sess["result"].layers) if L is O}
+        old_cache = {k: v for k, v in sess.get("png_cache", {}).items() if k[0] in kept}
     # support maps: made on demand (/api/support_map), they depend on the cut only
     cache = {k: v for k, v in old_cache.items() if k[1] == "support"}
 
@@ -836,6 +854,7 @@ def compute(sess, data):
         lines_added=res.lines_added,
         zone_lines={k: list(v) for k, v in res.zone_lines.items()},   # whole lines: kept, detected, steps
         recolored=recolored,     # colours only: the cut of the previous computation was kept
+        rebridged=rebridged is not None,   # manual bridges only: the other layers were kept
         bridges_paused=paused,   # computed without the automatic bridges (see compute)
         seconds=round(time.perf_counter() - t0, 2),
     )
@@ -843,6 +862,7 @@ def compute(sess, data):
     # stored only now: a cancelled computation leaves the previous result whole
     sess["geom"] = geom
     sess["result"] = res
+    sess["rebridge"] = (res, keep) if keep else None   # not saved in the snapshots (closures)
     sess["paused_result"] = res if paused else None
     sess["png_cache"] = cache
     sess["material"] = data.get("material")
@@ -1511,7 +1531,7 @@ def running_here(port: int) -> bool:
 # Functions timed when the preference "Log computation times" is on (see overspraylab.timings)
 timings.instrument(vars(pl), (
     "prepare", "preprocess_image", "flatten_auto", "majority_filter", "tone_histogram", "resolve_layout",
-    "build", "recolor", "clean_mask", "exclusive_layers", "trim_taken", "fill_gaps", "outline_entries",
+    "build", "recolor", "rebridge", "clean_mask", "exclusive_layers", "trim_taken", "fill_gaps", "outline_entries",
     "lines_into_layers", "merge_line_islands", "subject_silhouette", "detect_key_details", "_line_candidates",
     "_compute_candidates", "_image_grad", "_line_response", "_along_contours", "_crest", "_fdog_strength",
     "run_layer_jobs", "layer_job", "apply_manual_bridges", "merge_zones", "hold_material", "add_bridges",

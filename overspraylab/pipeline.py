@@ -2932,11 +2932,13 @@ def run_layer_jobs(jobs: list) -> list:
 
 
 def build(prep: Prepared, p: Params, outline_region: np.ndarray | None = None,
-          zone_regions: dict | None = None, src_map: tuple | None = None) -> Result:
+          zone_regions: dict | None = None, src_map: tuple | None = None, keep: dict | None = None) -> Result:
     """`zone_regions`: {zone id: boolean mask (image area) limiting the key-detail search of the
     zone, or None = whole image}; without it, `outline_region` is the first zone's.
     `src_map`: ((x0, y0, x1, y1) part of the source image computed, (width, height) of the
-    source), to place the manual bridges (None: manual bridges ignored)."""
+    source), to place the manual bridges (None: manual bridges ignored).
+    `keep`: filled with what `rebridge` needs to redo only the layers whose manual bridges change
+    (left empty for the line style)."""
     labels = prep.labels
     H, W = labels.shape
     ppm = p.px_per_mm
@@ -3107,10 +3109,10 @@ def build(prep: Prepared, p: Params, outline_region: np.ndarray | None = None,
         return (place(cleaned), hidden, p, float(np.clip(de / 40.0, 0.15, 1.0)), protect,
                 manual.segments(by_layer.get(li + 1, [])), others)
 
-    def color_layer(li, ci, result):
+    def color_layer(li, ci, result, mb=manual):
         (opening, (bridges, n_isl, n_short, n_struct, n_weak), paths, merged, n_merged,
          (m_drawn, m_states), cut) = result
-        manual.record(li + 1, m_states)
+        mb.record(li + 1, m_states)
         target, cleaned = targets[li], cleaned_all[li]
         return Layer(index=li + 1, color=colors[li], target=target,
                      opening=opening, lost=cv2.bitwise_xor(pre_fx[li] if li + 1 in fx else cleaned, target),
@@ -3138,11 +3140,46 @@ def build(prep: Prepared, p: Params, outline_region: np.ndarray | None = None,
     out_masks = []                         # outline stencils done (image area), for their effects
     excluded = None                        # outline stencils excluded from the colour layers (image area)
     pending = []                           # (index in layers, bridges + paths of an outline stencil)
+    outline_info = []                      # what rebridge needs to redo an outline stencil
+
+    def outline_tail(mb, o, mine):
+        """Manual bridges and merges of the outline stencil `o` (dict made below), from its opening
+        before them: (what it paints if exclusive, function making its bridges and paths, which
+        returns (Layer, what it paints once its bridges are retouched if exclusive))."""
+        opening = o["base"].copy()
+        n_out, exclusive = o["n_out"], o["exclusive"]
+        s = opening.copy()
+        m_drawn, forbid = mb.apply(opening, n_out, mine)
+        cut0 = _cut_by(s, opening)
+        merged, n_merged = merge_line_islands(opening, p, o["color"], support)
+        s = opening.copy()
+        # what the stencil paints once its bridges are retouched (its merges included), taken
+        # before they are cut: checked once they are (_outline_paints)
+        part = _outline_paints(cut0, s, s, merged)[Y0:Y0 + H, X0:X0 + W] if exclusive else None
+
+        def finish():
+            pre = s if needs_pre(mb.segments(mine)) else None
+            held = hold_material(opening, p, None, forbid, m_drawn)
+            held, l_drawn = mb.late(opening, pre, n_out, mine, held)
+            cut = _bridge_cut(cut0 | _cut_by(s, opening), opening, merged)
+            bridges, n_isl, n_short, n_struct, n_weak = held
+            drawn = m_drawn + l_drawn
+            paints = _outline_paints(cut0, s, opening, merged)[Y0:Y0 + H, X0:X0 + W] if exclusive else None
+            return Layer(index=n_out, color=o["color"], target=o["target"], opening=opening,
+                         lost=o["lost"], bridges=drawn + bridges, paths=vectorize(opening, p),
+                         islands=n_isl, short_islands=n_short, struct_bridges=n_struct, weak_spots=len(n_weak), weak_points=_weak_mm(n_weak, p),
+                         merged=merged, n_merged=n_merged,
+                         kind="outline", group=o["g"], manual_bridges=len(drawn), bridge_cut=cut), paints
+        return part, finish
+
     sim = sim_pre = None
     for g in order:
         check_cancel()
         if sim is None:
-            sim = res.detect_sim = image_sim(res, keep=True)    # the outline stencils come on top
+            # the outline stencils come on top; searched on the render of the colour layers once
+            # their bridges are retouched (opening_without_bridges): a bridge changes the lines only
+            # through the merges it changes (see rebridge)
+            sim = res.detect_sim = image_sim(_retouched(res), keep=True)
             if need_pre:           # same render (lines added to the layers included), effects left out
                 pre = [base_masks[li] | strokes[li] if li in strokes else base_masks[li] for li in range(len(base_masks))]
                 sim_pre = res.detect_sim_pre = render(pre)
@@ -3168,41 +3205,19 @@ def build(prep: Prepared, p: Params, outline_region: np.ndarray | None = None,
                 cleaned = fxmod.apply_alone(cleaned, fx_all[n_out], p, prep.resized, prep.off_px,
                                             cleaned_all + out_masks)
             out_masks.append(cleaned)
-            opening = place(cleaned)
+            o = dict(pos=len(layers), n_out=n_out, g=g, base=place(cleaned), color=color, target=target,
+                     lost=lost, exclusive=bool(excl and color_ids and group_exclusive(p, groups[g])))
             mine = manual.assign("outline", [(n_out, g)]).get(n_out, [])
-            s = opening.copy()
-            m_drawn, forbid = manual.apply(opening, n_out, mine)
-            cut0 = _cut_by(s, opening)
-            merged, n_merged = merge_line_islands(opening, p, color, support)
-            s = opening.copy()
-            exclusive = bool(excl and color_ids and group_exclusive(p, groups[g]))
-            if exclusive:
-                # what the stencil paints once its bridges are retouched (its merges included),
-                # taken before they are cut: checked once they are (_outline_paints)
-                part = _outline_paints(cut0, s, s, merged)[Y0:Y0 + H, X0:X0 + W]
+            o["segs"] = manual.segments(mine)
+            part, finish = outline_tail(manual, o, mine)
+            if part is not None:
                 excluded = part if excluded is None else (excluded | part)
-
-            def finish(opening=opening, s=s, cut0=cut0, mine=mine, m_drawn=m_drawn, forbid=forbid,
-                       merged=merged, n_merged=n_merged, n_out=n_out, color=color, target=target,
-                       lost=lost, g=g, exclusive=exclusive):
-                """Bridges and paths of the outline stencil: (Layer, what it paints if exclusive)."""
-                pre = s if needs_pre(manual.segments(mine)) else None
-                held = hold_material(opening, p, None, forbid, m_drawn)
-                held, l_drawn = manual.late(opening, pre, n_out, mine, held)
-                cut = _bridge_cut(cut0 | _cut_by(s, opening), opening, merged)
-                bridges, n_isl, n_short, n_struct, n_weak = held
-                drawn = m_drawn + l_drawn
-                paints = (_outline_paints(cut0, s, opening, merged)[Y0:Y0 + H, X0:X0 + W]
-                          if exclusive else None)
-                return Layer(index=n_out, color=color, target=target, opening=opening,
-                             lost=lost, bridges=drawn + bridges, paths=vectorize(opening, p),
-                             islands=n_isl, short_islands=n_short, struct_bridges=n_struct, weak_spots=len(n_weak), weak_points=_weak_mm(n_weak, p),
-                             merged=merged, n_merged=n_merged,
-                             kind="outline", group=g, manual_bridges=len(drawn), bridge_cut=cut), paints
+            outline_info.append(o)
             pending.append((len(layers), finish))
             layers.append(None)            # filled below
 
     saved = (list(cleaned_all), list(targets), list(pre_fx))
+    finals, last_redo = {}, []             # jobs of the second computation (not run, kept as is), redone layers
 
     def second_jobs(excluded):
         """(colour layers computed again, their jobs). Outline stencils `excluded` (image area): only
@@ -3222,8 +3237,11 @@ def build(prep: Prepared, p: Params, outline_region: np.ndarray | None = None,
                 targets[li] = np.where(excluded, np.uint8(0), targets[li])
                 pre_fx[li] = np.where(excluded, np.uint8(0), pre_fx[li])
         todo = list(range(len(color_ids))) if p_first is not None else redo
-        return todo, [layer_job_of(li, color_ids[li], ex_sheet) if li in redo
-                      else (jobs1[li][0].copy(), *jobs1[li][1:]) for li in todo]
+        finals.clear()
+        last_redo[:] = redo
+        for li in todo:                   # layer_job changes the opening of its job: run on a copy
+            finals[li] = layer_job_of(li, color_ids[li], ex_sheet) if li in redo else jobs1[li]
+        return todo, [(finals[li][0].copy(), *finals[li][1:]) for li in todo]
 
     def outlines():
         return [(i, *fin()) for i, fin in pending]
@@ -3251,13 +3269,121 @@ def build(prep: Prepared, p: Params, outline_region: np.ndarray | None = None,
         done = outlines()
         todo, jobs = second_jobs(exact(done))
         again = run_layer_jobs(jobs) if jobs else []
+    first_layers = layers[:len(color_ids)]      # the ones the outline stencils were searched against
     for i, L, _ in done:
         layers[i] = L
     for li, r in zip(todo, again):
         layers[li] = color_layer(li, color_ids[li], r)
     res.zone_lines = _zone_lines(entries)       # counted once every zone has been searched
     res.manual = manual.report()                # with the outline stencils
+    if keep is not None and src_map is not None:
+        for o, (_, _, paints) in zip(outline_info, done):
+            o["paints"] = paints
+        keep.update(
+            manual_args=(src_map, (X0, Y0), (W, H)),
+            refs=[(li + 1, prep.palette[ci]) for li, ci in enumerate(color_ids)], color_ids=list(color_ids),
+            # job of the last computation of each colour layer, and of the first one (two passes)
+            jobs={li: finals.get(li, jobs1[li]) for li in range(len(color_ids))},
+            first={li: (jobs1[li], _retouched_opening(first_layers[li].opening, first_layers[li].bridge_cut))
+                   for li in finals},
+            first_no_bridges=p_first is not None,
+            searched=bool(order), redo=set(last_redo), excluded=exact(done), cleaned=saved[0],
+            outlines=outline_info, tail=outline_tail, color_layer=color_layer,
+            states=_states_by_layer(manual))
     return res
+
+
+def _retouched_opening(opening: np.ndarray, cut) -> np.ndarray:
+    """Opening once the bridges are retouched (painted over): the pixels they cut (`cut`, see
+    Layer.bridge_cut, None = none) put back."""
+    return opening if cut is None else np.where(cut, np.uint8(255), opening)
+
+
+def _retouched(res: Result) -> Result:
+    """`res` (just built) with the openings of its layers as after their bridges are retouched."""
+    return replace(res, layers=[replace(L, opening=_retouched_opening(L.opening, L.bridge_cut)) for L in res.layers])
+
+
+def _states_by_layer(mb: "ManualBridges") -> dict:
+    """{layer index: [(id, *state)]} of the manual bridges recorded in `mb`."""
+    out: dict = {}
+    for bid, st in mb.states.items():
+        out.setdefault(mb.layer_of[bid], []).append((bid, *st))
+    return out
+
+
+def rebridge(old: Result, p: Params, ctx: dict) -> tuple | None:
+    """`build` when only the manual bridges changed since `old`, made with `ctx` (its `keep`): only
+    the layers whose manual bridges changed are computed again. None when the change reaches
+    further: a colour layer painting something else once its bridges are retouched (a manual
+    bridge changes its merges) while the key-detail lines were searched against it, or an
+    exclusive outline stencil painting something else; build is needed then.
+    Returns (result, ctx of that result)."""
+    mb = ManualBridges(p, *ctx["manual_args"])
+    by_layer = mb.assign("color", ctx["refs"])
+    jobs, first = dict(ctx["jobs"]), dict(ctx["first"])
+    changed = []
+    for li, j in ctx["jobs"].items():
+        segs = mb.segments(by_layer.get(li + 1, []))
+        if segs != j[5]:
+            changed.append(li)
+            jobs[li] = (j[0], j[1], p, j[3], j[4], segs, j[6])
+            if li in first:
+                j1, paint = first[li]
+                first[li] = ((j1[0], j1[1], p, j1[3], j1[4], segs, j1[6]), paint)
+    outlines, redo_out = [], []
+    for o in ctx["outlines"]:
+        mine = mb.assign("outline", [(o["n_out"], o["g"])]).get(o["n_out"], [])
+        segs = mb.segments(mine)
+        if segs != o["segs"]:
+            o = dict(o, segs=segs)
+            redo_out.append((o, mine))
+        outlines.append(o)
+    # colour layers: their last computation, and the first one where the lines were searched on it
+    p1 = replace(p, bridges=False) if ctx["first_no_bridges"] else p
+    again1 = [li for li in changed if li in first]
+    run = ([(jobs[li][0].copy(), *jobs[li][1:]) for li in changed]
+           + [(first[li][0][0].copy(), first[li][0][1], p1, *first[li][0][3:]) for li in again1])
+    results = run_layer_jobs(run) if run else []
+    fin, res1 = results[:len(changed)], dict(zip(again1, results[len(changed):]))
+    if ctx["searched"]:
+        X0, Y0 = ctx["manual_args"][1]
+        W, H = ctx["manual_args"][2]
+        ex = ctx["excluded"]
+        for li, r in zip(changed, fin):
+            if li in res1:
+                r, before = res1[li], first[li][1]
+            else:
+                before = _retouched_opening(old.layers[li].opening, old.layers[li].bridge_cut)
+            if not np.array_equal(_retouched_opening(r[0], r[6]), before):
+                return None
+            if li in res1 and ex is not None:   # still computed again without the outline lines?
+                redo = bool(((r[0][Y0:Y0 + H, X0:X0 + W] > 0) & ex).any() or (ctx["cleaned"][li][ex] > 0).any())
+                if redo != (li in ctx["redo"]):
+                    return None
+    # outline stencils: their manual bridges, merges, bridges and paths
+    done = run_threads([(lambda o=o, mine=mine: ctx["tail"](mb, o, mine)[1]()) for o, mine in redo_out])
+    for (o, _), (_, paints) in zip(redo_out, done):
+        o["paints"] = paints
+    if any(o["exclusive"] for o, _ in redo_out):
+        ex = None
+        for o in outlines:
+            if o["paints"] is not None:
+                ex = o["paints"] if ex is None else (ex | o["paints"])
+        if (ex is None) != (ctx["excluded"] is None) or (ex is not None and not np.array_equal(ex, ctx["excluded"])):
+            return None
+    layers = list(old.layers)
+    for li, r in zip(changed, fin):
+        layers[li] = ctx["color_layer"](li, ctx["color_ids"][li], r, mb)
+    for (o, _), (L, _) in zip(redo_out, done):
+        layers[o["pos"]] = L
+    # states of the bridges of the layers kept as they were
+    redone = {li + 1 for li in changed} | {o["n_out"] for o, _ in redo_out}
+    for index, states in ctx["states"].items():
+        if index not in redone:
+            mb.record(index, states)
+    res = replace(old, params=p, layers=layers, manual=mb.report())
+    return res, dict(ctx, jobs=jobs, first=first, outlines=outlines, states=_states_by_layer(mb))
 
 
 # --------------------------------------------------------------------------

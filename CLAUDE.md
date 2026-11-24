@@ -73,6 +73,13 @@ Hard-won constraints, verified by the author in Silhouette Studio – do not "cl
   choice: the lines are searched on the render once the bridges are retouched), the second time
   with them, while the outline stencils get their own bridges in parallel (checked afterwards, the
   colour layers are computed again if those bridges change what the stencils paint).
+- The outline stencils are always searched on the render of the colour layers with their bridges
+  retouched (`_retouched`). So a manual bridge changes them only through the merges it changes, which
+  lets `pl.rebridge` (called by `compute` when only `manual_bridges` changed) redo just the layers
+  whose manual bridges changed, from what `build(keep=...)` kept (`sess["rebridge"]`, never saved in a
+  snapshot); it returns None (full build) when a recomputed layer paints something else once
+  retouched, or an exclusive outline stencil does. A new build step that depends on the bridges must
+  be taken into account there.
 - TEED (`teed`, `overspraylab/teed.py`): strength = network logits (not the sigmoid, which
   saturates at 1 on every line and leaves the sensitivity without effect); lines = crest of the
   smoothed logits (a skeleton gave the same lines 5x slower). Uses `outline_follow_mm`
