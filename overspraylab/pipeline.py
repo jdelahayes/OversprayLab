@@ -153,6 +153,7 @@ class Params:
     outline_subject_de: float = 20.0        # ... i.e. colour difference across the edge (ΔE) below this
     outline_subject_gap_every_mm: float = 0.0   # silhouette interrupted every … mm (0 = continuous)
     outline_subject_gap_mm: float = 1.5     # length of an interruption (material left: a built-in bridge)
+    outline_subject_gap_jitter: float = 0.0     # % of random variation of the distance between interruptions
     outline_subject_pos: str = "center"     # stroke against the outline: center | outside | inside
     outline_subject_width_mm: float = 0.0   # stroke width (0 = the width of the key-detail lines)
     outline_auto_color: bool = True     # auto colour = tone with the most contrast against the support
@@ -167,6 +168,7 @@ class Params:
     line_zones_min_length_mm: float = 4.0   # shorter limits are left out
     line_zones_gap_every_mm: float = 0.0    # limits interrupted every … mm (0 = continuous)
     line_zones_gap_mm: float = 1.5      # length of an interruption (material left: a built-in bridge)
+    line_zones_gap_jitter: float = 0.0  # % of random variation of the distance between interruptions
     line_zones_width_max_mm: float = 0.0    # > width: the width grows with the contrast across the limit up to this (0 = constant)
     line_zones_min_de: float = 0.0      # limits between tones closer than this (ΔE) are not drawn
     line_zones_min_area_mm2: float = 0.0    # smaller zones are absorbed by their neighbours before tracing
@@ -279,12 +281,14 @@ class Params:
         if 0 < p.outline_subject_gap_every_mm < 5:
             p.outline_subject_gap_every_mm = 5.0
         p.outline_subject_gap_mm = float(np.clip(p.outline_subject_gap_mm, 0.3, 20))
+        p.outline_subject_gap_jitter = float(np.clip(p.outline_subject_gap_jitter, 0, GAP_JITTER_MAX))
         p.line_zones_width_mm = float(np.clip(p.line_zones_width_mm, 0.2, 10))
         p.line_zones_min_length_mm = float(np.clip(p.line_zones_min_length_mm, 0, 200))
         p.line_zones_gap_every_mm = float(np.clip(p.line_zones_gap_every_mm, 0, 1000))
         if 0 < p.line_zones_gap_every_mm < 5:
             p.line_zones_gap_every_mm = 5.0
         p.line_zones_gap_mm = float(np.clip(p.line_zones_gap_mm, 0.3, 20))
+        p.line_zones_gap_jitter = float(np.clip(p.line_zones_gap_jitter, 0, GAP_JITTER_MAX))
         p.line_zones_width_max_mm = float(np.clip(p.line_zones_width_max_mm, 0, 10))
         p.line_zones_min_de = float(np.clip(p.line_zones_min_de, 0, 100))
         p.line_zones_min_area_mm2 = float(np.clip(p.line_zones_min_area_mm2, 0, 10000))
@@ -3923,29 +3927,42 @@ def hyst_seed_share(method: str, keep_share: float) -> float:
     return keep_share / (1.0 + (d0 - 1.0) * (1.0 - keep_share) ** 3)
 
 
+GAP_JITTER_MAX = 80.0                   # % (beyond, two interruptions may fall on the same place)
+
+
+def _gap_spacings(n: int, jitter: float, seed: int) -> np.ndarray:
+    """`n` relative distances between interruptions (1 = the distance set), each varying at random
+    by up to `jitter` % either way. Seeded: the same settings give the same stencils."""
+    if jitter <= 0 or n <= 0:
+        return np.ones(max(n, 0))
+    u = np.random.default_rng(seed).uniform(-1.0, 1.0, n)
+    return 1.0 + (jitter / 100.0) * u
+
+
 def gap_lines(line: np.ndarray, ppm: float, every_mm: float, gap_mm: float,
-              width_mm: float) -> tuple[np.ndarray, np.ndarray | None]:
+              width_mm: float, jitter: float = 0.0) -> tuple[np.ndarray, np.ndarray | None]:
     """Interrupts any line drawing (one-pixel lines, drawn `width_mm` wide) about every `every_mm`
     (distance between interruptions, measured in a straight line: close to the length along smooth
-    lines) over `gap_mm`, so that closed loops do not cut islands out. Returns (line, zones of the
+    lines; varying at random by up to `jitter` % so that the line does not look dotted) over
+    `gap_mm`, so that closed loops do not cut islands out. Returns (line, zones of the
     interruptions)."""
     every = every_mm * ppm
     if every <= 0 or not line.any():
         return line, None
     r = max(1, int(round((gap_mm + width_mm) * ppm / 2)))
     ys, xs = np.nonzero(line)
-    # greedy sampling, bucketed on a grid of cells of `every`: a point closer than `every` to a
-    # centre already taken is skipped
-    cell = every
+    # greedy sampling, bucketed on a grid of cells of the largest distance: a point closer to a
+    # centre already taken than that centre's own distance is skipped
+    spac = every * _gap_spacings(len(ys), jitter, 1)    # distance of the centre each point may become
+    cell = every * (1.0 + max(jitter, 0.0) / 100.0)
     taken: dict[tuple, list] = {}
     centres = []
-    e2 = every * every
-    for y, x in zip(ys.tolist(), xs.tolist()):
+    for i, (y, x) in enumerate(zip(ys.tolist(), xs.tolist())):
         cy, cx = int(y // cell), int(x // cell)
         near = False
         for dy in (-1, 0, 1):
             for dx in (-1, 0, 1):
-                for (yy, xx) in taken.get((cy + dy, cx + dx), ()):
+                for (yy, xx, e2) in taken.get((cy + dy, cx + dx), ()):
                     if (yy - y) ** 2 + (xx - x) ** 2 < e2:
                         near = True
                         break
@@ -3954,7 +3971,7 @@ def gap_lines(line: np.ndarray, ppm: float, every_mm: float, gap_mm: float,
             if near:
                 break
         if not near:
-            taken.setdefault((cy, cx), []).append((y, x))
+            taken.setdefault((cy, cx), []).append((y, x, float(spac[i]) ** 2))
             centres.append((x, y))
     zones = np.zeros(line.shape, np.uint8)
     for x, y in centres:
@@ -4092,7 +4109,8 @@ def line_stencils(prep: Prepared, p: Params, entries: list, groups: dict, suppor
         g, c = gcol(dest)
         st = detect_key_details(prep, flat, pe, reg, outline_is_dark(c, support), stages=True)
         w = max(pe.outline_width_mm, p.min_opening_mm * 1.05)
-        ln, z = gap_lines(st["kept"], ppm, pe.outline_subject_gap_every_mm, pe.outline_subject_gap_mm, w)
+        ln, z = gap_lines(st["kept"], ppm, pe.outline_subject_gap_every_mm, pe.outline_subject_gap_mm, w,
+                          pe.outline_subject_gap_jitter)
         parts.append((ln, c, "details:" + g, w))
         if z is not None:
             zones |= z
@@ -4106,7 +4124,8 @@ def line_stencils(prep: Prepared, p: Params, entries: list, groups: dict, suppor
         wz = max(p.line_zones_width_mm, p.min_opening_mm * 1.05)
         wz2 = max(p.line_zones_width_max_mm, wz) if p.line_zones_width_max_mm > 0 else wz
         ln, darker, de, zlab = zone_limits(prep, p, support)
-        ln, z = gap_lines(ln, ppm, p.line_zones_gap_every_mm, p.line_zones_gap_mm, wz2)
+        ln, z = gap_lines(ln, ppm, p.line_zones_gap_every_mm, p.line_zones_gap_mm, wz2,
+                          p.line_zones_gap_jitter)
         if z is not None:
             zones |= z
         wmap = None                     # width (mm) of each line pixel, growing with the contrast
@@ -4199,8 +4218,8 @@ def subject_silhouette(prep: Prepared, p: Params, sim: np.ndarray | None = None,
 
     `outline_subject_weak` + `sim` (simulated render of the colour layers): only the parts of the
     edge that the render shows poorly (colour difference across the edge below `outline_subject_de`).
-    `outline_subject_gap_every_mm`: the line is interrupted at regular intervals along its length,
-    so that a closed silhouette does not cut the subject out as one big island (each interruption
+    `outline_subject_gap_every_mm`: the line is interrupted at regular intervals along its length
+    (varying at random by up to `outline_subject_gap_jitter` %), so that a closed silhouette does not cut the subject out as one big island (each interruption
     is a built-in bridge). With `gaps`, returns (line, zones of the interruptions) - the other
     lines must leave these zones empty too - otherwise the line alone."""
     none = (None, None) if gaps else None
@@ -4258,7 +4277,7 @@ def subject_silhouette(prep: Prepared, p: Params, sim: np.ndarray | None = None,
         r = (p.outline_subject_gap_mm + width) * ppm / 2     # stroke half-width + half the gap
         centres = []
         contours, _ = cv2.findContours(m.astype(np.uint8), cv2.RETR_LIST, cv2.CHAIN_APPROX_NONE)
-        for c in contours:
+        for ci, c in enumerate(contours):
             pts = c[:, 0, :]
             on = line[pts[:, 1], pts[:, 0]]
             if not on.any():
@@ -4270,19 +4289,22 @@ def subject_silhouette(prep: Prepared, p: Params, sim: np.ndarray | None = None,
                 pts, on = np.roll(pts, -k0, axis=0), np.roll(on, -k0)
             idx = np.flatnonzero(on)
             runs = np.split(idx, np.flatnonzero(np.diff(idx) > 1) + 1)
-            for run in runs:
+            for ri, run in enumerate(runs):
                 q = pts[run].astype(np.float64)
                 steps = np.hypot(*np.diff(q, axis=0).T)
                 if closed:
                     steps = np.append(steps, np.hypot(*(q[0] - q[-1])))
                 s_ = np.concatenate([[0.0], np.cumsum(steps)])
                 L = float(s_[-1])
+                # k pieces of line between the interruptions, of random relative lengths w
                 if closed:
                     k = max(1, int(round(L / every)))
-                    at = (np.arange(k) + 0.5) * L / k
+                    w = _gap_spacings(k, p.outline_subject_gap_jitter, 1000 * ci + ri)
+                    at = (np.concatenate([[0.0], np.cumsum(w)[:-1]]) + 0.5 * w[0]) * L / w.sum()
                 else:
-                    k = int(L // every)
-                    at = (np.arange(k) + 1) * L / (k + 1)
+                    k = int(L // every) + 1
+                    w = _gap_spacings(k, p.outline_subject_gap_jitter, 1000 * ci + ri)
+                    at = np.cumsum(w)[:-1] * L / w.sum()
                 for a in at:
                     j = min(int(np.searchsorted(s_, a)), len(q) - 1)
                     centres.append(q[j])

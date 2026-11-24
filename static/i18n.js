@@ -578,6 +578,9 @@ try {
     "Place du trait par rapport au contour du masque : centré dessus, juste à l'extérieur ou juste à l'intérieur.": "Where the stroke lies against the outline of the mask: centred on it, just outside or just inside.",
     "Largeur du trait de la silhouette, jamais moins que l'ouverture mini du matériau. 0 = même largeur que les traits des détails clés.": "Width of the silhouette stroke, never less than the material's minimum opening. 0 = same width as the key-detail lines.",
     "Interrompre tous les (mm)": "Interrupt every (mm)",
+    "Variation de la distance (%)": "Distance variation (%)",
+    "Fait varier au hasard la distance entre deux interruptions, jusqu'à ce pourcentage en plus ou en moins : le trait ne paraît plus pointillé. Le tirage est fixe : les mêmes réglages donnent les mêmes pochoirs. 0 = interruptions régulières.":
+      "Varies the distance between two interruptions at random, by up to this percentage more or less: the line no longer looks dotted. The draw is fixed: the same settings give the same stencils. 0 = regular interruptions.",
     "Longueur d'une interruption (mm)": "Length of an interruption (mm)",
     "0 = trait continu. Une silhouette fermée découpe tout le sujet en un seul îlot ; les interruptions le tiennent comme des ponts répartis tout autour.":
       "0 = continuous line. A closed silhouette cuts the whole subject out as one island; the interruptions hold it like bridges spread all around.",
