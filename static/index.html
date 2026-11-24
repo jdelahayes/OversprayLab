@@ -1120,7 +1120,7 @@
         <option value="fill">Couleurs pleines (aplats)</option>
         <option value="line">Trait seul (dessin au trait)</option>
       </select>
-      <p class="hint" id="styleHint" hidden>Trait seul : aucune couche pleine, seulement des pochoirs de traits (un par couleur de trait), réglés dans « Contours des détails clés ». Le nombre de pochoirs fixe le nombre de zones de teinte du coloriage.</p>
+      <p class="hint" id="styleHint" hidden>Trait seul : aucune couche pleine, seulement des pochoirs de traits (un par couleur de trait), réglés dans « Détails clés ». Le nombre de pochoirs fixe le nombre de zones de teinte du coloriage.</p>
       <label class="full" for="n_layers">Nombre de pochoirs</label>
       <div class="nchips" id="nLayerChips" role="group" aria-label="Nombre de pochoirs"></div>
       <input type="hidden" id="n_layers" value="3">
@@ -1191,7 +1191,7 @@
   </fieldset>
 
   <fieldset>
-    <legend>Contours des détails clés</legend>
+    <legend>Détails clés</legend>
     <div id="lineBox" hidden>
       <p class="hint">Trait seul : un pochoir par couleur de trait, du plus clair au plus foncé.</p>
       <div class="check"><input type="checkbox" id="line_zones"><label for="line_zones">Coloriage : tracer les limites entre les zones de teinte</label></div>
@@ -2997,7 +2997,7 @@ const SECTION_SUMMARY = {
     (val("hue_weight") !== 40 ? ` · teinte ${val("hue_weight")} %` : "") +
     (val("color_vividness") > 0 ? ` · vivacité ${val("color_vividness")} %` : "") +
     (val("flat_auto") > 0 ? ` · aplats ${val("flat_auto")}` : "") + (!flatEmpty() ? " · zones d'aplat" : ""),
-  "Contours des détails clés": () => val("stencil_style") === "line"
+  "Détails clés": () => val("stencil_style") === "line"
     ? "trait seul : " + ([val("outline") && "détails", val("outline_subject") && "silhouette", val("line_zones") && "coloriage"].filter(Boolean).join(" · ") || "aucun trait")
     : val("outline") && zState().zones.length > 1 ? `activé · ${zState().zones.filter(z => z.on !== false).length} zones${val("outline_subject") ? " · silhouette" : ""}`
     : val("outline") ? `activé · ${MASK_EMPTY ? "toute l'image" : "masque"} · sens. ${val("outline_sensitivity")}${val("outline_subject") ? " · silhouette" : ""}`

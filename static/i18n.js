@@ -511,8 +511,8 @@ try {
     "Style de pochoir": "Stencil style",
     "Couleurs pleines (aplats)": "Flat colours",
     "Trait seul (dessin au trait)": "Lines only (line drawing)",
-    "Trait seul : aucune couche pleine, seulement des pochoirs de traits (un par couleur de trait), réglés dans « Contours des détails clés ». Le nombre de pochoirs fixe le nombre de zones de teinte du coloriage.":
-      "Lines only: no flat layer, only line stencils (one per line colour), set in “Key-detail outlines”. The number of stencils sets the number of tone zones of the colouring book.",
+    "Trait seul : aucune couche pleine, seulement des pochoirs de traits (un par couleur de trait), réglés dans « Détails clés ». Le nombre de pochoirs fixe le nombre de zones de teinte du coloriage.":
+      "Lines only: no flat layer, only line stencils (one per line colour), set in “Key details”. The number of stencils sets the number of tone zones of the colouring book.",
     "Trait seul : chaque couleur de trait a son pochoir, pulvérisés du plus clair au plus foncé.":
       "Lines only: each line colour has its stencil, sprayed from the lightest to the darkest.",
     "Coloriage : tracer les limites entre les zones de teinte": "Colouring book: draw the limits between the tone zones",
@@ -603,7 +603,7 @@ try {
     "Cumulatif : chaque pochoir ouvre sa couleur + les plus foncées. Moins de pièces fragiles et pas de liseré entre couleurs.": "Cumulative: each stencil opens its colour + the darker ones. Fewer fragile pieces and no gap between colours.",
     "La teinte la plus proche du support reste nue (pas de pochoir)": "The tone closest to the support stays bare (no stencil)",
     // Outlines
-    "Contours des détails clés": "Key-detail outlines", "Retracer les détails clés estompés": "Redraw the faded key details",
+    "Détails clés": "Key details", "Retracer les détails clés estompés": "Redraw the faded key details",
     "Où mettre les traits": "Where the lines go", "Pochoir de contours séparé (peint en dernier)": "Separate outline stencil (painted last)",
     "Dans la couche la plus foncée": "In the darkest layer", "Dans la couche de teinte la plus proche": "In the layer of the nearest tone",
     "Un pochoir de plus, peint en dernier, de la couleur du trait choisie ci-dessous.": "One more stencil, painted last, in the line colour chosen below.",
