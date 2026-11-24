@@ -747,6 +747,9 @@ try {
     "Projet OversprayLab exporté (.zip).": "Exported OversprayLab project (.zip).",
     "Projet OversprayLab exporté (.zip) ou fichier infos.json : ses réglages sont appliqués à l'image chargée.": "Exported OversprayLab project (.zip) or infos.json file: its settings are applied to the loaded image.",
     "Ce JSON n'est pas un fichier infos.json de OversprayLab": "This JSON is not a OversprayLab infos.json file", "Fichier JSON illisible": "Unreadable JSON file",
+    "Choisissez le fichier infos.json d'un export ou d'une snapshot OversprayLab, ou le zip d'un projet exporté : ses réglages seront appliqués à l'image chargée.":
+      "Choose the infos.json file of an OversprayLab export or snapshot, or the zip of an exported project: its settings will be applied to the loaded image.",
+    "Abandonner": "Give up", "Charger des réglages": "Load settings",
     "Projet illisible": "Unreadable project", "Erreur du masque": "Mask error", "Erreur du masque sujet": "Subject mask error", "Erreur": "Error",
     "Masque illisible": "Unreadable mask", "Session inconnue, rechargez l'image": "Unknown session, reload the image", "Aucune image reçue": "No image received",
     "Aucun fichier reçu": "No file received", "Ce fichier n'est pas un zip de projet OversprayLab": "This file is not a OversprayLab project zip",

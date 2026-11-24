@@ -825,6 +825,16 @@
     </div>
   </div>
 </div>
+<div class="modalback" id="settingsBad" hidden>
+  <div class="modal" role="alertdialog" aria-modal="true" aria-labelledby="settingsBadTitle" aria-describedby="settingsBadText">
+    <h4 id="settingsBadTitle">Ce JSON n'est pas un fichier infos.json de OversprayLab</h4>
+    <p id="settingsBadText">Choisissez le fichier infos.json d'un export ou d'une snapshot OversprayLab, ou le zip d'un projet exporté : ses réglages seront appliqués à l'image chargée.</p>
+    <div class="btns">
+      <button type="button" data-a="cancel">Abandonner</button>
+      <button type="button" class="primary" data-a="load">Charger des réglages</button>
+    </div>
+  </div>
+</div>
 <div class="colorpop" id="colorPop" role="dialog" aria-label="Couleur de la couche" hidden></div>
 <div class="paledit" id="palEdit" role="dialog" aria-label="Éditeur de palette" hidden></div>
 <div class="modalback" id="projAll" hidden><div class="pa" role="dialog" aria-modal="true" aria-labelledby="pjTitle">
@@ -4610,9 +4620,14 @@ async function applySettingsFile(file) {
       info = j.info;
     } catch (e) { return status("Serveur injoignable : " + e.message, true); }
   } else {
-    try { info = JSON.parse(await file.text()); } catch (e) { return status("Fichier JSON illisible", true); }
+    try { info = JSON.parse(await file.text()); } catch (e) { info = undefined; }
   }
-  if (!info || (!info.projet && !info.parametres)) return status("Ce JSON n'est pas un fichier infos.json de OversprayLab", true);
+  if (!info || (!info.projet && !info.parametres)) {   // unreadable or another JSON: warning, another file can be chosen
+    $("settingsBadTitle").textContent = info === undefined ? "Fichier JSON illisible"
+      : "Ce JSON n'est pas un fichier infos.json de OversprayLab";
+    if (await askModal("settingsBad", "load") === "load") $("settingsFile").click();
+    return;
+  }
   if (SID) {
     const manual = $("manual_bridges").value;   // drawn on the loaded image: kept, like its masks
     applyProjectSettings(info);
@@ -4835,15 +4850,18 @@ async function createSnapshot() {
 }
 // Leaving the current version (another snapshot, project or image): when it belongs to a project
 // folder and is not saved, asks whether to save it first. true = go on.
-function askLeave() {
-  const back = $("leaveAsk");
+function askLeave() { return askModal("leaveAsk", "save"); }
+// Modal with data-a buttons: resolves with the action of the button clicked, "cancel" for Escape
+// or a click outside; `focus` = action of the button focused first
+function askModal(id, focus) {
+  const back = $(id);
   return new Promise(done => {
     const end = a => { back.hidden = true; back.onclick = null; document.removeEventListener("keydown", key, true); done(a); };
     const key = e => { if (e.key === "Escape") { e.preventDefault(); e.stopPropagation(); end("cancel"); } };
     back.onclick = e => { const b = e.target.closest("button[data-a]"); if (b) end(b.dataset.a); else if (e.target === back) end("cancel"); };
     document.addEventListener("keydown", key, true);
     back.hidden = false;
-    back.querySelector("[data-a=save]").focus();
+    back.querySelector(`[data-a=${focus}]`).focus();
   });
 }
 async function leaveOk() {
