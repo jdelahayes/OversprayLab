@@ -551,7 +551,6 @@ try {
     "Longueur de matière laissée à chaque interruption des limites.": "Length of material left at each interruption of the limits.",
     "Teinte de la zone la plus foncée (un pochoir par teinte)": "Tone of the darker zone (one stencil per tone)",
     "Couleur choisie": "Chosen colour",
-    "Couleur propre pour la silhouette": "Own colour for the silhouette",
     "Trait seul : la palette s'applique aux limites du coloriage colorées par teinte":
       "Lines only: the palette applies to the colouring-book limits coloured by tone",
     "Couleur de la silhouette": "Silhouette colour",
@@ -563,8 +562,6 @@ try {
       "Draws the limit between the computed tone zones, like a colouring book. The number of stencils and the level of detail set the number and fineness of the zones.",
     "Couleur du trait des limites : celle des détails clés, la teinte de la plus foncée des deux zones (un pochoir par teinte), ou une couleur choisie.":
       "Line colour of the limits: that of the key details, the tone of the darker of both zones (one stencil per tone), or a chosen colour.",
-    "Donne à la silhouette sa propre couleur de trait (un pochoir à part) ; sinon, celle des détails clés.":
-      "Gives the silhouette its own line colour (a separate stencil); otherwise that of the key details.",
     "Trait seul : aucun trait (cochez les détails clés, la silhouette ou le coloriage)":
       "Lines only: no line (tick the key details, the silhouette or the colouring book)",
     "Seulement là où le bord ressort peu": "Only where the edge stands out poorly",
@@ -573,12 +570,18 @@ try {
     "À cheval sur le contour": "Centred on the outline",
     "À l'extérieur du contour": "Outside the outline",
     "À l'intérieur du contour": "Inside the outline",
-    "Largeur de la silhouette (mm)": "Silhouette width (mm)",
-    "Largeur 0 = celle des traits des détails clés.": "Width 0 = that of the key-detail lines.",
     "Place du trait par rapport au contour du masque : centré dessus, juste à l'extérieur ou juste à l'intérieur.": "Where the stroke lies against the outline of the mask: centred on it, just outside or just inside.",
-    "Largeur du trait de la silhouette, jamais moins que l'ouverture mini du matériau. 0 = même largeur que les traits des détails clés.": "Width of the silhouette stroke, never less than the material's minimum opening. 0 = same width as the key-detail lines.",
     "Interrompre tous les (mm)": "Interrupt every (mm)",
     "Variation de la distance (%)": "Distance variation (%)",
+    "0 = traits continus. Les interruptions tiennent les traits fermés (yeux, boucles) comme des ponts.":
+      "0 = continuous lines. The interruptions hold the closed lines (eyes, loops) like bridges.",
+    "Trait seul : les traits de la zone sont interrompus à intervalles réguliers, pour que les traits fermés (yeux, boucles) restent tenus sans pont (0 = traits continus).":
+      "Lines only: the lines of the zone are interrupted at regular intervals, so that the closed lines (eyes, loops) stay held without a bridge (0 = continuous lines).",
+    "Longueur de matière laissée à chaque interruption des traits.": "Length of material left at each interruption of the lines.",
+    "Les morceaux de silhouette plus courts que cette longueur sont ignorés.": "Pieces of silhouette shorter than this length are ignored.",
+    "Couleur du trait de la silhouette. Automatique : la teinte la plus contrastée avec le support. Une couleur différente de celle des autres traits donne un pochoir à part.":
+      "Colour of the silhouette line. Automatic: the tone with the most contrast against the support. A colour different from the other lines' gives a separate stencil.",
+    "Largeur du trait de la silhouette, jamais moins que l'ouverture mini du matériau.": "Width of the silhouette stroke, never less than the material's minimum opening.",
     "Fait varier au hasard la distance entre deux interruptions, jusqu'à ce pourcentage en plus ou en moins : le trait ne paraît plus pointillé. Le tirage est fixe : les mêmes réglages donnent les mêmes pochoirs. 0 = interruptions régulières.":
       "Varies the distance between two interruptions at random, by up to this percentage more or less: the line no longer looks dotted. The draw is fixed: the same settings give the same stencils. 0 = regular interruptions.",
     "Longueur d'une interruption (mm)": "Length of an interruption (mm)",
@@ -872,9 +875,6 @@ try {
     "Le trait est interrompu à intervalles réguliers (0 = trait continu)": "The line is interrupted at regular intervals (0 = continuous line)",
     "sur (mm)": "over (mm)",
     "Longueur de matière laissée à chaque interruption": "Length of material left at each interruption",
-    "0 = continu. En trait seul : traits des détails clés et silhouette (le coloriage a les siens) ; les interruptions tiennent les boucles fermées comme des ponts.":
-      "0 = continuous. Lines only: key-detail lines and silhouette (the colouring book has its own); the interruptions hold the closed loops like bridges.",
-    "0 = continu. Les interruptions tiennent la silhouette comme des ponts.": "0 = continuous. The interruptions hold the silhouette like bridges.",
     "0 = trait continu. Les interruptions tiennent la silhouette comme des ponts.": "0 = continuous line. The interruptions hold the silhouette like bridges.",
     "La teinte de l'image la plus contrastée avec le support": "The image tone with the most contrast against the support",
     "Auto": "Auto",

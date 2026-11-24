@@ -123,6 +123,11 @@ class Params:
     outline_sensitivity: float = 50.0   # 0 = only the strongest details .. 100 = many details (progressive)
     outline_width_mm: float = 0.8       # line width (at least the material's minimum opening)
     outline_min_length_mm: float = 4.0  # minimum line length
+    # line style: key-detail lines interrupted every … mm (0 = continuous), over … mm, distance
+    # varying at random by … % (per zone in outline_zones: keys gap_every_mm, gap_mm, gap_jitter)
+    outline_gap_every_mm: float = 0.0
+    outline_gap_mm: float = 1.5
+    outline_gap_jitter: float = 0.0
     # what the key details are compared with: layers = render of the colour layers before their
     # effects (the lines stay put when effects change); effects = render after the effects (the lines
     # make up for what the effects lose); image = the image alone, before the layers are computed
@@ -155,7 +160,8 @@ class Params:
     outline_subject_gap_mm: float = 1.5     # length of an interruption (material left: a built-in bridge)
     outline_subject_gap_jitter: float = 0.0     # % of random variation of the distance between interruptions
     outline_subject_pos: str = "center"     # stroke against the outline: center | outside | inside
-    outline_subject_width_mm: float = 0.0   # stroke width (0 = the width of the key-detail lines)
+    outline_subject_width_mm: float = 0.8   # stroke width (0, earlier settings: the key-detail width)
+    outline_subject_min_length_mm: float = 4.0  # shorter pieces of the silhouette are left out
     outline_auto_color: bool = True     # auto colour = tone with the most contrast against the support
     # Stencil style: fill = flat colour layers (+ optional lines); line = line stencils only, from the
     # key details (`outline`), the silhouette (`outline_subject`) and/or the limits between the
@@ -300,6 +306,12 @@ class Params:
         if p.outline_subject_pos not in ("center", "outside", "inside"):
             p.outline_subject_pos = "center"
         p.outline_subject_width_mm = float(np.clip(p.outline_subject_width_mm, 0, 20))
+        p.outline_subject_min_length_mm = float(np.clip(p.outline_subject_min_length_mm, 0, 200))
+        p.outline_gap_every_mm = float(np.clip(p.outline_gap_every_mm, 0, 1000))
+        if 0 < p.outline_gap_every_mm < 5:
+            p.outline_gap_every_mm = 5.0
+        p.outline_gap_mm = float(np.clip(p.outline_gap_mm, 0.3, 20))
+        p.outline_gap_jitter = float(np.clip(p.outline_gap_jitter, 0, GAP_JITTER_MAX))
         p.outline_follow_mm = float(np.clip(p.outline_follow_mm, 0, 50))
         p.outline_clahe = float(np.clip(p.outline_clahe, 0, 100))
         p.px_per_mm = float(np.clip(p.px_per_mm, 2, 16))
@@ -3445,7 +3457,8 @@ def outline_plan(p: Params) -> tuple[list, dict, str]:
                   width_mm=p.outline_width_mm, min_length_mm=p.outline_min_length_mm, dest=legacy,
                   ref=p.outline_ref, whole=bool(p.outline_whole_lines), line_sens=p.outline_line_sens,
                   close=p.outline_close_lines, channel=p.outline_channel, follow_mm=p.outline_follow_mm,
-                  clahe=p.outline_clahe, excl="")]
+                  clahe=p.outline_clahe, excl="", gap_every_mm=p.outline_gap_every_mm,
+                  gap_mm=p.outline_gap_mm, gap_jitter=p.outline_gap_jitter)]
     sil = legacy
     try:
         data = json.loads(p.outline_zones) if p.outline_zones else None
@@ -3461,6 +3474,7 @@ def outline_plan(p: Params) -> tuple[list, dict, str]:
                          "excl": g.get("excl") if g.get("excl") in ("on", "off") else ""}
     zones = []
     seen = set()
+    gap_every = lambda v: 5.0 if 0 < v < 5 else v
     for z in data["zones"][:20]:
         if not isinstance(z, dict) or not _ZONE_ID.match(str(z.get("id", ""))) or z["id"] in seen:
             continue
@@ -3482,6 +3496,9 @@ def outline_plan(p: Params) -> tuple[list, dict, str]:
                           channel=z.get("channel") if z.get("channel") in OUTLINE_CHANNELS else "light",
                           whole=z.get("whole") is True, line_sens=num("line_sens", 0, 100, 50.0),
                           follow_mm=num("follow_mm", 0, 50, HYST_MM_DOG), clahe=num("clahe", 0, 100, 0.0),
+                          gap_every_mm=gap_every(num("gap_every_mm", 0, 1000, 0.0)),
+                          gap_mm=num("gap_mm", 0.3, 20, 1.5),
+                          gap_jitter=num("gap_jitter", 0, GAP_JITTER_MAX, 0.0),
                           excl=z.get("excl") if z.get("excl") in ("on", "off") else ""))
     if not zones:
         return outline_plan(replace(p, outline_zones=""))
@@ -3500,6 +3517,8 @@ def zone_params(p: Params, z: dict) -> Params:
                    outline_min_length_mm=z["min_length_mm"], outline_ref=z["ref"], outline_whole_lines=z["whole"],
                    outline_line_sens=z["line_sens"], outline_close_lines=z["close"], outline_channel=z["channel"],
                    outline_follow_mm=z["follow_mm"], outline_clahe=z["clahe"],
+                   outline_gap_every_mm=z["gap_every_mm"], outline_gap_mm=z["gap_mm"],
+                   outline_gap_jitter=z["gap_jitter"],
                    outline_exclusive=p.outline_exclusive if not z.get("excl") else z["excl"] == "on",
                    outline_target="stencil" if _GROUP.match(z["dest"]) else z["dest"])
 
@@ -3550,7 +3569,7 @@ def outline_entries(p: Params, prep: "Prepared", zone_regions: dict | None,
         excl = _sil_excl(p)
         entries.append((replace(p, outline=False, outline_subject=True, outline_ref="layers",
                                 outline_exclusive=p.outline_exclusive if not excl else excl == "on",
-                                outline_width_mm=p.outline_subject_width_mm or p.outline_width_mm,
+                                outline_width_mm=silhouette_width(p),
                                 outline_target="stencil" if _GROUP.match(sil_dest) else sil_dest),
                         None, sil_dest, True))
     return entries, groups
@@ -4095,11 +4114,9 @@ def line_stencils(prep: Prepared, p: Params, entries: list, groups: dict, suppor
         pg = group_params(p, groups[g]) if g else p
         return g or "A", np.asarray(outline_color(prep, support, pg), np.uint8)
 
-    sil = [e for e in entries if e[3]]
-    _, base = gcol(sil[0][2] if sil else next(iter(groups), "A"))
-
-    def colour(h):
-        return hex_to_bgr(h).astype(np.uint8) if h.startswith("#") else base
+    def colour(h):                      # own colour, or automatic: the most contrast with the support
+        return (hex_to_bgr(h).astype(np.uint8) if h.startswith("#")
+                else np.asarray(outline_color(prep, support, replace(p, outline_auto_color=True)), np.uint8))
 
     parts = []                          # (one-pixel line, colour, source, line width mm)
     zones = np.zeros((H, W), bool)
@@ -4109,8 +4126,8 @@ def line_stencils(prep: Prepared, p: Params, entries: list, groups: dict, suppor
         g, c = gcol(dest)
         st = detect_key_details(prep, flat, pe, reg, outline_is_dark(c, support), stages=True)
         w = max(pe.outline_width_mm, p.min_opening_mm * 1.05)
-        ln, z = gap_lines(st["kept"], ppm, pe.outline_subject_gap_every_mm, pe.outline_subject_gap_mm, w,
-                          pe.outline_subject_gap_jitter)
+        ln, z = gap_lines(st["kept"], ppm, pe.outline_gap_every_mm, pe.outline_gap_mm, w,
+                          pe.outline_gap_jitter)
         parts.append((ln, c, "details:" + g, w))
         if z is not None:
             zones |= z
@@ -4205,7 +4222,8 @@ def line_stencils(prep: Prepared, p: Params, entries: list, groups: dict, suppor
 
 
 def silhouette_width(p: Params) -> float:
-    """Width of the silhouette stroke: its own, or that of the lines; at least the minimum opening."""
+    """Width of the silhouette stroke: its own (0, settings of earlier versions: that of the key-detail
+    lines); at least the minimum opening."""
     return max(p.outline_subject_width_mm or p.outline_width_mm, p.min_opening_mm * 1.05)
 
 
@@ -4251,7 +4269,7 @@ def subject_silhouette(prep: Prepared, p: Params, sim: np.ndarray | None = None,
         if not m.any():                     # subject thinner than the stroke
             return none
     line = border(m)
-    min_px = max(2, int(p.outline_min_length_mm * ppm))
+    min_px = max(2, int(p.outline_subject_min_length_mm * ppm))
     if p.outline_subject_weak and sim is not None and line.any():
         # colour of the render on each side of the edge (normalised Gaussian means, ~1.5 mm)
         lab = cv2.cvtColor(np.asarray(sim, np.float32) / 255.0, cv2.COLOR_BGR2LAB)

@@ -1321,6 +1321,14 @@
         <label class="row" title="Largeur du trait découpé ; jamais plus fin que l'ouverture mini du matériau">Largeur (mm) <input type="number" id="outline_width_mm" value="0.8" min="0.2" max="10" step="0.1"></label>
         <label class="row" title="Les traits plus courts sont ignorés">Longueur mini (mm) <input type="number" id="outline_min_length_mm" value="4" min="0" max="200" step="0.5"></label>
       </div>
+      <div id="zoneGapBox" hidden>
+        <div class="pair">
+          <label class="row">Interrompre tous les (mm) <input type="number" id="outline_gap_every_mm" value="0" min="0" max="1000" step="5"></label>
+          <label class="row">sur (mm) <input type="number" id="outline_gap_mm" value="1.5" min="0.3" max="20" step="0.5"></label>
+        </div>
+        <label class="row">Variation de la distance (%) <input type="number" id="outline_gap_jitter" value="0" min="0" max="80" step="5"></label>
+        <p class="hint">0 = traits continus. Les interruptions tiennent les traits fermés (yeux, boucles) comme des ponts.</p>
+      </div>
     </div>
 
     <div class="check ohead"><input type="checkbox" id="outline_subject"><label for="outline_subject">Silhouette (contour d'un masque)</label></div>
@@ -1352,22 +1360,28 @@
           <option value="outside">À l'extérieur du contour</option>
           <option value="inside">À l'intérieur du contour</option>
         </select></label>
-      <label class="row">Largeur de la silhouette (mm) <input type="number" id="outline_subject_width_mm" value="0" min="0" max="20" step="0.1"></label>
-      <p class="hint">Largeur 0 = celle des traits des détails clés.</p>
+      <div class="pair">
+        <label class="row">Largeur (mm) <input type="number" id="outline_subject_width_mm" value="0.8" min="0.2" max="20" step="0.1"></label>
+        <label class="row">Longueur mini (mm) <input type="number" id="outline_subject_min_length_mm" value="4" min="0" max="200" step="0.5"></label>
+      </div>
       <div class="pair">
         <div class="check" id="silWeakRow" title="Le contour n'est tracé que là où le rendu le montre mal (écart de couleur entre les deux côtés inférieur au ΔE maxi)"><input type="checkbox" id="outline_subject_weak"><label for="outline_subject_weak">Seulement où le bord ressort peu</label></div>
         <label class="row" id="silDeRow">ΔE maxi <input type="number" id="outline_subject_de" value="20" min="1" max="100" step="1"></label>
       </div>
-      <div id="silColorRow" hidden class="selc">
-        <div class="check" style="flex:1"><input type="checkbox" id="silOwn"><label for="silOwn">Couleur propre pour la silhouette</label></div>
-        <input type="color" id="silColor" value="#1e1e1e" aria-label="Couleur de la silhouette" class="swc" disabled>
-      </div>
+      <label class="row sel" for="silMode" id="silColorRow" hidden>Couleur
+        <span class="selc">
+          <select id="silMode">
+            <option value="">Automatique (la plus contrastée avec le support)</option>
+            <option value="custom">Couleur choisie</option>
+          </select>
+          <input type="color" id="silColor" value="#1e1e1e" aria-label="Couleur de la silhouette" class="swc" hidden>
+        </span></label>
     </div>
     <div class="ogroup" id="gapBox" hidden>
       <label class="row" title="Le trait est interrompu à intervalles réguliers (0 = trait continu)">Interrompre tous les (mm) <input type="number" id="outline_subject_gap_every_mm" value="0" min="0" max="1000" step="5"></label>
       <label class="row" title="Longueur de matière laissée à chaque interruption">sur (mm) <input type="number" id="outline_subject_gap_mm" value="1.5" min="0.3" max="20" step="0.5"></label>
       <label class="row">Variation de la distance (%) <input type="number" id="outline_subject_gap_jitter" value="0" min="0" max="80" step="5"></label>
-      <p class="hint" id="gapHint">0 = trait continu. Les interruptions tiennent la silhouette comme des ponts.</p>
+      <p class="hint">0 = trait continu. Les interruptions tiennent la silhouette comme des ponts.</p>
     </div>
 
     <!-- one sub-section per outline layer (Contours A, B...), built by renderOutlineSwatches -->
@@ -1839,7 +1853,7 @@ const PARAMS = ["support_w_mm", "support_h_mm", "support_color", "inner_margin_m
   "manual_thresholds", "thresholds", "pre_saturation", "pre_sharpen", "pre_remove_bg",
   "layer_colors", "layer_effects", "manual_bridges",
   "n_layers", "detail", "hue_weight", "color_vividness", "flat_auto", "flat_tolerance", "flat_tolerances", "color_mode", "layering", "skip_support", "fill_gaps", "under_darker", "protect_lines",
-  "outline", "outline_target", "outline_exclusive", "outline_method", "outline_sensitivity", "outline_width_mm", "outline_min_length_mm", "outline_subject", "outline_subject_mask", "outline_subject_pos", "outline_subject_width_mm", "outline_subject_weak", "outline_subject_de", "outline_subject_gap_every_mm", "outline_subject_gap_mm", "outline_subject_gap_jitter", "stencil_style", "line_zones", "line_zones_color", "line_zones_width_mm", "line_zones_min_length_mm", "line_zones_gap_every_mm", "line_zones_gap_mm", "line_zones_gap_jitter", "line_zones_width_max_mm", "line_zones_min_de", "line_zones_min_area_mm2", "line_zones_smooth_mm", "line_zones_pos", "line_zones_mask", "line_zones_frame", "line_sil_color", "outline_auto_color", "outline_color", "outline_zones", "outline_ref", "outline_whole_lines", "outline_line_sens", "outline_close_lines", "outline_channel", "outline_follow_mm", "outline_clahe",
+  "outline", "outline_target", "outline_exclusive", "outline_method", "outline_sensitivity", "outline_width_mm", "outline_min_length_mm", "outline_gap_every_mm", "outline_gap_mm", "outline_gap_jitter", "outline_subject", "outline_subject_mask", "outline_subject_pos", "outline_subject_width_mm", "outline_subject_min_length_mm", "outline_subject_weak", "outline_subject_de", "outline_subject_gap_every_mm", "outline_subject_gap_mm", "outline_subject_gap_jitter", "stencil_style", "line_zones", "line_zones_color", "line_zones_width_mm", "line_zones_min_length_mm", "line_zones_gap_every_mm", "line_zones_gap_mm", "line_zones_gap_jitter", "line_zones_width_max_mm", "line_zones_min_de", "line_zones_min_area_mm2", "line_zones_smooth_mm", "line_zones_pos", "line_zones_mask", "line_zones_frame", "line_sil_color", "outline_auto_color", "outline_color", "outline_zones", "outline_ref", "outline_whole_lines", "outline_line_sens", "outline_close_lines", "outline_channel", "outline_follow_mm", "outline_clahe",
   ...MAT_FIELDS, "merge_amount", "merge_channel_mm", "merge_channels", "merge_islands", "merge_line_islands",
   "tolerance_mm", "smooth_curves", "spray_mm", "px_per_mm", "px_per_mm_auto"];
 const SUPPORT_COLORS = [["Blanc", "#ffffff"], ["Ivoire", "#f3ecd9"], ["Kraft", "#c8a26e"], ["Gris", "#9a9a9a"], ["Noir", "#1e1e1e"]];
@@ -2974,6 +2988,7 @@ function restoreSettings() {
   if (s.user_support && UP.support[s.user_support]) s.support_preset = "user:" + s.user_support;
   delete s.user_support;
   if ("line_zones" in s && !("line_zones_width_mm" in s)) migrateLineZones(s);
+  if ("outline_subject" in s && !("outline_subject_min_length_mm" in s)) migrateOwnSettings(s);
   setVals(migrateSens(s));
   if (!("machine" in s)) { machineFromWidth(); syncMat(); }
   return true;
@@ -3199,6 +3214,10 @@ const TIPS = {
   outline_sensitivity: "Quantité de détails retenus (bas = seulement les plus marqués). Échelle progressive : de 1 % des traits candidats à 0 jusqu'à 95 % à 100, environ 10 % à 50.",
   outline_width_mm: "Largeur du trait du pochoir de contours, en mm (jamais moins que l'ouverture mini du matériau).",
   outline_min_length_mm: "Les traits plus courts que cette longueur sont ignorés.",
+  outline_gap_every_mm: "Trait seul : les traits de la zone sont interrompus à intervalles réguliers, pour que les traits fermés (yeux, boucles) restent tenus sans pont (0 = traits continus).",
+  outline_gap_mm: "Longueur de matière laissée à chaque interruption des traits.",
+  outline_gap_jitter: "Fait varier au hasard la distance entre deux interruptions, jusqu'à ce pourcentage en plus ou en moins : le trait ne paraît plus pointillé. Le tirage est fixe : les mêmes réglages donnent les mêmes pochoirs. 0 = interruptions régulières.",
+  outline_subject_min_length_mm: "Les morceaux de silhouette plus courts que cette longueur sont ignorés.",
   outline_clahe: "Contraste local de l'image où les traits de la zone sont cherchés, en plus du prétraitement : fait ressortir les traits dans les ombres et les zones peu contrastées, sans changer les couches. Trop fort : le grain et les textures donnent des traits parasites. 0 = désactivé.",
   outline_follow_mm: "Traits dessinés (DoG, fluide) et contours appris (TEED) : distance sur laquelle un trait retenu est prolongé le long de lui-même, tant qu'il reste presque aussi marqué. Plus long : traits d'un seul tenant, moins de trous ; mais un trait faible partant d'un départ marqué est aussi prolongé. 0 : point par point. Conseillé : 12 mm en DoG, 4 mm en fluide, 8 mm en TEED.",
   outline_subject: "Trace le contour d'un masque (le sujet sélectionné, un masque dédié à la silhouette ou le masque des détails clés), avec ou sans les détails clés. Utile quand le sujet se détache mal du fond. Le bord de l'image n'est pas tracé.",
@@ -3218,11 +3237,11 @@ const TIPS = {
   line_zones_width_max_mm: "Au-dessus de la largeur : les limites entre teintes très différentes sont plus épaisses, jusqu'à cette largeur ; les plus douces gardent la largeur. 0 = largeur constante.",
   line_zones_pos: "Place du trait par rapport à la limite : centré, ou entièrement dans la zone la plus foncée (ou la plus claire) des deux.",
   lzMode: "Couleur du trait des limites : celle des détails clés, la teinte de la plus foncée des deux zones (un pochoir par teinte), ou une couleur choisie.",
-  silOwn: "Donne à la silhouette sa propre couleur de trait (un pochoir à part) ; sinon, celle des détails clés.",
+  silMode: "Couleur du trait de la silhouette. Automatique : la teinte la plus contrastée avec le support. Une couleur différente de celle des autres traits donne un pochoir à part.",
   outline_subject_weak: "Ne trace la silhouette que là où le rendu simulé des couches la montre mal (couleurs proches de part et d'autre du bord). Ailleurs, les couches dessinent déjà le bord : le trait s'interrompt, ce qui ouvre souvent la boucle.",
   outline_subject_de: "Écart de couleur (ΔE) entre les deux côtés du bord dans le rendu simulé, en dessous duquel la silhouette est tracée. Plus haut = trait plus présent.",
   outline_subject_pos: "Place du trait par rapport au contour du masque : centré dessus, juste à l'extérieur ou juste à l'intérieur.",
-  outline_subject_width_mm: "Largeur du trait de la silhouette, jamais moins que l'ouverture mini du matériau. 0 = même largeur que les traits des détails clés.",
+  outline_subject_width_mm: "Largeur du trait de la silhouette, jamais moins que l'ouverture mini du matériau.",
   outline_subject_gap_every_mm: "Coupe le trait de la silhouette à intervalles réguliers (mesurés le long du trait) : chaque interruption laisse un peu de matière qui tient l'intérieur du sujet, comme un pont. 0 = trait continu.",
   outline_subject_gap_jitter: "Fait varier au hasard la distance entre deux interruptions, jusqu'à ce pourcentage en plus ou en moins : le trait ne paraît plus pointillé. Le tirage est fixe : les mêmes réglages donnent les mêmes pochoirs. 0 = interruptions régulières.",
   outline_subject_gap_mm: "Longueur de matière laissée à chaque interruption. Au pistolet, la peinture passe un peu sous les petites interruptions : le trait paraît presque continu.",
@@ -3551,7 +3570,8 @@ function zoneCanvas(id) { if (!ZCV[id]) ZCV[id] = maskCanvas(); return ZCV[id]; 
 function zLegacy() {               // one zone made of the outline fields (earlier projects)
   const t = val("outline_target"), dest = t === "stencil" ? "A" : t;
   return { zones: [{ id: "z1", name: "Zone 1", on: true, method: val("outline_method"), sensitivity: val("outline_sensitivity"),
-                     width_mm: val("outline_width_mm"), min_length_mm: val("outline_min_length_mm"), dest, ref: val("outline_ref"), whole: val("outline_whole_lines"), line_sens: val("outline_line_sens"), close: val("outline_close_lines"), channel: val("outline_channel"), follow_mm: val("outline_follow_mm"), clahe: val("outline_clahe") }],
+                     width_mm: val("outline_width_mm"), min_length_mm: val("outline_min_length_mm"), dest, ref: val("outline_ref"), whole: val("outline_whole_lines"), line_sens: val("outline_line_sens"), close: val("outline_close_lines"), channel: val("outline_channel"), follow_mm: val("outline_follow_mm"), clahe: val("outline_clahe"),
+                     gap_every_mm: val("outline_gap_every_mm"), gap_mm: val("outline_gap_mm"), gap_jitter: val("outline_gap_jitter") }],
            groups: { A: { auto: val("outline_auto_color"), color: val("outline_color") } }, sil_dest: dest };
 }
 function zState() {
@@ -3577,7 +3597,8 @@ const destLabel = d => d === "darkest" ? "dans la couche la plus foncée" : d ==
 function fieldsToZone() {
   const s = zState(), z = zCur(s);
   Object.assign(z, { method: val("outline_method"), sensitivity: val("outline_sensitivity"),
-                     width_mm: val("outline_width_mm"), min_length_mm: val("outline_min_length_mm"), ref: val("outline_ref"), whole: val("outline_whole_lines"), line_sens: val("outline_line_sens"), close: val("outline_close_lines"), channel: val("outline_channel"), follow_mm: val("outline_follow_mm"), clahe: val("outline_clahe") });
+                     width_mm: val("outline_width_mm"), min_length_mm: val("outline_min_length_mm"), ref: val("outline_ref"), whole: val("outline_whole_lines"), line_sens: val("outline_line_sens"), close: val("outline_close_lines"), channel: val("outline_channel"), follow_mm: val("outline_follow_mm"), clahe: val("outline_clahe"),
+                     gap_every_mm: val("outline_gap_every_mm"), gap_mm: val("outline_gap_mm"), gap_jitter: val("outline_gap_jitter") });
   zSave(s);
 }
 // zone shown -> fields of the section
@@ -3586,6 +3607,9 @@ function zoneToFields() {
   ZONE_CUR = z.id;
   $("outline_method").value = [...$("outline_method").options].some(o => o.value === z.method) ? z.method : "canny"; $("outline_sensitivity").value = z.sensitivity;
   $("outline_width_mm").value = z.width_mm; $("outline_min_length_mm").value = z.min_length_mm;
+  const fin = (x, d) => x != null && x !== "" && Number.isFinite(+x) ? x : d;
+  $("outline_gap_every_mm").value = fin(z.gap_every_mm, 0); $("outline_gap_mm").value = fin(z.gap_mm, 1.5);
+  $("outline_gap_jitter").value = fin(z.gap_jitter, 0);
   $("outline_ref").value = ["layers", "effects", "image"].includes(z.ref) ? z.ref : "layers";
   $("outline_close_lines").value = ["", "median", "outer", "inner"].includes(z.close) ? z.close : "";
   $("outline_channel").value = ["light", "colour", "both"].includes(z.channel) ? z.channel : "light";
@@ -3736,7 +3760,7 @@ function setupZones() {
   form.querySelector(".cancel").onclick = () => close(false);
   input.addEventListener("keydown", e => { if (e.key === "Enter") { e.preventDefault(); close(true); } else if (e.key === "Escape") close(false); });
   // the fields of the section edit the zone shown
-  ["outline_method", "outline_sensitivity", "outline_width_mm", "outline_min_length_mm", "outline_ref", "outline_whole_lines", "outline_line_sens", "outline_close_lines", "outline_channel", "outline_follow_mm", "outline_clahe"]
+  ["outline_method", "outline_sensitivity", "outline_width_mm", "outline_min_length_mm", "outline_ref", "outline_whole_lines", "outline_line_sens", "outline_close_lines", "outline_channel", "outline_follow_mm", "outline_clahe", "outline_gap_every_mm", "outline_gap_mm", "outline_gap_jitter"]
     .forEach(k => { $(k).addEventListener("change", fieldsToZone); $(k).addEventListener("input", fieldsToZone); });
   ["outline_ref", "outline_whole_lines", "outline_line_sens", "outline_close_lines", "outline_channel"].forEach(k => $(k).addEventListener("change", () => { enableOutline(); detectPreview(); }));
   $("outline_whole_lines").addEventListener("change", syncLineSens);
@@ -4185,7 +4209,7 @@ async function init() {
   });
   $("outline_target").addEventListener("change", () => { syncOutlineTarget(); enableOutline(); detectPreview(); });
   ["outline_sensitivity", "outline_width_mm", "outline_min_length_mm", "outline_follow_mm", "outline_clahe"].forEach(k => $(k).addEventListener("change", enableOutline));
-  ["outline_method", "outline_subject", "outline_subject_mask", "outline_subject_pos", "outline_subject_width_mm", "outline_subject_weak", "outline_subject_de", "outline_subject_gap_every_mm", "outline_subject_gap_mm", "outline_subject_gap_jitter"].forEach(k => $(k).addEventListener("change", detectPreview));
+  ["outline_method", "outline_subject", "outline_subject_mask", "outline_subject_pos", "outline_subject_width_mm", "outline_subject_min_length_mm", "outline_subject_weak", "outline_subject_de", "outline_subject_gap_every_mm", "outline_subject_gap_mm", "outline_subject_gap_jitter", "outline_gap_every_mm", "outline_gap_mm", "outline_gap_jitter"].forEach(k => $(k).addEventListener("change", detectPreview));
   $("outline_subject_weak").addEventListener("change", syncSilhouetteSource);
   $("stencil_style").addEventListener("change", () => { syncStyle(); detectPreview(); });
   $("line_zones").addEventListener("change", syncSilhouetteSource);
@@ -4193,7 +4217,7 @@ async function init() {
   const setHidden = (id, v) => { $(id).value = v; syncSilhouetteSource(); updateSummaries(); detectPreview(); schedule(); };
   $("lzMode").addEventListener("change", () => setHidden("line_zones_color", $("lzMode").value === "custom" ? $("lzColor").value.toLowerCase() : $("lzMode").value));
   $("lzColor").addEventListener("change", () => setHidden("line_zones_color", $("lzColor").value.toLowerCase()));
-  $("silOwn").addEventListener("change", () => setHidden("line_sil_color", $("silOwn").checked ? $("silColor").value.toLowerCase() : ""));
+  $("silMode").addEventListener("change", () => setHidden("line_sil_color", $("silMode").value === "custom" ? $("silColor").value.toLowerCase() : ""));
   $("silColor").addEventListener("change", () => setHidden("line_sil_color", $("silColor").value.toLowerCase()));
   // the silhouette is independent of the key details: ticking it does not turn them on
   ["outline_subject", "outline_subject_mask"].forEach(k => $(k).addEventListener("change", () => { syncSilhouetteSource(); updateSummaries(); schedule(); }));
@@ -4235,7 +4259,7 @@ async function init() {
   $("preview_sim").addEventListener("change", () => { refreshPreviewOnly(); rememberSettings(); });
   $("preview_nobridges").addEventListener("change", () => { refreshPreviewOnly(); rememberSettings(); });
   $("showAll").onclick = () => { HIDDEN.clear(); refreshPreviewOnly(); };
-  ["outline_width_mm", "outline_subject_width_mm", "outline_min_length_mm", "outline_follow_mm"].forEach(k => $(k).addEventListener("input", schedule));
+  ["outline_width_mm", "outline_subject_width_mm", "outline_min_length_mm", "outline_subject_min_length_mm", "outline_follow_mm"].forEach(k => $(k).addEventListener("input", schedule));
   renderOutlineSwatches();
   methodHint(); syncOutlineTarget();
 
@@ -4472,6 +4496,8 @@ function applyProjectSettings(info) {
   if ("px_per_mm" in vals && !("px_per_mm_auto" in vals)) vals.px_per_mm_auto = false;
   // (nor the colouring book's own settings: it used those of the key details and of the silhouette)
   if ("line_zones" in vals && !("line_zones_width_mm" in vals)) migrateLineZones(vals);
+  // (nor the own settings of the silhouette and of the key details: they shared some)
+  if ("outline_subject" in vals && !("outline_subject_min_length_mm" in vals)) migrateOwnSettings(vals);
   if (DEFAULTS) PARAMS.forEach(k => {
     if (!(k in vals) && k in DEFAULTS && !(legacyZones && k === "outline_zones")) vals[k] = DEFAULTS[k];
   });
@@ -4505,6 +4531,31 @@ function migrateLineZones(v) {
       if (g && z.groups[g]) { auto = z.groups[g].auto !== false; color = z.groups[g].color; }
     }
     if (!auto && /^#[0-9a-f]{6}$/i.test(color || "")) v.line_zones_color = color.toLowerCase();
+  }
+}
+// Settings saved when the silhouette took its minimum length (and, width 0, its width) from the
+// key-detail zone shown and, in the line style, its colour from the key details by default, and when
+// the key-detail lines took their interruptions from the silhouette: the same values become their own.
+function migrateOwnSettings(v) {
+  const num = (x, d) => (x === undefined || x === null || x === "" || isNaN(+x)) ? d : +x;
+  v.outline_subject_min_length_mm = num(v.outline_min_length_mm, 4);
+  if (!(num(v.outline_subject_width_mm, 0) > 0)) v.outline_subject_width_mm = num(v.outline_width_mm, 0.8);
+  const every = num(v.outline_subject_gap_every_mm, 0), gap = num(v.outline_subject_gap_mm, 1.5),
+        jit = num(v.outline_subject_gap_jitter, 0);
+  v.outline_gap_every_mm = every; v.outline_gap_mm = gap; v.outline_gap_jitter = jit;
+  let z = null;
+  try { z = JSON.parse(v.outline_zones || "null"); } catch (e) { z = null; }
+  if (z && Array.isArray(z.zones)) {
+    z.zones.forEach(zn => { if (zn && !("gap_every_mm" in zn)) Object.assign(zn, { gap_every_mm: every, gap_mm: gap, gap_jitter: jit }); });
+    v.outline_zones = JSON.stringify(z);
+  }
+  if (!v.line_sil_color) {           // "like the key details": their colour when it was chosen
+    let auto = v.outline_auto_color !== false, color = v.outline_color;
+    if (z && Array.isArray(z.zones) && z.zones.length && z.groups) {
+      const g = z.groups[z.sil_dest] ? z.sil_dest : (z.groups[z.zones[0].dest] ? z.zones[0].dest : Object.keys(z.groups)[0]);
+      if (g && z.groups[g]) { auto = z.groups[g].auto !== false; color = z.groups[g].color; }
+    }
+    if (!auto && /^#[0-9a-f]{6}$/i.test(color || "")) v.line_sil_color = color.toLowerCase();
   }
 }
 function loadMaskImage(src, coverage, kind = "outline:z1") {
@@ -5520,14 +5571,12 @@ function syncSilhouetteSource() {
   $("silSrcBox").hidden = !val("outline_subject");
   // weak edges: compared with the render of the colour layers (none in the line style)
   $("silWeakRow").hidden = line; $("silDeRow").hidden = line || !val("outline_subject_weak");
-  $("gapBox").hidden = !(val("outline_subject") || (line && val("outline")));
-  $("gapHint").textContent = line
-    ? "0 = continu. En trait seul : traits des détails clés et silhouette (le coloriage a les siens) ; les interruptions tiennent les boucles fermées comme des ponts."
-    : "0 = continu. Les interruptions tiennent la silhouette comme des ponts.";
+  $("gapBox").hidden = !val("outline_subject");
+  $("zoneGapBox").hidden = !line;     // key-detail interruptions: line style only
   // line style: own colours of the silhouette and of the colouring-book limits
   $("silColorRow").hidden = !line;
   const sc = val("line_sil_color");
-  $("silOwn").checked = !!sc; $("silColor").disabled = !sc; if (sc) $("silColor").value = sc;
+  $("silMode").value = sc ? "custom" : ""; $("silColor").hidden = !sc; if (sc) $("silColor").value = sc;
   const zc = val("line_zones_color");
   $("lzMode").value = zc === "" || zc === "tones" ? zc : "custom";
   $("lzColor").hidden = $("lzMode").value !== "custom"; if (zc.startsWith("#")) $("lzColor").value = zc;
