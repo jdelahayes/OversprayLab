@@ -511,13 +511,44 @@ try {
     "Style de pochoir": "Stencil style",
     "Couleurs pleines (aplats)": "Flat colours",
     "Trait seul (dessin au trait)": "Lines only (line drawing)",
-    "Trait seul : aucune couche pleine, seulement des pochoirs de traits (un par couleur de trait), réglés dans « Détails clés ». Le nombre de pochoirs fixe le nombre de zones de teinte du coloriage.":
-      "Lines only: no flat layer, only line stencils (one per line colour), set in “Key details”. The number of stencils sets the number of tone zones of the colouring book.",
     "Trait seul : chaque couleur de trait a son pochoir, pulvérisés du plus clair au plus foncé.":
       "Lines only: each line colour has its stencil, sprayed from the lightest to the darkest.",
     "Coloriage : tracer les limites entre les zones de teinte": "Colouring book: draw the limits between the tone zones",
     "Couleur des limites": "Colour of the limits",
-    "Comme les détails clés": "Same as the key details",
+    "Automatique (la plus contrastée avec le support)": "Automatic (most contrast with the support)",
+    "Teintes du coloriage": "Colouring-book tones",
+    "Surface mini (mm²)": "Min area (mm²)", "Lissage (mm)": "Smoothing (mm)", "Contraste mini (ΔE)": "Min contrast (ΔE)",
+    "Limiter à": "Limit to", "Toute l'image": "Whole image",
+    "Tracer le bord de la zone coloriée": "Draw the edge of the coloured area",
+    "Largeur maxi selon le contraste (mm)": "Max width by contrast (mm)",
+    "À cheval sur la limite": "Across the limit", "Dans la zone la plus foncée": "In the darker zone",
+    "Dans la zone la plus claire": "In the lighter zone", "Trait": "Stroke", "Zones": "Zones",
+    "Réglages propres au coloriage, indépendants des détails clés et de la silhouette. 0 = réglage désactivé (largeur maxi : largeur constante ; interruptions : limites continues).":
+      "Settings of the colouring book alone, independent of the key details and of the silhouette. 0 = setting off (max width: constant width; interruptions: continuous limits).",
+    "Trait seul : aucune couche pleine, seulement des pochoirs de traits (un par couleur de trait), réglés dans « Détails clés ». « Teintes du coloriage » fixe le nombre de zones de teinte du coloriage, indépendamment du nombre de pochoirs.":
+      "Lines only: no flat layer, only line stencils (one per line colour), set in “Key details”. “Colouring-book tones” sets the number of tone zones of the colouring book, independently of the number of stencils.",
+    "Les zones plus petites que cette surface sont absorbées par les zones voisines avant le tracé : moins de petites boucles (chacune demande un pont). 0 = toutes les zones.":
+      "Zones smaller than this area are absorbed by the neighbouring zones before tracing: fewer small loops (each needs a bridge). 0 = every zone.",
+    "Adoucit le contour des zones avant le tracé : courbes plus régulières, sans marches d'escalier. Les zones plus étroites qu'environ deux fois le lissage disparaissent. 0 = contours tels que calculés.":
+      "Smooths the outline of the zones before tracing: more regular curves, without staircase steps. Zones narrower than about twice the smoothing disappear. 0 = outlines as computed.",
+    "Pas de limite entre deux teintes plus proches que cet écart (ΔE) : un dégradé (ciel, joue) n'est plus découpé en bandes. 0 = toutes les limites.":
+      "No limit between two tones closer than this difference (ΔE): a gradient (sky, cheek) is no longer cut into bands. 0 = every limit.",
+    "Ne trace les limites qu'à l'intérieur du masque choisi (onglet Masques), indépendamment de celui de la silhouette.":
+      "Draws the limits only inside the chosen mask (Masks tab), independently of the silhouette's.",
+    "Trace aussi le bord de la zone coloriée : le cadre de l'image, ou le contour du masque choisi ou du sujet détouré.":
+      "Also draws the edge of the coloured area: the frame of the image, or the outline of the chosen mask or of the cut-out subject.",
+    "Au-dessus de la largeur : les limites entre teintes très différentes sont plus épaisses, jusqu'à cette largeur ; les plus douces gardent la largeur. 0 = largeur constante.":
+      "Above the width: the limits between very different tones are thicker, up to this width; the softest keep the width. 0 = constant width.",
+    "Place du trait par rapport à la limite : centré, ou entièrement dans la zone la plus foncée (ou la plus claire) des deux.":
+      "Where the stroke lies against the limit: centred, or wholly in the darker (or lighter) of the two zones.",
+    "Réglages propres au coloriage, indépendants des détails clés et de la silhouette. Interruptions : 0 = limites continues ; elles tiennent les zones fermées comme des ponts.":
+      "Settings of the colouring book alone, independent of the key details and of the silhouette. Interruptions: 0 = continuous limits; they hold the closed zones like bridges.",
+    "Largeur des limites découpées ; jamais plus fine que l'ouverture mini du matériau.":
+      "Width of the limits cut; never thinner than the material's minimum opening.",
+    "Les limites plus courtes sont ignorées (petites zones, bruit).": "Shorter limits are ignored (small zones, noise).",
+    "Les limites sont interrompues à intervalles réguliers, pour que les zones fermées restent tenues sans pont (0 = limites continues).":
+      "The limits are interrupted at regular intervals, so that the closed zones stay held without a bridge (0 = continuous limits).",
+    "Longueur de matière laissée à chaque interruption des limites.": "Length of material left at each interruption of the limits.",
     "Teinte de la zone la plus foncée (un pochoir par teinte)": "Tone of the darker zone (one stencil per tone)",
     "Couleur choisie": "Chosen colour",
     "Couleur propre pour la silhouette": "Own colour for the silhouette",
@@ -838,7 +869,8 @@ try {
     "Le trait est interrompu à intervalles réguliers (0 = trait continu)": "The line is interrupted at regular intervals (0 = continuous line)",
     "sur (mm)": "over (mm)",
     "Longueur de matière laissée à chaque interruption": "Length of material left at each interruption",
-    "0 = continu. En trait seul : tous les traits ; les interruptions tiennent les boucles fermées comme des ponts.": "0 = continuous. Lines only: every line; the interruptions hold the closed loops like bridges.",
+    "0 = continu. En trait seul : traits des détails clés et silhouette (le coloriage a les siens) ; les interruptions tiennent les boucles fermées comme des ponts.":
+      "0 = continuous. Lines only: key-detail lines and silhouette (the colouring book has its own); the interruptions hold the closed loops like bridges.",
     "0 = continu. Les interruptions tiennent la silhouette comme des ponts.": "0 = continuous. The interruptions hold the silhouette like bridges.",
     "0 = trait continu. Les interruptions tiennent la silhouette comme des ponts.": "0 = continuous line. The interruptions hold the silhouette like bridges.",
     "La teinte de l'image la plus contrastée avec le support": "The image tone with the most contrast against the support",
@@ -1326,6 +1358,8 @@ try {
     [/^Pochoir (\d+) \(traits\) : peinture (#[0-9a-f]{6})$/i, (m, n, c) => `Stencil ${n} (lines): paint ${c}`],
     [/^Pochoir (\d+) \(traits\) : couleur automatique$/, (m, n) => `Stencil ${n} (lines): automatic colour`],
     [/^(\d+) couches?( \+ contours)? · dans l'ordre$/, (m, n, c) => `${plural(n, "layer")}${c ? " + outline" : ""} · in order`],
+    [/^trait seul · (\d+) teintes? · détail (\d+)(?: · teinte (\d+) %)?(?: · vivacité (\d+) %)?(?: · aplats (\d+))?( · zones d'aplat)?$/, (m, n, d, h, v, f, z) =>
+      `lines only · ${plural(n, "tone")} · detail ${d}${h ? ` · hue ${h} %` : ""}${v ? ` · vividness ${v} %` : ""}${f ? ` · flat areas ${f}` : ""}${z ? " · flat zones" : ""}`],
     [/^(trait seul · )?(\d+) pochoirs? · détail (\d+)(?: · teinte (\d+) %)?(?: · vivacité (\d+) %)?(?: · aplats (\d+))?( · zones d'aplat)?$/, (m, l, n, d, h, v, f, z) =>
       `${l ? "lines only · " : ""}${plural(n, "stencil")} · detail ${d}${h ? ` · hue ${h} %` : ""}${v ? ` · vividness ${v} %` : ""}${f ? ` · flat areas ${f}` : ""}${z ? " · flat zones" : ""}`],
     [/^Zones d'aplat : ([\d.]+) % de l'image — chaque zone séparée prend sa teinte principale \(tolérance (\d+)\)\.$/,
@@ -1371,6 +1405,8 @@ try {
     [/^Couche (\d+) \(contours\) : couleur automatique$/, (m, n) => `Layer ${n} (outline): automatic colour`],
     [/^Masque (contours|sujet|silhouette|aplats) copié dans le masque (contours|sujet|silhouette|aplats)$/, (m, a, b) => `${MASK_EN[a]} mask copied into the ${MASK_EN[b]} mask`],
     [/^Silhouette : le masque (sujet|silhouette|contours \(détails clés\)) est vide \(onglet Masques\)$/, (m, a) => `Silhouette: the ${MASK_EN[a]} mask is empty (Masks tab)`],
+    [/^Coloriage : le masque (sujet|silhouette|contours \(détails clés\)) est vide \(onglet Masques\) ; limites tracées sur toute l'image$/,
+      (m, a) => `Colouring book: the ${MASK_EN[a]} mask is empty (Masks tab); limits drawn over the whole image`],
     [/^Zone peinte : ([\d.]+) % de l'image — son contour est tracé par les contours \(masque silhouette\)\.$/, (m, a) => `Painted area: ${a} % of the image — its outline is drawn by the outline (silhouette mask).`],
     [/^Couche (\d+) : (#[0-9a-f]{6})$/i, (m, n, h) => `Layer ${n}: ${h}`],
     [/^Couleur de la peinture de la couche (\d+) \((choisie|calculée)\) — cliquer pour changer$/,

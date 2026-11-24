@@ -161,7 +161,19 @@ class Params:
     # tone zones (`line_zones`, colouring-book style); one stencil per line colour.
     stencil_style: str = "fill"
     line_zones: bool = False
-    line_zones_color: str = ""          # "" = colour of the key-detail lines | "tones" = darker tone of the two zones | #hex
+    # colouring book: its own settings, independent of the key details and of the silhouette
+    line_zones_color: str = ""          # "" = automatic (tone with the most contrast against the support) | "tones" = darker tone of the two zones | #hex
+    line_zones_width_mm: float = 0.8    # width of the limits (at least the minimum opening)
+    line_zones_min_length_mm: float = 4.0   # shorter limits are left out
+    line_zones_gap_every_mm: float = 0.0    # limits interrupted every … mm (0 = continuous)
+    line_zones_gap_mm: float = 1.5      # length of an interruption (material left: a built-in bridge)
+    line_zones_width_max_mm: float = 0.0    # > width: the width grows with the contrast across the limit up to this (0 = constant)
+    line_zones_min_de: float = 0.0      # limits between tones closer than this (ΔE) are not drawn
+    line_zones_min_area_mm2: float = 0.0    # smaller zones are absorbed by their neighbours before tracing
+    line_zones_smooth_mm: float = 0.0   # smoothing of the zones (Gaussian sigma) before tracing their limits
+    line_zones_pos: str = "center"      # stroke against the limit: center | dark (in the darker zone) | light
+    line_zones_mask: str = ""           # "" = whole image | subject | silhouette | outline: only inside that mask
+    line_zones_frame: bool = False      # also draw the edge of the area coloured (image, mask, subject)
     line_sil_color: str = ""            # "" = colour of the key-detail lines | #hex
     outline_color: str = "#1e1e1e"
     # Paint colours chosen for the layers: "1=#rrggbb;3=#rrggbb" (layer number -> colour).
@@ -267,6 +279,20 @@ class Params:
         if 0 < p.outline_subject_gap_every_mm < 5:
             p.outline_subject_gap_every_mm = 5.0
         p.outline_subject_gap_mm = float(np.clip(p.outline_subject_gap_mm, 0.3, 20))
+        p.line_zones_width_mm = float(np.clip(p.line_zones_width_mm, 0.2, 10))
+        p.line_zones_min_length_mm = float(np.clip(p.line_zones_min_length_mm, 0, 200))
+        p.line_zones_gap_every_mm = float(np.clip(p.line_zones_gap_every_mm, 0, 1000))
+        if 0 < p.line_zones_gap_every_mm < 5:
+            p.line_zones_gap_every_mm = 5.0
+        p.line_zones_gap_mm = float(np.clip(p.line_zones_gap_mm, 0.3, 20))
+        p.line_zones_width_max_mm = float(np.clip(p.line_zones_width_max_mm, 0, 10))
+        p.line_zones_min_de = float(np.clip(p.line_zones_min_de, 0, 100))
+        p.line_zones_min_area_mm2 = float(np.clip(p.line_zones_min_area_mm2, 0, 10000))
+        p.line_zones_smooth_mm = float(np.clip(p.line_zones_smooth_mm, 0, 10))
+        if p.line_zones_pos not in ("center", "dark", "light"):
+            p.line_zones_pos = "center"
+        if p.line_zones_mask not in ("", "subject", "silhouette", "outline"):
+            p.line_zones_mask = ""
         if p.outline_subject_pos not in ("center", "outside", "inside"):
             p.outline_subject_pos = "center"
         p.outline_subject_width_mm = float(np.clip(p.outline_subject_width_mm, 0, 20))
@@ -550,6 +576,9 @@ class Prepared:
     # area whose outline is drawn by the outline (option `outline_subject`): selected subject or
     # another mask, computed image size (set by the server for each computation; None = prep.fg)
     subject: np.ndarray | None = None
+    # area the colouring-book limits are limited to (option `line_zones_mask`), computed image size
+    # (set by the server for each computation; None = the whole image)
+    zones_area: np.ndarray | None = None
     # painted flat zones, computed image size (shown on the layer views): "auto" zones (main tone)
     # and the zones forced into the layer of a tone {tone: mask}
     flat_zones: np.ndarray | None = None
@@ -3894,15 +3923,16 @@ def hyst_seed_share(method: str, keep_share: float) -> float:
     return keep_share / (1.0 + (d0 - 1.0) * (1.0 - keep_share) ** 3)
 
 
-def gap_lines(line: np.ndarray, p: Params) -> tuple[np.ndarray, np.ndarray | None]:
-    """Interrupts any line drawing (one-pixel lines) about every `outline_subject_gap_every_mm`
+def gap_lines(line: np.ndarray, ppm: float, every_mm: float, gap_mm: float,
+              width_mm: float) -> tuple[np.ndarray, np.ndarray | None]:
+    """Interrupts any line drawing (one-pixel lines, drawn `width_mm` wide) about every `every_mm`
     (distance between interruptions, measured in a straight line: close to the length along smooth
-    lines), so that closed loops do not cut islands out. Returns (line, zones of the interruptions)."""
-    every = p.outline_subject_gap_every_mm * p.px_per_mm
+    lines) over `gap_mm`, so that closed loops do not cut islands out. Returns (line, zones of the
+    interruptions)."""
+    every = every_mm * ppm
     if every <= 0 or not line.any():
         return line, None
-    width = max(p.outline_width_mm, p.min_opening_mm * 1.05)
-    r = max(1, int(round((p.outline_subject_gap_mm + width) * p.px_per_mm / 2)))
+    r = max(1, int(round((gap_mm + width_mm) * ppm / 2)))
     ys, xs = np.nonzero(line)
     # greedy sampling, bucketed on a grid of cells of `every`: a point closer than `every` to a
     # centre already taken is skipped
@@ -3933,29 +3963,103 @@ def gap_lines(line: np.ndarray, p: Params) -> tuple[np.ndarray, np.ndarray | Non
     return line & ~zones, zones
 
 
-def zone_limits(prep: Prepared, p: Params) -> tuple[np.ndarray, np.ndarray]:
-    """Limits between the tone zones (colouring-book lines): one-pixel line and, for each line
-    pixel, the darker of the two tones it separates."""
+def _absorb_small_zones(lab: np.ndarray, min_px: float) -> np.ndarray:
+    """Label map where the zones smaller than `min_px` pixels take the tone of the zones around them
+    (each pixel the one of the nearest pixel kept: a small zone between two may be shared)."""
+    small = np.zeros(lab.shape, bool)
+    for t in np.unique(lab).tolist():
+        check_cancel()
+        _, cc, st, _ = cv2.connectedComponentsWithStats((lab == t).astype(np.uint8), connectivity=4)
+        tiny = st[:, cv2.CC_STAT_AREA] < min_px
+        tiny[0] = False                 # component 0: the other tones
+        if tiny.any():
+            small |= tiny[cc]
+    if not small.any() or small.all():
+        return lab
+    _, near = cv2.distanceTransformWithLabels(small.astype(np.uint8), cv2.DIST_L2, 5,
+                                             labelType=cv2.DIST_LABEL_PIXEL)
+    ys, xs = np.nonzero(~small)
+    lut = np.zeros(int(near.max()) + 1, lab.dtype)
+    lut[near[ys, xs]] = lab[ys, xs]
+    out = lab.copy()
+    out[small] = lut[near[small]]
+    return out
+
+
+def _smooth_zones(lab: np.ndarray, sigma: float) -> np.ndarray:
+    """Label map with smoother limits: each pixel takes the tone most present around it (Gaussian
+    weights of standard deviation `sigma` pixels)."""
+    best = np.full(lab.shape, -1.0, np.float32)
+    out = lab.copy()
+    for t in np.unique(lab).tolist():
+        check_cancel()
+        s = cv2.GaussianBlur((lab == t).astype(np.float32), (0, 0), sigma)
+        upd = s > best
+        out[upd] = t
+        best[upd] = s[upd]
+    return out
+
+
+def _nearest_line(line: np.ndarray) -> tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
+    """For every pixel: distance (px) to the nearest pixel of `line` and the position of that pixel
+    in (ys, xs) = np.nonzero(line). Returns (distance, position, ys, xs)."""
+    dist, near = cv2.distanceTransformWithLabels((~line).astype(np.uint8), cv2.DIST_L2, 5,
+                                                 labelType=cv2.DIST_LABEL_PIXEL)
+    ys, xs = np.nonzero(line)
+    pos = np.zeros(int(near.max()) + 1, np.int64)
+    pos[near[ys, xs]] = np.arange(len(ys))
+    return dist, pos[near], ys, xs
+
+
+def zone_limits(prep: Prepared, p: Params, support) -> tuple:
+    """Limits between the tone zones (colouring-book lines), with the colouring book's own settings:
+    small zones absorbed, zones smoothed, limits between close tones left out, only inside the
+    chosen mask, edge of the area coloured. Returns (one-pixel line, darker of the two tones each
+    line pixel separates, contrast across it (ΔE), label map the limits were traced on)."""
+    ppm = p.px_per_mm
     lab = prep.labels
-    Lt = _lab(prep.palette)[:, 0]
+    if p.line_zones_min_area_mm2 > 0:
+        lab = _absorb_small_zones(lab, p.line_zones_min_area_mm2 * ppm * ppm)
+    if p.line_zones_smooth_mm > 0:
+        lab = _smooth_zones(lab, p.line_zones_smooth_mm * ppm)
+    pal = _lab(prep.palette)
+    Lt = pal[:, 0]
+    dmat = np.linalg.norm(pal[:, None, :] - pal[None, :, :], axis=2).astype(np.float32)
     line = np.zeros(lab.shape, bool)
     darker = np.full(lab.shape, -1, np.int32)
+    de = np.zeros(lab.shape, np.float32)
     for a, b, sl in ((lab[:, :-1], lab[:, 1:], (slice(None), slice(1, None))),
                      (lab[:-1], lab[1:], (slice(1, None), slice(None)))):
         diff = a != b
+        dab = dmat[a, b]
+        if p.line_zones_min_de > 0:     # close tones: no limit between them
+            diff &= dab >= p.line_zones_min_de
         d = np.where(Lt[a] <= Lt[b], a, b)
         line[sl] |= diff
         darker[sl][diff] = d[diff]
-    if prep.fg is not None:             # removed background: only the limits inside the subject
-        line &= cv2.erode(prep.fg.astype(np.uint8), np.ones((3, 3), np.uint8)) > 0
-    ppm = p.px_per_mm
+        de[sl][diff] = dab[diff]
+    area = None                         # removed background and chosen mask: only the limits inside
+    for m in (prep.fg, getattr(prep, "zones_area", None)):
+        if m is not None:
+            area = m if area is None else (area & m)
+    if area is not None:
+        line &= cv2.erode(area.astype(np.uint8), np.ones((3, 3), np.uint8)) > 0
     bd = max(2, int(round(0.5 * ppm)))  # the image's own edge is not a limit
     line[:bd, :] = False; line[-bd:, :] = False; line[:, :bd] = False; line[:, -bd:] = False
+    if p.line_zones_frame:              # edge of the area coloured, its stroke inside it
+        w = max(p.line_zones_width_mm, p.line_zones_width_max_mm, p.min_opening_mm * 1.05)
+        r = max(bd, int(math.ceil(w * ppm / 2)) + 1)
+        inside = np.ones(lab.shape, np.uint8) if area is None else area.astype(np.uint8)
+        inside = cv2.distanceTransform(np.pad(inside, 1), cv2.DIST_L2, 5)[1:-1, 1:-1] > r
+        edge = inside & ~(cv2.erode(inside.astype(np.uint8), np.ones((3, 3), np.uint8)) > 0)
+        line |= edge
+        darker[edge] = lab[edge]        # the tone of the zone it closes, its contrast with the support
+        de[edge] = np.linalg.norm(pal - _lab(support)[0], axis=1).astype(np.float32)[lab[edge]]
     n, lab_c, stats, _ = cv2.connectedComponentsWithStats(line.astype(np.uint8), connectivity=8)
     length = np.maximum(stats[:, cv2.CC_STAT_WIDTH], stats[:, cv2.CC_STAT_HEIGHT])
-    keep = length >= max(2, int(p.outline_min_length_mm * ppm))
+    keep = length >= max(2, int(p.line_zones_min_length_mm * ppm))
     keep[0] = False
-    return keep[lab_c], darker
+    return keep[lab_c], darker, de, lab
 
 
 def line_stencils(prep: Prepared, p: Params, entries: list, groups: dict, support: np.ndarray,
@@ -3980,7 +4084,6 @@ def line_stencils(prep: Prepared, p: Params, entries: list, groups: dict, suppor
     def colour(h):
         return hex_to_bgr(h).astype(np.uint8) if h.startswith("#") else base
 
-    width0 = max(p.outline_width_mm, p.min_opening_mm * 1.05)
     parts = []                          # (one-pixel line, colour, source, line width mm)
     zones = np.zeros((H, W), bool)
     for pe, reg, dest, is_sil in entries:
@@ -3988,8 +4091,9 @@ def line_stencils(prep: Prepared, p: Params, entries: list, groups: dict, suppor
             continue
         g, c = gcol(dest)
         st = detect_key_details(prep, flat, pe, reg, outline_is_dark(c, support), stages=True)
-        ln, z = gap_lines(st["kept"], pe)
-        parts.append((ln, c, "details:" + g, max(pe.outline_width_mm, p.min_opening_mm * 1.05)))
+        w = max(pe.outline_width_mm, p.min_opening_mm * 1.05)
+        ln, z = gap_lines(st["kept"], ppm, pe.outline_subject_gap_every_mm, pe.outline_subject_gap_mm, w)
+        parts.append((ln, c, "details:" + g, w))
         if z is not None:
             zones |= z
     if p.outline_subject:
@@ -3998,29 +4102,55 @@ def line_stencils(prep: Prepared, p: Params, entries: list, groups: dict, suppor
             parts.append((ln, colour(p.line_sil_color), "silhouette", silhouette_width(p)))
             if z is not None:
                 zones |= z
-    if p.line_zones:
-        ln, darker = zone_limits(prep, p)
-        ln, z = gap_lines(ln, p)
+    if p.line_zones:                    # colouring book: its own settings only
+        wz = max(p.line_zones_width_mm, p.min_opening_mm * 1.05)
+        wz2 = max(p.line_zones_width_max_mm, wz) if p.line_zones_width_max_mm > 0 else wz
+        ln, darker, de, zlab = zone_limits(prep, p, support)
+        ln, z = gap_lines(ln, ppm, p.line_zones_gap_every_mm, p.line_zones_gap_mm, wz2)
         if z is not None:
             zones |= z
+        wmap = None                     # width (mm) of each line pixel, growing with the contrast
+        if wz2 > wz and ln.any():
+            lo, hi = float(de[ln].min()), float(de[ln].max())
+            wmap = wz + (wz2 - wz) * np.clip((de - lo) / max(hi - lo, 1e-6), 0, 1)
+        stroke = None                   # None: each line pixel drawn as a disk of the width, centred
+        if wmap is not None or p.line_zones_pos != "center":
+            def stroke(sub, wmap=wmap, wz=wz, darker=darker, zlab=zlab):
+                """Stroke of the limits `sub`: their width at the nearest limit pixel, centred on the
+                limit or all on the side of its darker / lighter zone."""
+                dist, k, ys, xs = _nearest_line(sub)
+                w = (wmap[ys, xs] if wmap is not None else np.full(len(ys), wz, np.float32)) * ppm
+                wk = w[k]
+                if p.line_zones_pos == "center":
+                    band = dist <= wk / 2
+                else:
+                    # + 1 px: as wide as a centred stroke, which also holds the limit pixel
+                    dark = zlab == darker[ys, xs][k]
+                    band = (dist <= wk + 1) & (dark if p.line_zones_pos == "dark" else ~dark)
+                return band.astype(np.uint8) * 255
         if p.line_zones_color == "tones":
             paints = parse_tone_colors(p.layer_colors)
             for t in np.unique(darker[ln]).tolist():
                 if t >= 0:
                     c = paints.get(t, prep.palette[t].astype(np.uint8))
-                    parts.append((ln & (darker == t), c, f"tone{t}", width0))
+                    parts.append((ln & (darker == t), c, f"tone{t}", wz2, stroke))
         else:
-            parts.append((ln, colour(p.line_zones_color), "zones", width0))
-    wmax = max([w for *_, w in parts] + [width0])
+            c = (hex_to_bgr(p.line_zones_color).astype(np.uint8) if p.line_zones_color.startswith("#")
+                 else np.asarray(outline_color(prep, support, replace(p, outline_auto_color=True)), np.uint8))
+            parts.append((ln, c, "zones", wz2, stroke))
+    wmax = max([pt[3] for pt in parts] + [p.min_opening_mm * 1.05])
     # the interruptions of a line stay free of every other line
     free = ~(cv2.dilate(zones.astype(np.uint8), disk(wmax * ppm / 2)) > 0)
     by_colour: dict[str, list] = {}
-    for ln, c, src, w in parts:
+    for ln, c, src, w, *make in parts:
         ln = ln & free
         if not ln.any():
             continue
         g = by_colour.setdefault(bgr_hex(c), [np.zeros((H, W), np.uint8), [], np.asarray(c, np.uint8)])
-        g[0] |= cv2.dilate(ln.astype(np.uint8) * 255, disk(w * ppm / 2))   # each line its own width
+        if make and make[0] is not None:    # own stroke (colouring book: width, position)
+            g[0] |= make[0](ln)
+        else:                               # each line its own width
+            g[0] |= cv2.dilate(ln.astype(np.uint8) * 255, disk(w * ppm / 2))
         if src not in g[1]:
             g[1].append(src)
     order = sorted(by_colour.values(), key=lambda g: -float(_lab(g[2].reshape(1, 3))[0, 0]))  # light first
