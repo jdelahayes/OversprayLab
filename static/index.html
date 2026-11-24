@@ -523,7 +523,11 @@
   .weakov g { transition: opacity .15s; }
   .weakov g.near { opacity: 0; }   /* pointer inside it with the bridge tool: out of the way */
   body.no-support .lv .weakov { display: none; }
-  .card .weaklink { color: #d97706; cursor: pointer; text-decoration: underline dotted; }
+  .card .lnum { min-width: 22px; height: 22px; padding: 0 5px; box-sizing: border-box; display: inline-grid; place-items: center;
+                border: 1px solid var(--line); border-radius: 5px; font-size: 12px; font-variant-numeric: tabular-nums; flex: none; }
+  .card .linfo.lwarn { color: #d97706; cursor: pointer; }
+  #layerTip .tipwarn { color: #d97706; font-weight: 600; }
+  #layerTip small { display: inline-block; margin-bottom: 4px; color: var(--muted); font-size: 11px; }
   body.no-bridges .lv .ov-bridges, body.no-lost .lv .ov-lost, body.no-merged .lv .ov-merged, body.no-flat .lv .ov-flat, body.no-support .lv .ov-support { display: none; }
   /* manual bridges on the layer view (sheet mm): blue = drawn, grey = no effect, dashed orange = ignored */
   .mbov { position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none; overflow: visible; z-index: 6; }
@@ -6510,13 +6514,15 @@ function render() {
   $("layers").innerHTML = LAST.layers.map((L, i) => `
     <div class="card ${SEL === i ? "sel" : ""} ${HIDDEN.has(L.index) ? "hidden-layer" : ""}" data-i="${i}" data-idx="${L.index}">
       <div class="meta">
-        <div class="t">${L.kind === "outline"
+        <div class="t"><span class="lnum">${L.index}</span>${L.kind === "outline"
           ? `<button type="button" class="lcolor" data-idx="${L.index}" style="background:${L.color}" aria-haspopup="dialog" title="Couleur du trait des contours${groupAuto(L.group || "A") ? " (automatique)" : " (choisie)"} — cliquer pour changer"></button>`
-          : `<button type="button" class="lcolor" data-idx="${L.index}" style="background:${L.color}" aria-haspopup="dialog" title="Couleur de la peinture de la couche ${L.index}${layerColors()[L.index] ? " (choisie)" : " (calculée)"} — cliquer pour changer"></button>`}${L.index}${L.kind === "outline" ? ` (contours${L.group ? " " + L.group : ""}) ✎` : ""}${customColor(L)
+          : `<button type="button" class="lcolor" data-idx="${L.index}" style="background:${L.color}" aria-haspopup="dialog" title="Couleur de la peinture de la couche ${L.index}${layerColors()[L.index] ? " (choisie)" : " (calculée)"} — cliquer pour changer"></button>`}${L.kind === "outline" ? `(contours${L.group ? " " + L.group : ""}) ✎` : ""}${customColor(L)
           ? ` <button type="button" class="lcreset" data-idx="${L.index}" title="Revenir à la teinte calculée" aria-label="Revenir à la teinte calculée">${ICO_RESET}</button>` : ""}
           ${fxBadge(L)}
           ${L.kind !== "outline" && L.tone != null ? `<button type="button" class="lflat${FLAT_COVS["t" + L.tone] > 0 ? " on" : ""}" data-tone="${L.tone}" title="Peindre un aplat dans cette couche : les zones peintes (ou objets sélectionnés) prennent la couleur de cette couche, les détails francs restent (onglet Masques, masque Aplats)" aria-label="Peindre un aplat dans cette couche">${ICO_FLAT}</button>` : ""}
-          <button type="button" class="linfo" aria-label="Informations sur la couche">${ICO_INFO}<span class="linfo-body" hidden>
+          <button type="button" class="linfo${L.weak_spots ? " lwarn" : ""}" aria-label="Informations sur la couche">${ICO_INFO}<span class="linfo-body" hidden>
+            ${L.weak_spots ? `<span class="tipwarn">⚠ ${L.weak_spots} partie(s) fragile(s)</span><br>
+            <small>Parties tenues d'un seul côté, sans place pour un pont. Cliquer sur l'icône pour les afficher sur la couche (cerclées en rouge sur la carte du maintien).</small><br>` : ""}
             ${L.paths} tracés · ${L.nodes} nœuds · ${L.islands} îlot${L.islands > 1 ? "s" : ""} · ${L.bridges} ponts${L.merged ? ` · ${L.merged} fusion${L.merged > 1 ? "s" : ""}` : ""}<br>
             ${L.struct_bridges ? `dont ${L.struct_bridges} pont(s) structurel(s)<br>` : ""}
             ${L.manual_bridges ? `dont ${L.manual_bridges} pont(s) manuel(s)<br>` : ""}
@@ -6526,7 +6532,6 @@ function render() {
         ${LAST.bridges_paused ? `<span style="color:#d97706">Ponts automatiques en pause</span><br>` : ""}
         ${L.short_islands ? `<span style="color:#d97706">⚠ ${L.short_islands} îlot(s) sans place pour ${val("min_bridges")} ponts</span><br>` : ""}
         ${(n => n ? `<span style="color:#d97706">⚠ ${n} pont(s) manuel(s) ignoré(s) : extrémité hors de la matière ou de la feuille</span><br>` : "")(manualIgnored(L))}
-        ${L.weak_spots ? `<span class="weaklink" title="Parties tenues d'un seul côté, sans place pour un pont. Cliquer pour les afficher sur la couche (cerclées en rouge sur la carte du maintien).">⚠ ${L.weak_spots} partie(s) fragile(s)</span><br>` : ""}
       </div>
       ${layerStack(L)}
     </div>`).join("");
@@ -6548,8 +6553,9 @@ function render() {
     if (e.target.closest(".fxbadge")) { showFxLayer(+e.target.closest(".fxbadge").dataset.idx); return; }
     if (e.target.closest(".lflat")) { flatOpen("t" + e.target.closest(".lflat").dataset.tone); return; }
     if (e.target.closest(".lcolor")) return;                       // colour picker: no selection
-    if (e.target.closest(".linfo")) return;                        // details tooltip: no selection
-    if (e.target.closest(".weaklink")) {                          // weak parts: the layer with its support map
+    // details tooltip: no selection, unless it warns of weak parts (shown on the layer with its support map)
+    if (e.target.closest(".linfo:not(.lwarn)")) return;
+    if (e.target.closest(".linfo")) {
       SEL = +c.dataset.i; BR.sel = null; BR.autoSeg = null;
       if ($("lgSupport").getAttribute("aria-pressed") !== "true") $("lgSupport").click();   // shown (remembered)
       render();

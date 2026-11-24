@@ -221,8 +221,8 @@ try {
     "Pont automatique retiré sans toucher aux autres : « Rétablir le pont » le remet.": "Automatic bridge taken off without changing the others: “Restore the bridge” puts it back.",
     "Pont manuel découpé sans toucher aux ponts automatiques": "Manual bridge cut without changing the automatic bridges",
     "Les ponts automatiques tiennent compte de ce pont manuel": "The automatic bridges take this manual bridge into account",
-    "Parties tenues d'un seul côté, sans place pour un pont. Cliquer pour les afficher sur la couche (cerclées en rouge sur la carte du maintien).":
-      "Parts held from one side only, with no room for a bridge. Click to show them on the layer (circled in red on the support map).",
+    "Parties tenues d'un seul côté, sans place pour un pont. Cliquer sur l'icône pour les afficher sur la couche (cerclées en rouge sur la carte du maintien).":
+      "Parts held from one side only, with no room for a bridge. Click the icon to show them on the layer (circled in red on the support map).",
     "Pont automatique rétabli": "Automatic bridge restored", "Rétablir le pont": "Restore the bridge",
     "Rattacher à cette couche": "Attach to this layer",
     "Ce pont n'appartient plus à aucune couche (aucune couche ne peint plus sa teinte) : le rattacher à la couche affichée":
@@ -1360,7 +1360,7 @@ try {
     [/^(\d+) teintes? bien distinctes? détectées? ; (\d+) teintes retenues( \(dont celle laissée au support\))? : (.+)\.$/,
       (m, a, b, c, r) => `${plural(a, "clearly distinct tone")} detected; ${b} tones kept${c ? " (including the one left to the support)" : ""}: ${trAny(r)}.`],
     [/^écart à l'original jugé bon \(ΔE ([\d.]+) ≤ ([\d.]+)\)$/, (m, a, b) => `difference from original judged good (ΔE ${a} ≤ ${b})`],
-    [/^(\d+) \(contours( [A-Z])?\) ✎$/, (m, n, g) => `${n} (outline${g || ""}) ✎`],
+    [/^\(contours( [A-Z])?\) ✎$/, (m, g) => `(outline${g || ""}) ✎`],
     [/^Couche (\d+)( \(contours\))?$/, (m, n, c) => `Layer ${n}${c ? " (outline)" : ""}`],
     [/^(.+) — tolérance (\d+(?:\.\d+)?)$/, (m, n, v) => `${trAny(n) ?? n} — tolerance ${v}`],
     [/^(.+) — tolérance générale$/, (m, n) => `${trAny(n) ?? n} — general tolerance`],
