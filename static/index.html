@@ -723,7 +723,6 @@
   .fxdel, .fxldel { border: 0; background: none; padding: 2px 6px; color: var(--muted); font-size: 14px; line-height: 1; }
   .fxdel:hover, .fxldel:hover { color: var(--accent); }
   .fxparams { padding: 0 8px 6px; font-size: 12px; }
-  .fxparams select { margin-bottom: 4px; }
   .fxnone { margin: 4px 2px 0; }
   .fxp[hidden] { display: none; }
   .fxbadge { font-size: 11px; padding: 1px 6px; border-radius: 9px; line-height: 1.4; margin-left: 4px;
@@ -735,7 +734,7 @@
   .vt-icons { display: inline-flex; gap: 4px; margin-left: auto; }
   .vt-icons[hidden] { display: none; }
   .vt-ico { padding: 3px 8px; line-height: 0; }
-  .fxopts { margin: 2px 0 8px; padding: 4px 0 6px; border-bottom: 1px solid var(--line); font-size: 12px; }
+  .fxopts { margin: 2px 0 8px; padding: 4px 0 6px; border-bottom: 1px solid var(--line); }
   .fxopts .check { align-items: flex-start; }
   .fxopts .check label { min-width: 0; }
   .zonebar, .mzones { display: flex; flex-wrap: wrap; gap: 4px; align-items: center; }
@@ -1115,11 +1114,11 @@
     <legend>Simplification</legend>
     <div class="subhead">Pochoirs</div>
     <div class="ogroup">
-      <label class="full" for="stencil_style">Style de pochoir</label>
-      <select id="stencil_style">
-        <option value="fill">Couleurs pleines (aplats)</option>
-        <option value="line">Trait seul (dessin au trait)</option>
-      </select>
+      <label class="row sel" for="stencil_style">Style de pochoir
+        <select id="stencil_style">
+          <option value="fill">Couleurs pleines (aplats)</option>
+          <option value="line">Trait seul (dessin au trait)</option>
+        </select></label>
       <p class="hint" id="styleHint" hidden>Trait seul : aucune couche pleine, seulement des pochoirs de traits (un par couleur de trait), réglés dans « Détails clés ». « Teintes du coloriage » fixe le nombre de zones de teinte du coloriage, indépendamment du nombre de pochoirs.</p>
       <label class="full" for="n_layers" id="nLayersLbl">Nombre de pochoirs</label>
       <div class="nchips" id="nLayerChips" role="group" aria-label="Nombre de pochoirs"></div>
@@ -1130,12 +1129,12 @@
     </div>
     <div class="subhead">Couleurs</div>
     <div class="ogroup">
-      <label class="full">Mode</label>
-      <select id="color_mode">
-        <option value="auto">Automatique</option>
-        <option value="color">Couleur</option>
-        <option value="gray">Noir & blanc / niveaux de gris</option>
-      </select>
+      <label class="row sel" for="color_mode">Mode
+        <select id="color_mode">
+          <option value="auto">Automatique</option>
+          <option value="color">Couleur</option>
+          <option value="gray">Noir & blanc / niveaux de gris</option>
+        </select></label>
       <label class="row">Poids de la teinte (%) <span class="v" id="hue_weight_v"></span>
         <input type="range" id="hue_weight" min="0" max="300" step="10" value="40"></label>
       <label class="row">Vivacité des couleurs (%) <span class="v" id="color_vividness_v"></span>
@@ -1162,11 +1161,11 @@
     <div id="fillOnly">
       <div class="subhead">Couches</div>
       <div class="ogroup">
-        <label class="full">Superposition des couches</label>
-        <select id="layering">
-          <option value="exclusive" selected>Exclusive (chaque couleur seule)</option>
-          <option value="cumulative">Cumulative (du clair au foncé, chevauchement)</option>
-        </select>
+        <label class="row sel" for="layering">Superposition des couches
+          <select id="layering">
+            <option value="exclusive" selected>Exclusive (chaque couleur seule)</option>
+            <option value="cumulative">Cumulative (du clair au foncé, chevauchement)</option>
+          </select></label>
         <p class="hint">Cumulatif : chaque pochoir ouvre sa couleur + les plus foncées. Moins de pièces fragiles et pas de liseré entre couleurs.</p>
         <div class="check"><input type="checkbox" id="skip_support" checked><label for="skip_support">La teinte la plus proche du support reste nue (pas de pochoir)</label></div>
         <div class="check"><input type="checkbox" id="fill_gaps"><label for="fill_gaps">Combler les trous laissés par les limites du matériau</label></div>
@@ -1194,8 +1193,8 @@
     <legend>Détails clés</legend>
     <div id="lineBox" hidden>
       <p class="hint">Trait seul : un pochoir par couleur de trait, du plus clair au plus foncé.</p>
-      <div class="check"><input type="checkbox" id="line_zones"><label for="line_zones">Coloriage : tracer les limites entre les zones de teinte</label></div>
-      <div id="lzBox" hidden>
+      <div class="check"><input type="checkbox" id="line_zones"><label for="line_zones">Contour de coloriage : tracer les limites entre les zones de teinte</label></div>
+      <div class="ogroup" id="lzBox" hidden>
         <label class="row sel" for="lzMode">Couleur des limites
           <span class="selc">
             <select id="lzMode">
@@ -1236,14 +1235,14 @@
           <label class="row">sur (mm) <input type="number" id="line_zones_gap_mm" value="1.5" min="0.3" max="20" step="0.5"></label>
         </div>
         <label class="row">Variation de la distance (%) <input type="number" id="line_zones_gap_jitter" value="0" min="0" max="80" step="5"></label>
-        <p class="hint">Réglages propres au coloriage, indépendants des détails clés et de la silhouette. 0 = réglage désactivé (largeur maxi : largeur constante ; interruptions : limites continues).</p>
+        <p class="hint">0 = limites continues. Les interruptions tiennent les zones fermées comme des ponts.</p>
       </div>
       <input type="hidden" id="line_zones_color" value="">
       <input type="hidden" id="line_sil_color" value="">
       <input type="hidden" id="outline_zones" value="">
     </div>
 
-    <div class="check ohead" title="Détecte les détails nets de l'image que la simplification et le flou de l'aérographe estompent (yeux, traits fins, mèches…) et les redessine d'un trait fin."><input type="checkbox" id="outline"><label for="outline">Détails clés estompés</label></div>
+    <div class="check ohead" title="Détecte les détails nets de l'image que la simplification et le flou de l'aérographe estompent (yeux, traits fins, mèches…) et les redessine d'un trait fin."><input type="checkbox" id="outline"><label for="outline">Détails clés</label></div>
     <div class="ogroup" id="zoneGroup">
       <div id="zoneBox">
         <div class="zonebar" id="zoneBar" role="group" aria-label="Zones de contours"></div>
@@ -1270,12 +1269,12 @@
         </select>
         <p class="hint" id="outline_target_hint"></p>
         <div id="zoneExclBox">
-          <label class="full" for="zoneExcl">Exclus des autres couches</label>
-          <select id="zoneExcl" style="width:100%">
-            <option value="">Réglage général</option>
-            <option value="on">Oui</option>
-            <option value="off">Non</option>
-          </select>
+          <label class="row sel" for="zoneExcl">Exclus des autres couches
+            <select id="zoneExcl">
+              <option value="">Réglage général</option>
+              <option value="on">Oui</option>
+              <option value="off">Non</option>
+            </select></label>
         </div>
       </div>
       <label class="row sel" for="outline_method">Méthode
@@ -1346,12 +1345,12 @@
         <label class="row sel" for="silDest">Destination
           <select id="silDest" title="Couche de contours de la silhouette, ou une couche de couleur"></select></label>
         <div id="silExclBox">
-          <label class="full" for="silExcl">Exclus des autres couches</label>
-          <select id="silExcl" style="width:100%">
-            <option value="">Réglage général</option>
-            <option value="on">Oui</option>
-            <option value="off">Non</option>
-          </select>
+          <label class="row sel" for="silExcl">Exclus des autres couches
+            <select id="silExcl">
+              <option value="">Réglage général</option>
+              <option value="on">Oui</option>
+              <option value="off">Non</option>
+            </select></label>
         </div>
       </div>
       <label class="row sel" for="outline_subject_pos">Position
@@ -1376,10 +1375,10 @@
           </select>
           <input type="color" id="silColor" value="#1e1e1e" aria-label="Couleur de la silhouette" class="swc" hidden>
         </span></label>
-    </div>
-    <div class="ogroup" id="gapBox" hidden>
-      <label class="row" title="Le trait est interrompu à intervalles réguliers (0 = trait continu)">Interrompre tous les (mm) <input type="number" id="outline_subject_gap_every_mm" value="0" min="0" max="1000" step="5"></label>
-      <label class="row" title="Longueur de matière laissée à chaque interruption">sur (mm) <input type="number" id="outline_subject_gap_mm" value="1.5" min="0.3" max="20" step="0.5"></label>
+      <div class="pair">
+        <label class="row">Interrompre tous les (mm) <input type="number" id="outline_subject_gap_every_mm" value="0" min="0" max="1000" step="5"></label>
+        <label class="row">sur (mm) <input type="number" id="outline_subject_gap_mm" value="1.5" min="0.3" max="20" step="0.5"></label>
+      </div>
       <label class="row">Variation de la distance (%) <input type="number" id="outline_subject_gap_jitter" value="0" min="0" max="80" step="5"></label>
       <p class="hint">0 = trait continu. Les interruptions tiennent la silhouette comme des ponts.</p>
     </div>
@@ -1398,12 +1397,12 @@
     <div class="check"><input type="checkbox" id="fxAll" checked><label for="fxAll">Appliquer les effets</label></div>
     <div class="fxopts">
       <div class="check" title="Empilement exclusif : ce qu'un effet ajoute à une couche (gonflement, ombre, halo peint…) est retiré des couches plus foncées, qui sinon le recouvriraient. Décoché : les couches plus foncées gardent leurs zones et l'ajout n'est découpé que là où elles ne peignent pas. Le Recouvrement n'est pas concerné (il passe dessous exprès)."><input type="checkbox" id="fxSync" checked><label for="fxSync">Les ajouts d'un effet passent devant les couches plus foncées</label></div>
-      <label class="full" for="fxFreed" title="Empilement exclusif : ce que deviennent les zones qu'un effet retire d'une couche (entre les points d'une trame, à l'intérieur d'un contour seul…). Couche qui entoure la zone : chaque zone de la couche prend la teinte qu'on trouve le plus le long de son bord (ou reste nue si c'est le support).">Zones retirées par un effet</label>
+      <label class="row sel" for="fxFreed" title="Empilement exclusif : ce que deviennent les zones qu'un effet retire d'une couche (entre les points d'une trame, à l'intérieur d'un contour seul…). Couche qui entoure la zone : chaque zone de la couche prend la teinte qu'on trouve le plus le long de son bord (ou reste nue si c'est le support).">Zones retirées par un effet
         <select id="fxFreed">
           <option value="support">support nu</option>
           <option value="nearest">couche qui entoure la zone</option>
           <option value="lighter">couche plus claire précédente</option>
-        </select>
+        </select></label>
       <p class="hint" id="fxExclHint" hidden>Empilement cumulatif : ces deux options sont sans effet (les couches se recouvrent déjà).</p>
     </div>
     <div id="fxList"></div>
@@ -3199,7 +3198,7 @@ const TIPS = {
   flat_tolerance: "Zones d'aplat peintes (onglet Masques, masque Aplats) : chaque zone peinte séparément prend sa teinte principale partout où l'image en est assez proche. 0 = rien ne change ; 50 = les teintes voisines rejoignent la teinte principale ; 100 = toute la zone d'une seule couleur.",
   paintFlat: "Ouvre l'onglet Masques sur le masque Aplats : peignez ou cliquez (outil Objet) chaque zone à remplir d'une seule teinte (visage, fond, vêtement…). Chaque zone séparée est traitée seule.",
   fill_gaps: "Ce que les limites du matériau retirent d'une couche est donné aux couches qui l'entourent, pour que le support ne se voie pas à travers. Empilement exclusif uniquement. Les formes changent et il peut falloir plus de ponts.",
-  protect_lines: "Les traits fins, sombres ou clairs (yeux, sourcils, narines, mèches), gardent leur teinte au lieu d'être absorbés par la zone voisine lors de la simplification. Les traits plus fins que l'ouverture mini disparaissent quand même : utilisez alors « Détails clés estompés ».",
+  protect_lines: "Les traits fins, sombres ou clairs (yeux, sourcils, narines, mèches), gardent leur teinte au lieu d'être absorbés par la zone voisine lors de la simplification. Les traits plus fins que l'ouverture mini disparaissent quand même : utilisez alors « Détails clés ».",
   under_darker: "Empilement exclusif : chaque endroit n'est peint que par une couche. Cochée, une couche claire peut quand même peindre sous une couche plus foncée qui la recouvre (fusions et limites du matériau) : moins de ponts, rien de visible. Décochée : aucun endroit n'est peint par deux couches.",
   outline_exclusive: "Empilement exclusif : les détails clés découpés dans une couche de couleur sont retirés des autres couches, seule leur couche les peint. Décochée : ils sont peints par-dessus les couches plus claires. Chaque zone, la silhouette et chaque pochoir de contours peuvent garder ce réglage ou le remplacer.",
   groupExcl: "Empilement exclusif : les couches de couleur ne peignent pas sous les traits de ce pochoir de contours, seul lui les peint (un décalage de calage laisse alors voir le support le long des traits). Réglage général : celui de la section Couches.",
@@ -3214,8 +3213,8 @@ const TIPS = {
   outline_sensitivity: "Quantité de détails retenus (bas = seulement les plus marqués). Échelle progressive : de 1 % des traits candidats à 0 jusqu'à 95 % à 100, environ 10 % à 50.",
   outline_width_mm: "Largeur du trait du pochoir de contours, en mm (jamais moins que l'ouverture mini du matériau).",
   outline_min_length_mm: "Les traits plus courts que cette longueur sont ignorés.",
-  outline_gap_every_mm: "Trait seul : les traits de la zone sont interrompus à intervalles réguliers, pour que les traits fermés (yeux, boucles) restent tenus sans pont (0 = traits continus).",
-  outline_gap_mm: "Longueur de matière laissée à chaque interruption des traits.",
+  outline_gap_every_mm: "Trait seul : coupe les traits de la zone à intervalles réguliers : chaque interruption laisse un peu de matière qui tient les traits fermés (yeux, boucles), comme un pont. 0 = traits continus.",
+  outline_gap_mm: "Longueur de matière laissée à chaque interruption. Au pistolet, la peinture passe un peu sous les petites interruptions : le trait paraît presque continu.",
   outline_gap_jitter: "Fait varier au hasard la distance entre deux interruptions, jusqu'à ce pourcentage en plus ou en moins : le trait ne paraît plus pointillé. Le tirage est fixe : les mêmes réglages donnent les mêmes pochoirs. 0 = interruptions régulières.",
   outline_subject_min_length_mm: "Les morceaux de silhouette plus courts que cette longueur sont ignorés.",
   outline_clahe: "Contraste local de l'image où les traits de la zone sont cherchés, en plus du prétraitement : fait ressortir les traits dans les ombres et les zones peu contrastées, sans changer les couches. Trop fort : le grain et les textures donnent des traits parasites. 0 = désactivé.",
@@ -3223,11 +3222,11 @@ const TIPS = {
   outline_subject: "Trace le contour d'un masque (le sujet sélectionné, un masque dédié à la silhouette ou le masque des détails clés), avec ou sans les détails clés. Utile quand le sujet se détache mal du fond. Le bord de l'image n'est pas tracé.",
   outline_subject_mask: "Masque dont le contour est tracé : le masque sujet (objet sélectionné ou zone détourée), le masque silhouette dédié (onglet Masques), ou le masque des détails clés.",
   stencil_style: "Couleurs pleines : une couche de peinture par teinte (aplats), avec des traits en option. Trait seul : pas d'aplat, seulement des pochoirs de traits — détails clés, silhouette et/ou limites entre zones (coloriage) — un pochoir par couleur de trait.",
-  line_zones: "Trace la limite entre les zones de teinte calculées, comme un coloriage. Le nombre de pochoirs et le niveau de détail fixent le nombre et la finesse des zones.",
+  line_zones: "Trace la limite entre les zones de teinte calculées, comme un coloriage. « Teintes du coloriage » et le niveau de détail fixent le nombre et la finesse des zones.",
   line_zones_width_mm: "Largeur des limites découpées ; jamais plus fine que l'ouverture mini du matériau.",
   line_zones_min_length_mm: "Les limites plus courtes sont ignorées (petites zones, bruit).",
-  line_zones_gap_every_mm: "Les limites sont interrompues à intervalles réguliers, pour que les zones fermées restent tenues sans pont (0 = limites continues).",
-  line_zones_gap_mm: "Longueur de matière laissée à chaque interruption des limites.",
+  line_zones_gap_every_mm: "Coupe les limites à intervalles réguliers : chaque interruption laisse un peu de matière qui tient les zones fermées, comme un pont. 0 = limites continues.",
+  line_zones_gap_mm: "Longueur de matière laissée à chaque interruption. Au pistolet, la peinture passe un peu sous les petites interruptions : le trait paraît presque continu.",
   line_zones_gap_jitter: "Fait varier au hasard la distance entre deux interruptions, jusqu'à ce pourcentage en plus ou en moins : le trait ne paraît plus pointillé. Le tirage est fixe : les mêmes réglages donnent les mêmes pochoirs. 0 = interruptions régulières.",
   line_zones_min_area_mm2: "Les zones plus petites que cette surface sont absorbées par les zones voisines avant le tracé : moins de petites boucles (chacune demande un pont). 0 = toutes les zones.",
   line_zones_smooth_mm: "Adoucit le contour des zones avant le tracé : courbes plus régulières, sans marches d'escalier. Les zones plus étroites qu'environ deux fois le lissage disparaissent. 0 = contours tels que calculés.",
@@ -3350,8 +3349,8 @@ function fxActive(n) {
 function fxParamHtml(f, q) {
   const v = fxValue(q, f), tip = escH(q.tip || ""), hid = fxShown(q, f) ? "" : " hidden";
   if (q.kind === "choice")
-    return `<div class="fxp"${hid}><label class="full" title="${tip}">${escH(q.label)}</label>
-      <select data-k="${q.key}" title="${tip}">${q.choices.map(c => `<option value="${escH(c[0])}"${c[0] === v ? " selected" : ""}>${escH(c[1])}</option>`).join("")}</select></div>`;
+    return `<label class="row sel fxp" title="${tip}"${hid}>${escH(q.label)}
+      <select data-k="${q.key}" title="${tip}">${q.choices.map(c => `<option value="${escH(c[0])}"${c[0] === v ? " selected" : ""}>${escH(c[1])}</option>`).join("")}</select></label>`;
   return `<label class="row fxp" title="${tip}"${hid}>${escH(q.label)} <span class="v">${fxFmt(q, v)}</span>
     <input type="range" data-k="${q.key}" min="${q.min}" max="${q.max}" step="${q.step}" value="${v}"></label>`;
 }
@@ -5571,7 +5570,6 @@ function syncSilhouetteSource() {
   $("silSrcBox").hidden = !val("outline_subject");
   // weak edges: compared with the render of the colour layers (none in the line style)
   $("silWeakRow").hidden = line; $("silDeRow").hidden = line || !val("outline_subject_weak");
-  $("gapBox").hidden = !val("outline_subject");
   $("zoneGapBox").hidden = !line;     // key-detail interruptions: line style only
   // line style: own colours of the silhouette and of the colouring-book limits
   $("silColorRow").hidden = !line;
@@ -8725,8 +8723,8 @@ function renderOutlineSwatches() {
         <div class="palette">${cols.map(c => `<span class="sw pick" title="${c}" data-c="${c}" style="background:${c}"></span>`).join("")}</div>
       </div>
       <div title="${TIPS.groupExcl}"${exclOn ? "" : " hidden"}>
-        <label class="full" for="gexcl${g}">Exclus des couches de couleur</label>
-        <select class="gexcl" id="gexcl${g}" style="width:100%">${opt("", "Réglage général", ex)}${opt("on", "Oui", ex)}${opt("off", "Non", ex)}</select>
+        <label class="row sel" for="gexcl${g}">Exclus des couches de couleur
+          <select class="gexcl" id="gexcl${g}">${opt("", "Réglage général", ex)}${opt("on", "Oui", ex)}${opt("off", "Non", ex)}</select></label>
       </div>
     </div>`;
   }).join("");

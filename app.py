@@ -691,7 +691,7 @@ def compute(sess, data):
     zmask = p.stencil_style == "line" and p.line_zones and p.line_zones_mask
     sess["prep"].zones_area = subject_area(sess, lay, sess["prep"].labels.shape, p.line_zones_mask) if zmask else None
     if zmask and sess["prep"].zones_area is None:
-        warnings.append(f"Coloriage : le masque {SILHOUETTE_MASK_NAMES[p.line_zones_mask]} est vide "
+        warnings.append(f"Contour de coloriage : le masque {SILHOUETTE_MASK_NAMES[p.line_zones_mask]} est vide "
                         f"(onglet Masques) ; limites tracées sur toute l'image")
     # Only the paints changed (and they do not change the cut): same geometry, new colours
     geom = ({f.name: getattr(p, f.name) for f in fields(p) if f.name not in ("layer_colors", "px_per_mm_auto")},
