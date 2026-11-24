@@ -92,11 +92,11 @@ class Params:
     layering: str = "exclusive"    # exclusive | cumulative
     skip_support: bool = True      # the tone closest to the support gets no stencil
     # exclusive layers: what the material limits remove goes to the layers around it
-    fill_gaps: bool = False
+    fill_gaps: bool = True
     # exclusive layers: each spot is painted by one layer only (see exclusive_layers); with this on, a
     # lighter layer may still paint under a darker one, which repaints it (its merges and the material
     # limits may then fill areas of the darker layer, hidden: fewer bridges)
-    under_darker: bool = True
+    under_darker: bool = False
     protect_lines: bool = False    # thin strokes (eyes, eyebrows…) escape the majority filter
     # Flat areas (poster look: full flat layers, no interleaving): 0 = off .. 100 = strongest.
     # Islands of a tone whose border with the surrounding area has a low contrast are absorbed by it
