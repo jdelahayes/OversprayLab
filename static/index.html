@@ -2957,6 +2957,8 @@ async function resetSettings() {
   setVals(d);
   $("layer_colors").value = ""; showPaletteChoice(""); PAL_LAST = "";
   $("manual_bridges").value = "";
+  // layer effects (and their stacking options) removed, whatever the captured state held
+  $("layer_effects").value = ""; FXOPEN.clear(); renderFx(true);
   HIDDEN.clear();                                    // every layer shown again in the preview
   CROP = { x: 0, y: 0, w: 1, h: 1 }; $("crop_ratio").value = "free";
   $("image_scale").value = 100; $("image_pos_x").value = 50; $("image_pos_y").value = 50;
