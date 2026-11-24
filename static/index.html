@@ -1731,7 +1731,7 @@
       <span class="mgroup">
         <div class="seg" role="group" aria-label="Outil">
           <button type="button" id="mBrush" aria-pressed="true" title="Pinceau (B) : peindre une zone. Maj + clic gauche : effacer">Pinceau</button>
-          <button type="button" id="mSelect" aria-pressed="false" title="Sélection d'objet (S) : cliquez sur un objet pour l'ajouter au masque, recliquez dessus pour changer de découpage (partie, objet, ensemble), Alt + clic pour retirer un objet. Le pinceau reste utilisable pour retoucher (Maj + clic : effacer).">Objet</button>
+          <button type="button" id="mSelect" aria-pressed="false" title="Sélection d'objet (S) : cliquez sur un objet pour l'ajouter au masque, recliquez dessus pour changer de découpage (partie, objet, ensemble), Maj + clic (ou Alt + clic) pour retirer un objet. Le pinceau reste utilisable pour retoucher (Maj + clic : effacer).">Objet</button>
         </div>
         <button type="button" class="vt-opt" id="mSmart" aria-pressed="false" title="Pinceau intelligent (M) : ne peint (ou, avec Maj, n'efface) que la zone de couleur sous le centre du pinceau, et s'arrête à ses limites (bords, changement de teinte). La couleur est comparée en continu autour du pinceau.">Intelligent</button>
       </span>
@@ -5870,7 +5870,7 @@ function semanticPrepare() {
     .then(async r => {
       const j = await r.json();
       if (!r.ok) { status(j.error || "Sélection d'objet indisponible", true); if (SEM_SID === sid) SEM_READY = null; return false; }
-      if (SID === sid) status("Sélection d'objet prête : cliquez sur un objet (Alt + clic pour le retirer)");
+      if (SID === sid) status("Sélection d'objet prête : cliquez sur un objet (Maj + clic pour le retirer)");
       return true;
     })
     .catch(e => { status("Serveur injoignable : " + e.message, true); if (SEM_SID === sid) SEM_READY = null; return false; });
@@ -5973,7 +5973,7 @@ async function semanticClick(CV, kind, fx, fy, remove, wrap, redo = false) {
     status(redo ? `Sélection refaite avec les nouveaux réglages : ${j.pct} % de l'image`
       : remove ? `Objet retiré du masque (${j.pct} % de l'image)`
       : level ? `Autre découpage : ${j.pct} % de l'image (recliquez pour en changer encore)`
-      : `Objet ajouté : ${j.pct} % de l'image (recliquez dessus pour changer de découpage, Alt + clic pour retirer)`);
+      : `Objet ajouté : ${j.pct} % de l'image (recliquez dessus pour changer de découpage, Maj + clic pour retirer)`);
     sendMask();
   } catch (e) { status("Serveur injoignable : " + e.message, true); }
   finally { SEM_BUSY = false; wrap.classList.remove("wait"); }
@@ -6120,7 +6120,7 @@ function maskEditor(st) {
     if (MASK_TOOL === "select") {
       if (!$("mShow").checked) { $("mShow").checked = true; CV.style.display = ""; }
       const q = toMask(e);
-      semanticClick(CV, kind, q.x / CV.width, q.y / CV.height, e.altKey, wrap);
+      semanticClick(CV, kind, q.x / CV.width, q.y / CV.height, e.shiftKey || e.altKey, wrap);   // Shift (like the brush's eraser) or Alt: removes
       return;
     }
     DRAGGING = true; last = null; SEM_LAST = null; smart = null;
