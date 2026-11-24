@@ -189,6 +189,14 @@ class Params:
     layer_colors: str = ""
     # Effects stacks of the colour layers (JSON, see overspraylab/effects.py); "" = none
     layer_effects: str = ""
+    # Primer stencil (layer 0, sprayed first): what the layers paint, e.g. in white so that the
+    # colours stay bright on a dark support (see primer_opening). Shrunk by `primer_inset_mm` (an edge
+    # of the primer showing past a colour is far more visible than a colour edge on the support);
+    # `primer_lines`: also under the outline stencils (usually dark: left out)
+    primer: bool = False
+    primer_color: str = "#ffffff"
+    primer_inset_mm: float = 0.5
+    primer_lines: bool = False
     # Key-detail zones (JSON, see outline_plan); "" = one zone from the outline_* settings above
     outline_zones: str = ""
     # Material constraints
@@ -362,6 +370,8 @@ class Params:
         p.merge_amount = float(np.clip(p.merge_amount, 0, 150))
         p.merge_channel_mm = float(np.clip(p.merge_channel_mm, 0.3, 30))
         p.outline_min_length_mm = float(np.clip(p.outline_min_length_mm, 0, 200))
+        p.primer_color = _hex(p.primer_color, "#ffffff")
+        p.primer_inset_mm = float(np.clip(p.primer_inset_mm, 0, 5))
         return p
 
 
@@ -2364,7 +2374,8 @@ def hold_material(opening: np.ndarray, p: Params, hidden: np.ndarray | None = No
 # pts: both ends in fractions of the source image (they follow the crop, scale and position of
 # the image; may lie outside 0..1, on the sheet around the image). The layer is identified by its
 # number and by what it paints, `ref`: computed tone colour (kind "color"), outline layer key A, B…
-# (kind "outline", separate outline stencil) or stroke colour (kind "line", line style).
+# (kind "outline", separate outline stencil), stroke colour (kind "line", line style) or PRIMER_REF
+# (kind "primer", the primer stencil, layer 0).
 # At each computation a bridge is:
 #   ok       - drawn (counted with the layer's bridges);
 #   useless  - its layer was found but the segment crosses no opening: no effect, kept;
@@ -2385,7 +2396,8 @@ def hold_material(opening: np.ndarray, p: Params, hidden: np.ndarray | None = No
 # --------------------------------------------------------------------------
 MANUAL_DE = 15.0           # largest colour drift (ΔE) of a layer's tone still taken as the same layer
 _MANUAL_ID = re.compile(r"^m\d{1,6}$")
-MANUAL_KINDS = ("color", "outline", "line")
+MANUAL_KINDS = ("color", "outline", "line", "primer")
+PRIMER_REF = "P"           # `ref` of the manual bridges of the primer stencil
 BLOCK_MARGIN_MM = 2.0      # removed bridge: margin on each side kept free of automatic bridges
 
 
@@ -2408,10 +2420,15 @@ def parse_manual_bridges(txt: str) -> list[dict]:
             pts = [float(v) for v in pts]
         except (TypeError, ValueError):
             continue
-        if not 1 <= layer <= 99 or len(pts) != 4 or not all(math.isfinite(v) for v in pts):
+        if kind == "primer":
+            layer = 0
+        if not (kind == "primer" or 1 <= layer <= 99) or len(pts) != 4 or not all(math.isfinite(v) for v in pts):
             continue
         if kind == "outline":
             if not _GROUP.match(ref):
+                continue
+        elif kind == "primer":
+            if ref != PRIMER_REF:
                 continue
         else:
             ref = _hex(ref, "")
@@ -2426,14 +2443,14 @@ def parse_manual_bridges(txt: str) -> list[dict]:
 
 def assign_manual(bridges: list[dict], refs: list[tuple]) -> dict[int, list[dict]]:
     """Layer of each bridge: {layer index: [bridges]}. `refs`: [(index, kind, ref)] of the layers
-    computed, ref = BGR tone colour (color, line) or outline layer key (outline). A colour bridge
+    computed, ref = BGR tone colour (color, line), outline layer key (outline) or PRIMER_REF. A colour bridge
     keeps its layer number while that layer's tone stays within MANUAL_DE of the one it was drawn
     on, otherwise goes to the layer of the nearest tone within MANUAL_DE (layers added or removed);
     bridges of no layer are left out."""
     out: dict[int, list[dict]] = {}
     for b in bridges:
         cands = [(i, r) for i, k, r in refs if k == b["kind"]]
-        if b["kind"] == "outline":
+        if b["kind"] in ("outline", "primer"):
             hit = next((i for i, r in cands if r == b["ref"]), None)
         else:
             ref = _lab(hex_to_bgr(b["ref"]).astype(np.uint8))[0]
@@ -2763,7 +2780,7 @@ class Layer:
     struct_bridges: int = 0  # structural bridges (included in `bridges`), see add_struct_bridges
     weak_spots: int = 0      # parts held from one side only that got no structural bridge
     weak_points: tuple = ()  # where they are: (x, y, radius) in sheet mm
-    kind: str = "color"      # "color" (flat colour) or "outline" (key-detail outlines)
+    kind: str = "color"      # "color" (flat colour), "outline" (key-detail outlines) or "primer" (index 0, see primer_layer)
     merged: np.ndarray | None = None   # areas changed by merges instead of bridges (whole sheet)
     n_merged: int = 0        # number of merges (closed channels + removed islands)
     tone: int | None = None  # index of the tone it paints in prepared.palette (colour layers)
@@ -2827,10 +2844,11 @@ def colors_only(p: Params) -> bool:
 
 
 def recolor(res: "Result", p: Params) -> "Result":
-    """Previous result with the paints of `p.layer_colors` (same openings, bridges and paths):
+    """Previous result with the paints of `p.layer_colors` and `p.primer_color` (same openings, bridges and paths):
     only valid when `colors_only(p)` and nothing but `layer_colors` changed."""
     paints = parse_layer_colors(p.layer_colors)
-    layers = [L if L.kind == "outline" or L.tone is None
+    layers = [replace(L, color=hex_to_bgr(p.primer_color)) if L.kind == "primer"
+              else L if L.kind == "outline" or L.tone is None
               else replace(L, color=paints.get(L.index, res.prepared.palette[L.tone]))
               for L in res.layers]
     return replace(res, params=p, layers=layers)
@@ -2921,7 +2939,8 @@ def run_threads(funcs: list) -> list:
 _JOB_CACHE: dict = {}
 _JOB_CACHE_MAX = 24
 # fields with no influence on layer_job (or already reflected in its masks)
-_JOB_KEY_SKIP = {"layer_colors", "layer_effects", "spray_mm", "manual_bridges"}
+_JOB_KEY_SKIP = {"layer_colors", "layer_effects", "spray_mm", "manual_bridges",
+                 "primer", "primer_color", "primer_inset_mm", "primer_lines"}
 
 
 def _job_key(job) -> bytes:
@@ -3060,7 +3079,8 @@ def build(prep: Prepared, p: Params, outline_region: np.ndarray | None = None,
 
     if p.stencil_style == "line":
         layers = line_stencils(prep, p, entries, groups, support, place, fx_all, manual)
-        return make_result(layers, zone_lines=_zone_lines(entries))
+        primer = primer_layer(layers, p, manual, None, (X0, Y0, W, H))
+        return make_result(([primer] if primer is not None else []) + layers, zone_lines=_zone_lines(entries))
 
     # Key-detail lines merged into the colour layers (instead of a separate outline stencil):
     # searched against the render of the layers before bridges, then added to the chosen layer.
@@ -3320,7 +3340,17 @@ def build(prep: Prepared, p: Params, outline_region: np.ndarray | None = None,
     for li, r in zip(todo, again):
         layers[li] = color_layer(li, color_ids[li], r)
     res.zone_lines = _zone_lines(entries)       # counted once every zone has been searched
-    res.manual = manual.report()                # with the outline stencils
+    # primer stencil: under what the colour layers (and the outline stencils if asked) finally paint
+    painted = None
+    if p.primer and color_ids:
+        t = np.zeros((H, W), np.uint8)
+        for tg in targets:
+            t |= tg
+        painted = place(t) > 0
+    primer = primer_layer(layers, p, manual, painted, (X0, Y0, W, H))
+    if primer is not None:
+        res.layers = [primer, *layers]
+    res.manual = manual.report()                # with the outline stencils and the primer
     if keep is not None and src_map is not None:
         for o, (_, _, paints) in zip(outline_info, done):
             o["paints"] = paints
@@ -3334,8 +3364,60 @@ def build(prep: Prepared, p: Params, outline_region: np.ndarray | None = None,
             first_no_bridges=p_first is not None,
             searched=bool(order), redo=set(last_redo), excluded=exact(done), cleaned=saved[0],
             outlines=outline_info, tail=outline_tail, color_layer=color_layer,
-            states=_states_by_layer(manual))
+            states=_states_by_layer(manual), painted=painted, img_box=(X0, Y0, W, H))
     return res
+
+
+def primer_opening(layers: list, p: Params, painted: np.ndarray | None) -> np.ndarray | None:
+    """Openings of the primer stencil (whole sheet, uint8 0 / 255), None when nothing is painted:
+    what the colour layers paint once their bridges are retouched (effects, merges and lines
+    included; the outline stencils too with `p.primer_lines`), the thin gaps the material limits
+    leave between two layers filled where a layer is meant to paint (`painted`, whole sheet, bool:
+    their targets; never where the image leaves the support bare), then shrunk by
+    `p.primer_inset_mm` (a primer edge showing past a colour is far more visible than a colour edge
+    on the support) and cleaned with the material limits."""
+    check_cancel()
+    u = None
+    for L in layers:
+        if L.kind == "primer" or (L.kind == "outline" and not p.primer_lines):
+            continue
+        o = _retouched_opening(L.opening, L.bridge_cut) > 0
+        u = o if u is None else (u | o)
+    if u is None or not u.any():
+        return None
+    ppm = p.px_per_mm
+    m = u.astype(np.uint8) * 255
+    r = p.min_strip_mm * ppm / 2
+    if painted is not None and r >= 0.5:
+        m[(cv2.morphologyEx(m, cv2.MORPH_CLOSE, disk(r)) > 0) & painted] = 255
+    r = p.primer_inset_mm * ppm
+    if r >= 0.5:
+        m = cv2.erode(m, disk(r))
+    m = clean_mask(m, p)
+    return m if m.any() else None
+
+
+def primer_layer(layers: list, p: Params, mb: "ManualBridges", painted: np.ndarray | None,
+                 img_box: tuple) -> "Layer | None":
+    """Primer stencil (index 0, sprayed first) under the final `layers`, or None (off, or nothing
+    painted): its openings (primer_opening), then its manual bridges, bridges and paths like a
+    colour layer, without merges (a merge would paint primer where no colour covers it).
+    `img_box`: (x, y, width, height) of the image area in the sheet."""
+    if not p.primer:
+        return None
+    base = primer_opening(layers, p, painted)
+    if base is None:
+        return None
+    mine = mb.assign("primer", [(0, PRIMER_REF)]).get(0, [])
+    job = (base, None, replace(p, merge_amount=0.0), 1.0, None, mb.segments(mine), None)
+    (opening, (bridges, n_isl, n_short, n_struct, n_weak), paths, _merged, _n,
+     (m_drawn, m_states), cut) = run_layer_jobs([job])[0]
+    mb.record(0, m_states)
+    X0, Y0, W, H = img_box
+    return Layer(index=0, color=hex_to_bgr(p.primer_color), target=base[Y0:Y0 + H, X0:X0 + W].copy(),
+                 opening=opening, lost=np.zeros((H, W), np.uint8), bridges=list(m_drawn) + bridges, paths=paths,
+                 islands=n_isl, short_islands=n_short, struct_bridges=n_struct, weak_spots=len(n_weak),
+                 weak_points=_weak_mm(n_weak, p), kind="primer", manual_bridges=len(m_drawn), bridge_cut=cut)
 
 
 def _retouched_opening(opening: np.ndarray, cut) -> np.ndarray:
@@ -3365,6 +3447,7 @@ def rebridge(old: Result, p: Params, ctx: dict) -> tuple | None:
     exclusive outline stencil painting something else; build is needed then.
     Returns (result, ctx of that result)."""
     mb = ManualBridges(p, *ctx["manual_args"])
+    body = [L for L in old.layers if L.kind != "primer"]    # positions as in build (primer added last)
     by_layer = mb.assign("color", ctx["refs"])
     jobs, first = dict(ctx["jobs"]), dict(ctx["first"])
     changed = []
@@ -3399,7 +3482,7 @@ def rebridge(old: Result, p: Params, ctx: dict) -> tuple | None:
             if li in res1:
                 r, before = res1[li], first[li][1]
             else:
-                before = _retouched_opening(old.layers[li].opening, old.layers[li].bridge_cut)
+                before = _retouched_opening(body[li].opening, body[li].bridge_cut)
             if not np.array_equal(_retouched_opening(r[0], r[6]), before):
                 return None
             if li in res1 and ex is not None:   # still computed again without the outline lines?
@@ -3417,17 +3500,20 @@ def rebridge(old: Result, p: Params, ctx: dict) -> tuple | None:
                 ex = o["paints"] if ex is None else (ex | o["paints"])
         if (ex is None) != (ctx["excluded"] is None) or (ex is not None and not np.array_equal(ex, ctx["excluded"])):
             return None
-    layers = list(old.layers)
+    layers = list(body)
     for li, r in zip(changed, fin):
         layers[li] = ctx["color_layer"](li, ctx["color_ids"][li], r, mb)
     for (o, _), (L, _) in zip(redo_out, done):
         layers[o["pos"]] = L
+    # the primer follows what the layers paint (a merge a bridge changes) and its own manual bridges
+    # (its layer job is cached: unchanged, it costs only the comparison of its inputs)
+    primer = primer_layer(layers, p, mb, ctx.get("painted"), ctx["img_box"])
     # states of the bridges of the layers kept as they were
-    redone = {li + 1 for li in changed} | {o["n_out"] for o, _ in redo_out}
+    redone = {li + 1 for li in changed} | {o["n_out"] for o, _ in redo_out} | {0}
     for index, states in ctx["states"].items():
         if index not in redone:
             mb.record(index, states)
-    res = replace(old, params=p, layers=layers, manual=mb.report())
+    res = replace(old, params=p, layers=([primer] if primer is not None else []) + layers, manual=mb.report())
     return res, dict(ctx, jobs=jobs, first=first, outlines=outlines, states=_states_by_layer(mb))
 
 
@@ -4809,7 +4895,7 @@ def outline_detection(res: Result, p: Params, region: np.ndarray | None = None) 
         region = prep.fg if region is None else (region.astype(bool) & prep.fg)
     sim = res.detect_sim_pre if (p.outline_ref == "layers" and res.detect_sim_pre is not None) else res.detect_sim
     if sim is None:      # outline off in the last computation: render of its colour layers
-        sim = image_sim(replace(res, layers=[L for L in res.layers if L.kind != "outline"]))
+        sim = image_sim(replace(res, layers=[L for L in res.layers if L.kind not in ("outline", "primer")]))
     if p.outline_ref == "image":       # the image alone: compared with the bare support
         sim = np.empty(sim.shape, np.uint8)
         sim[:] = np.asarray(res.support_color, np.uint8)
@@ -4819,7 +4905,7 @@ def outline_detection(res: Result, p: Params, region: np.ndarray | None = None) 
             sim[:] = np.asarray(res.support_color, np.uint8)
         dark = outline_is_dark(outline_color(prep, res.support_color, p), res.support_color)
         return dict(detect_key_details(prep, sim, p, region, dark, stages=True), present=None)
-    colour = [L for L in res.layers if L.kind != "outline"]
+    colour = [L for L in res.layers if L.kind not in ("outline", "primer")]
     color_ids = [i for i in range(len(prep.palette)) if i != res.support_label][:len(colour)]
     painted = res.detect_painted
     if painted is None:  # lines not merged in the last computation: its colour layers as cut

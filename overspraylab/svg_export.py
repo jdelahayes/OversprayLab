@@ -26,7 +26,7 @@ _FR = {
     "OversprayLab - Silhouette Studio file: one compound path per stencil (openings, sheet outline and marks)":
         "OversprayLab - fichier Silhouette Studio : un tracé composé par pochoir (ouvertures, contour de la feuille et repères)",
     "Stencils for Silhouette Studio": "Pochoirs pour Silhouette Studio",
-    "Layer": "Couche", "outline": "contours", "colour": "couleur", "material": "matériau", "custom": "personnalisé",
+    "Layer": "Couche", "outline": "contours", "primer": "sous-couche", "Primer": "Sous-couche", "colour": "couleur", "material": "matériau", "custom": "personnalisé",
     "Stencil layer": "Pochoir couche", "Overview of all layers": "Aperçu de toutes les couches",
     "OversprayLab - overview (do not cut)": "OversprayLab - aperçu (ne pas découper)",
     "Registration dimensions (do not cut)": "Cotes de calage (ne pas découper)",
@@ -44,7 +44,7 @@ _FR = {
     "layer": "couche", "of": "sur", "overview": "apercu", "simulated_render": "rendu_simule",
     "outline_mask": "masque_contours", "subject_mask": "masque_sujet", "silhouette_mask": "masque_silhouette",
     "flat_mask": "masque_aplats",
-    "_outline": "_contours",
+    "_outline": "_contours", "_primer": "_sous-couche",
     "spray_sheet": "fiche_pulverisation",
     # PDF spraying sheet
     "Spraying sheet": "Fiche de pulvérisation", "Stencil sheet": "Feuille du pochoir", "Image": "Image",
@@ -72,6 +72,23 @@ _CORNERS_EN = {"haut-gauche": "top-left", "haut-droite": "top-right", "bas-gauch
 def T(en: str) -> str:
     """Text in the export language (English source string)."""
     return _FR.get(en, en) if _LANG.get() == "fr" else en
+
+
+def _kind(L, sep: str = " - ") -> str:
+    """Kind of a stencil appended to its number: outline stencil or primer (empty for a colour layer)."""
+    return f"{sep}{T(L.kind)}" if L.kind in ("outline", "primer") else ""
+
+
+def _name(L) -> str:
+    """Short name of a stencil: "Layer 2", "Layer 4 (outline)", "Primer"."""
+    if L.kind == "primer":
+        return T("Primer")
+    return f"{T('Layer')} {L.index}" + (f" ({T('outline')})" if L.kind == "outline" else "")
+
+
+def _count(res) -> int:
+    """Number of stencils counted in "layer n/N": the primer (layer 0) is not counted."""
+    return sum(L.kind != "primer" for L in res.layers)
 
 
 def _corner(fr_name: str) -> str:
@@ -191,13 +208,13 @@ def layer_svg(res: Result, L, material: dict | None = None) -> str:
     """Cut file of one layer: openings, bridges included, plus registration marks."""
     p = res.params
     W, H = res.sheet_mm
-    outline = f" ({T('outline')})" if L.kind == "outline" else ""
-    comment = (f"OversprayLab - {T('Layer').lower()} {L.index}/{len(res.layers)}{outline} - {T('colour')} {bgr_hex(L.color)} - "
+    outline = f" ({T(L.kind)})" if L.kind in ("outline", "primer") else ""
+    comment = (f"OversprayLab - {T('Layer').lower()} {L.index}/{_count(res)}{outline} - {T('colour')} {bgr_hex(L.color)} - "
                f"{T('material')}: {(material or {}).get('label', T('custom'))}")
     cal = positioning_text(res)
     if cal:
         comment += " - " + cal
-    title = f"{T('Stencil layer')} {L.index}{' - ' + T('outline') if L.kind == 'outline' else ''} ({bgr_hex(L.color)})"
+    title = f"{T('Stencil layer')} {L.index}{_kind(L)} ({bgr_hex(L.color)})"
     s = [_header(W, H, title, comment)]
     s.append('<g id="cut">')
     if L.paths:
@@ -222,7 +239,7 @@ def overview_svg(res: Result) -> str:
     for L in res.layers:     # openings always lie on the support: no clip-path needed
         d = " ".join(path_d(pts, p.smooth_curves, p.tolerance_mm) for pts in L.paths)
         s.append(f'<path fill-rule="evenodd" fill="{bgr_hex(L.color)}" '
-                 f'd="{d}"><title>{T("Layer")} {L.index}</title></path>')
+                 f'd="{d}"><title>{_name(L)}</title></path>')
     if positioning_text(res):
         s.append(f'<g id="dimensions"><title>{T("Registration dimensions (do not cut)")}</title>')
         s.extend(_dims_body(res))
@@ -304,7 +321,7 @@ def inkscape_svg(res: Result, material: dict | None = None) -> str:
         d = " ".join(path_d(pts, p.smooth_curves, p.tolerance_mm) for pts in L.paths)
         if d:
             body.append(f'<path fill-rule="evenodd" fill="{bgr_hex(L.color)}" '
-                        f'd="{d}"><title>{T("Layer")} {L.index}</title></path>')
+                        f'd="{d}"><title>{_name(L)}</title></path>')
     out.append(_layer(T("Preview (flat colours)"), body, "layer_preview", visible=False, locked=True))
     # 4. Simulated render (airbrush blur): common area of sheet and support, cropped to the pixel
     #    (no clip-path, badly handled by some software)
@@ -320,9 +337,9 @@ def inkscape_svg(res: Result, material: dict | None = None) -> str:
     if positioning_text(res):
         out.append(_layer(T("Registration dimensions (do not cut)"), _dims_body(res), "layer_dimensions", locked=True))
     # 6. One layer per stencil (cut lines + registration marks), last one on top
-    n = len(res.layers)
+    n = _count(res)
     for L in res.layers:
-        kind = f" - {T('outline')}" if L.kind == "outline" else ""
+        kind = _kind(L)
         body = []
         if L.paths:
             d = " ".join(path_d(pts, p.smooth_curves, p.tolerance_mm) for pts in L.paths)
@@ -377,9 +394,9 @@ def silhouette_svg(res: Result, material: dict | None = None) -> str:
         f'width="{_f(W)}mm" height="{_f(H)}mm" viewBox="0 0 {_f(W)} {_f(H)}">',
         f"<title>{T('Stencils for Silhouette Studio')}</title>",
     ]
-    n = len(res.layers)
+    n = _count(res)
     for L in res.layers:
-        kind = f" - {T('outline')}" if L.kind == "outline" else ""
+        kind = _kind(L)
         parts = [path_d(pts, p.smooth_curves, p.tolerance_mm) for pts in L.paths]
         parts += _marks_d(res, L.index)
         label = f"{T('Layer')} {L.index:02d}/{n:02d}{kind} ({bgr_hex(L.color)})"
@@ -404,7 +421,7 @@ def _swatch_body(res: Result) -> list[str]:
     for k, L in enumerate(res.layers):
         y = k * (sq + gap)
         hx = bgr_hex(L.color)
-        name = f"{T('Layer')} {L.index}" + (f" ({T('outline')})" if L.kind == "outline" else "")
+        name = _name(L)
         body.append(f'<rect x="{_f(x0)}" y="{_f(y)}" width="{_f(sq)}" height="{_f(sq)}" rx="0.8" fill="{hx}" '
                     f'stroke="#666666" stroke-width="0.2"><title>{name}: {hx}</title></rect>')
         body.append(f'<text x="{_f(x0 + sq + 2)}" y="{_f(y + sq / 2 - 1)}" font-family="sans-serif" '
@@ -490,7 +507,7 @@ def sheet_pdf(res: Result, name: str) -> bytes:
         if y + row > 285:
             pdf.add_page()
             y = 20.0
-        title = f"{T('Layer')} {L.index}" + (f" ({T('outline')})" if L.kind == "outline" else "")
+        title = _name(L)
         st = layer_stats(L)
         swatch_row(y, bgr_hex(L.color), title,
                    f"{T('cut')} {_num(st['cut_length_m'])} m, {st['bridges']} {T('bridges')}")
@@ -644,9 +661,9 @@ def export_zip(res: Result, material: dict | None, name: str = "stencil", lang: 
         with zipfile.ZipFile(buf, "w", zipfile.ZIP_DEFLATED) as z:
             for f, data in project_files(res, material, name, **project).items():
                 z.writestr(f, data)
-            n = len(res.layers)
+            n = _count(res)
             for L in res.layers:
-                kind = T("_outline") if L.kind == "outline" else ""
+                kind = T("_" + L.kind) if L.kind in ("outline", "primer") else ""
                 z.writestr(f"{T('layer')}{L.index:02d}_{T('of')}{n:02d}{kind}_{bgr_hex(L.color)[1:]}.svg",
                            layer_svg(res, L, material))
             z.writestr(f"{T('overview')}.svg", overview_svg(res))

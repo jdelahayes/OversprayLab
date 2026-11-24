@@ -80,6 +80,11 @@ Hard-won constraints, verified by the author in Silhouette Studio – do not "cl
   snapshot); it returns None (full build) when a recomputed layer paints something else once
   retouched, or an exclusive outline stencil does. A new build step that depends on the bridges must
   be taken into account there.
+- Primer stencil (`primer_layer`, kind "primer", index 0, first in `res.layers`): made last, in
+  `build` and in `rebridge`, from what the final layers paint once retouched. It is never numbered
+  with the colour layers (`layer_colors`, effects and `L<n>` destinations skip it; its colour is
+  `primer_color`, its manual bridges kind "primer", ref "P"); code that takes `res.layers[i]` as
+  colour layer i must skip it.
 - TEED (`teed`, `overspraylab/teed.py`): strength = network logits (not the sigmoid, which
   saturates at 1 on every line and leaves the sensitivity without effect); lines = crest of the
   smoothed logits (a skeleton gave the same lines 5x slower). Uses `outline_follow_mm`

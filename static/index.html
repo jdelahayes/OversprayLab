@@ -883,7 +883,7 @@
   <fieldset>
     <legend>Support à peindre</legend>
     <div id="supBar">
-    <div class="phead">
+    <div class="phead sub">
       <label for="support_preset">Format</label>
       <span class="dirty" hidden title="Les valeurs ont été modifiées depuis le dernier enregistrement">● modifié</span>
       <span class="picons">
@@ -893,6 +893,7 @@
         <button type="button" class="ibtn" data-act="delete" aria-label="Supprimer" title="Supprimer le support ★ sélectionné"><svg class="ico" viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 6h18"/><path d="M8 6V4h8v2"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/><path d="M10 11v6"/><path d="M14 11v6"/></svg></button>
       </span>
     </div>
+    <div class="ogroup">
     <div style="display:flex; gap:6px">
       <select id="support_preset" style="flex:1" title="Format du support : vos supports ★ enregistrés, puis les formats standard (grand côté / petit côté selon l'orientation)">
         <optgroup label="Papier ISO">
@@ -997,11 +998,22 @@
       <button type="button" class="ok">OK</button>
       <button type="button" class="cancel">Annuler</button>
     </div>
-    </div>
     <label class="row">Largeur du support (mm) <input type="number" id="support_w_mm" value="210" min="20" max="3000" step="1"></label>
     <label class="row">Hauteur du support (mm) <input type="number" id="support_h_mm" value="297" min="20" max="3000" step="1"></label>
     <label class="row">Couleur du support <input type="color" id="support_color" value="#ffffff" style="width:84px;height:28px;padding:0;border:1px solid var(--line);border-radius:6px"></label>
     <div class="palette" id="supportSwatches" style="margin-bottom:6px"></div>
+    </div>
+    </div>
+    <div class="subhead">Sous-couche</div>
+    <div class="ogroup">
+    <div class="check"><input type="checkbox" id="primer"><label for="primer">Pochoir de sous-couche, pulvérisé en premier</label></div>
+    <div id="primerOpts">
+      <label class="row">Couleur de la sous-couche <input type="color" id="primer_color" value="#ffffff" style="width:84px;height:28px;padding:0;border:1px solid var(--line);border-radius:6px"></label>
+      <label class="row">Retrait du bord (mm) <input type="number" id="primer_inset_mm" value="0.5" min="0" max="5" step="0.1"></label>
+      <div class="check"><input type="checkbox" id="primer_lines"><label for="primer_lines">Aussi sous les pochoirs de traits</label></div>
+    </div>
+    <p class="hint">Sur un support foncé, une sous-couche claire sous les couleurs les garde vives. Elle couvre tout ce que les couches peignent, en retrait de leur bord.</p>
+    </div>
   </fieldset>
 
   <fieldset>
@@ -1864,7 +1876,7 @@ const $ = id => document.getElementById(id);
 let SID = null, MATS = {}, LAST = null, VIEW = "preview", SEL = null, timer = null, busy = false, again = false;
 
 const MAT_FIELDS = ["min_opening_mm", "min_strip_mm", "bridge_width_mm", "min_area_mm2", "double_bridge_area_mm2", "min_bridges", "bridges", "bridge_spacing_mm"];
-const PARAMS = ["support_w_mm", "support_h_mm", "support_color", "inner_margin_mm",
+const PARAMS = ["support_w_mm", "support_h_mm", "support_color", "inner_margin_mm", "primer", "primer_color", "primer_inset_mm", "primer_lines",
   "image_scale", "image_height_factor", "image_pos_x", "image_pos_y", "margin_mm", "sheet_mode", "sheet_border_mm", "reg_dims", "machine_max_mm", "mat_w_mm", "mat_h_mm", "mat_orient", "reg_corners", "reg_shape", "reg_size_mm", "layer_notches", "sheet_outline",
   "pre_auto_levels", "pre_clahe", "pre_contrast", "pre_shadows", "pre_highlights", "pre_black", "pre_white", "pre_gamma", "pre_curve",
   "manual_thresholds", "thresholds", "pre_saturation", "pre_sharpen", "pre_remove_bg",
@@ -1942,6 +1954,10 @@ function sheetRectMM(L = layoutCalc()) {
   const vx0 = Math.max(0, L.x), vy0 = Math.max(0, L.y), vx1 = Math.min(L.SW, L.x + L.w), vy1 = Math.min(L.SH, L.y + L.h);
   const b = Math.max(3, val("sheet_border_mm"));
   return { x0: vx0 - b, y0: vy0 - b, x1: vx1 + b, y1: vy1 + b };
+}
+// primer stencil: its settings are used only when it is on
+function syncPrimer() {
+  $("primerOpts").querySelectorAll("input").forEach(i => { i.disabled = !$("primer").checked; });
 }
 function syncSheetMode() {
   // old settings / projects with the removed "fixed size" mode: sheet fitted to the design
@@ -2760,6 +2776,7 @@ function setVals(o) {
   if (!$("mat_preset").value) $("mat_preset").value = "custom";         // ★ mat absent here
   if (!$("support_preset").value) { $("support_preset").value = "custom"; syncPresetFromSize(); }   // ★ support absent here
   syncSheetMode(); syncStockPreset(); syncMat();   // state of the fields, sheet, cutting mat and material sheet
+  syncPrimer();
   methodHint(); syncStyle(); renderFx(true); zonesAfterLoad();
   // settings saved before per-mask flat tolerances: "auto" = the loaded flat_tolerance
   if (o && "flat_tolerance" in o && !("flat_tolerances" in o)) $("flat_tolerances").value = JSON.stringify({ auto: +o.flat_tolerance });
@@ -3042,7 +3059,7 @@ function applyMaterial(k) {
 // All collapsed at first; opening one closes the others.
 const SECTION_SUMMARY = {
   "Projet": () => PROJECT_NAME,
-  "Support à peindre": () => `${val("support_w_mm")} × ${val("support_h_mm")} mm`,
+  "Support à peindre": () => `${val("support_w_mm")} × ${val("support_h_mm")} mm${val("primer") ? " · sous-couche" : ""}`,
   "Position de l'image": () => IMG ? `${$("img_width_mm").value} × ${$("img_height_mm").value} mm` : "",
   "Prétraitement": () => {
     const a = [];
@@ -3225,6 +3242,10 @@ const TIPS = {
   silExcl: "La silhouette découpée dans une couche de couleur est-elle retirée des autres couches ? Réglage général : celui de la section Couches.",
   zoneExcl: "Les traits de cette zone découpés dans une couche de couleur sont-ils retirés des autres couches ? Réglage général : celui de la section Couches.",
   outline_target: "Pochoir séparé : un pochoir de plus, peint en dernier, de la couleur choisie. Dans une couche : pas de pochoir en plus, les traits sont découpés dans une couche de couleur (plus foncée que la zone qu'ils traversent).",
+  primer: "Ajoute un pochoir de sous-couche (couche 0), pulvérisé avant les couleurs : il peint tout ce que les couches peignent, par exemple en blanc pour que les couleurs restent vives sur un support noir. Il a ses propres ponts et se cale comme les autres pochoirs.",
+  primer_color: "Peinture de la sous-couche, en général du blanc. Elle se change aussi depuis sa carte, dans la colonne des pochoirs.",
+  primer_inset_mm: "La sous-couche s'arrête à cette distance du bord des couleurs : un liseré de sous-couche qui dépasse d'une couleur (calage imparfait, dispersion de la bombe) se voit bien plus qu'un bord de couleur posé sur le support. Les parties plus étroites que deux fois ce retrait n'ont pas de sous-couche.",
+  primer_lines: "Décoché : pas de sous-couche sous les pochoirs de traits, en général foncés. Coché : aussi sous eux, pour des traits clairs.",
   skip_support: "La teinte de l'image la plus proche de la couleur du support n'a pas de pochoir : le support reste visible à la place.",
   outline: "Retrace d'un trait fin les détails estompés par la simplification et le flou de l'aérographe, dans un pochoir séparé ou dans une couche de couleur.",
   outline_method: "Comment les détails sont trouvés : bords nets (Canny), trait dessiné le long des contours (DoG), trait dessiné fluide qui suit les courbes (FDoG, plus propre mais plus lent), ligne centrale des traits fins (crêtes) ou contours appris par un réseau de neurones (TEED).",
@@ -3332,12 +3353,16 @@ function fxSave(s, compute = true) {
   renderFx(true); updateSummaries();
   if (compute) schedule();
 }
+// What a layer paints: a colour layer (not an outline stencil, nor the primer, layer 0)
+const isPaint = L => L.kind !== "outline" && L.kind !== "primer";
+// Stencil number shown (chips, cards): the primer is layer 0
+const layerTitle = L => L.kind === "primer" ? "la sous-couche" : `la couche ${L.index}${L.kind === "outline" ? " (contours)" : ""}`;
 // Layers shown: those of the last computation (outline stencils included: their effects change
-// them alone), else the requested number of stencils; layers that no longer exist but still have
+// them alone; never the primer), else the requested number of stencils; layers that no longer exist but still have
 // effects are listed as "absent" (kept, not applied)
 function fxLayers() {
   const out = LAST && LAST.layers
-    ? LAST.layers.map(L => ({ n: L.index, color: L.color, outline: L.kind === "outline" }))
+    ? LAST.layers.filter(L => L.kind !== "primer").map(L => ({ n: L.index, color: L.color, outline: L.kind === "outline" }))
     : (val("stencil_style") === "line" ? [] : Array.from({ length: val("n_layers") }, (_, i) => ({ n: i + 1, color: null })));
   const s = fxState();
   Object.keys(s.layers).map(Number).filter(n => !out.some(L => L.n === n) && s.layers[n].fx.length)
@@ -3673,7 +3698,7 @@ function zoneActivate(id) {
 }
 // colour layers of the last computation (position, colour), offered as destinations "L<n>"
 function destLayers(s) {
-  const L = LAST && val("stencil_style") !== "line" ? LAST.layers.filter(x => x.kind !== "outline") : [];
+  const L = LAST && val("stencil_style") !== "line" ? LAST.layers.filter(isPaint) : [];
   const out = L.map((x, i) => [i + 1, x.color]);
   // a destination beyond the layers of the last computation: kept (the computation uses the last layer)
   for (const d of [...s.zones.map(z => z.dest), s.sil_dest].filter(isLayerDest))
@@ -4148,6 +4173,8 @@ async function init() {
     `<span class="sw pick" title="${n}" data-c="${c}" style="background:${c}"></span>`).join("");
   $("supportSwatches").querySelectorAll(".sw").forEach(s => s.onclick = () => { $("support_color").value = s.dataset.c; schedule(); });
   $("support_color").addEventListener("input", schedule);
+  $("primer").addEventListener("change", () => { syncPrimer(); updateSummaries(); });
+  syncPrimer();
   // Crop & layout
   $("crop_ratio").addEventListener("change", () => { applyCropRatio(); if (VIEW === "crop") render(); cropChanged(); });
   $("cropReset").onclick = () => { $("crop_ratio").value = "free"; if (IMG) setCropKeepingImage({ x: 0, y: 0, w: 1, h: 1 }, fullImageRect(layoutCalc())); if (VIEW === "crop") render(); cropChanged(); };
@@ -5484,15 +5511,15 @@ function setupMaskBg() {
 }
 function mbgDefaultSel() {           // the layer of the flat mask shown, else every colour layer
   const L = (LAST && LAST.layers) || [], t = FLAT_CUR.startsWith("t") ? +FLAT_CUR.slice(1) : null;
-  const own = maskKind() === "flat" && t != null ? L.filter(x => x.tone === t && x.kind !== "outline") : [];
-  (own.length ? own : L.filter(x => x.kind !== "outline")).forEach(x => MBG_SEL.add(x.index));
+  const own = maskKind() === "flat" && t != null ? L.filter(x => x.tone === t && isPaint(x)) : [];
+  (own.length ? own : L.filter(isPaint)).forEach(x => MBG_SEL.add(x.index));
 }
 function renderMaskBgChips() {
   const box = $("mBgLayers");
   $("mBgSrc").hidden = MBG_MODE === "image";
   box.hidden = MBG_MODE !== "layers" || !LAST;
   if (box.hidden) return;
-  box.innerHTML = LAST.layers.map(L => `<button type="button" class="vt-opt fchip bchip" data-l="${L.index}" aria-pressed="${MBG_SEL.has(L.index)}" title="${L.kind === "outline" ? `Couche ${L.index} (contours)` : `Couche ${L.index}`}">` +
+  box.innerHTML = LAST.layers.map(L => `<button type="button" class="vt-opt fchip bchip" data-l="${L.index}" aria-pressed="${MBG_SEL.has(L.index)}" title="${L.kind === "outline" ? `Couche ${L.index} (contours)` : L.kind === "primer" ? "Sous-couche" : `Couche ${L.index}`}">` +
     `<i class="fsw" style="background:${L.color}"></i>${L.index}</button>`).join("");
 }
 async function drawMaskBg(wrap, CV) {
@@ -6316,9 +6343,9 @@ function compareLayers(side, layers) {
   const hid = CMP.hid[side], box = $(side === "left" ? "cmpLayL" : "cmpLayR");
   [...hid].forEach(i => { if (!layers.some(L => L.index === i)) hid.delete(i); });
   box.innerHTML = layers.map(L => {
-    const vis = !hid.has(L.index), lbl = L.kind === "outline" ? "✎ contours" : String(L.index);
+    const vis = !hid.has(L.index), lbl = L.kind === "outline" ? "✎ contours" : L.kind === "primer" ? "sous-couche" : String(L.index);
     return `<button type="button" class="ltog" data-i="${L.index}" aria-pressed="${vis}"
-      title="${vis ? "Masquer" : "Afficher"} la couche ${L.index}${L.kind === "outline" ? " (contours)" : ""}">
+      title="${vis ? "Masquer" : "Afficher"} ${layerTitle(L)}">
       <span class="sw" style="background:${L.color}"></span>${lbl}</button>`;
   }).join("");
   box.querySelectorAll(".ltog").forEach(b => b.onclick = () => {
@@ -6547,9 +6574,9 @@ function renderToolbar() {
   // forget layers that no longer exist
   [...HIDDEN].forEach(i => { if (!LAST.layers.some(L => L.index === i)) HIDDEN.delete(i); });
   $("layerToggles").innerHTML = LAST.layers.map(L => {
-    const vis = !HIDDEN.has(L.index), lbl = L.kind === "outline" ? "✎ contours" : String(L.index);
+    const vis = !HIDDEN.has(L.index), lbl = L.kind === "outline" ? "✎ contours" : L.kind === "primer" ? "sous-couche" : String(L.index);
     return `<button type="button" class="ltog" data-i="${L.index}" aria-pressed="${vis}"
-      title="${vis ? "Masquer" : "Afficher"} la couche ${L.index}${L.kind === "outline" ? " (contours)" : ""}">
+      title="${vis ? "Masquer" : "Afficher"} ${layerTitle(L)}">
       <span class="sw" style="background:${L.color}"></span>${lbl}</button>`;
   }).join("");
   $("layerToggles").querySelectorAll(".ltog").forEach(b => b.onclick = () => toggleLayer(+b.dataset.i));
@@ -6678,8 +6705,10 @@ function render() {
       <div class="meta">
         <div class="t"><span class="lnum">${L.index}</span>${L.kind === "outline"
           ? `<button type="button" class="lcolor" data-idx="${L.index}" style="background:${L.color}" aria-haspopup="dialog" title="Couleur du trait des contours${groupAuto(L.group || "A") ? " (automatique)" : " (choisie)"} — cliquer pour changer"></button>`
+          : L.kind === "primer"
+          ? `<button type="button" class="lcolor" data-idx="${L.index}" style="background:${L.color}" aria-haspopup="dialog" title="Couleur de la sous-couche — cliquer pour changer"></button>(sous-couche)`
           : `<button type="button" class="lcolor" data-idx="${L.index}" style="background:${L.color}" aria-haspopup="dialog" title="Couleur de la peinture de la couche ${L.index}${layerColors()[L.index] ? " (choisie)" : " (calculée)"} — cliquer pour changer"></button>`}${L.kind === "outline" ? `(contours${L.group ? " " + L.group : ""}) ✎` : ""}${customColor(L)
-          ? ` <button type="button" class="lcreset" data-idx="${L.index}" title="Revenir à la teinte calculée" aria-label="Revenir à la teinte calculée">${ICO_RESET}</button>` : ""}
+          ? ` <button type="button" class="lcreset" data-idx="${L.index}" title="${L.kind === "primer" ? "Revenir au blanc" : "Revenir à la teinte calculée"}" aria-label="${L.kind === "primer" ? "Revenir au blanc" : "Revenir à la teinte calculée"}">${ICO_RESET}</button>` : ""}
           ${fxBadge(L)}
           ${L.kind !== "outline" && L.tone != null ? `<button type="button" class="lflat${FLAT_COVS["t" + L.tone] > 0 ? " on" : ""}" data-tone="${L.tone}" title="Peindre un aplat dans cette couche : les zones peintes (ou objets sélectionnés) prennent la couleur de cette couche, les détails francs restent (onglet Masques, masque Aplats)" aria-label="Peindre un aplat dans cette couche">${ICO_FLAT}</button>` : ""}
           <button type="button" class="linfo${L.weak_spots ? " lwarn" : ""}" aria-label="Informations sur la couche">${ICO_INFO}<span class="linfo-body" hidden>
@@ -6815,6 +6844,7 @@ function srcToMm(u, v) {
 }
 // What a layer paints, as stored with a bridge drawn on it
 function layerRef(L) {
+  if (L.kind === "primer") return { kind: "primer", ref: "P" };
   if (L.kind !== "outline") return { kind: "color", ref: LAST.palette[L.tone] };
   return L.sources && L.sources.length ? { kind: "line", ref: L.color } : { kind: "outline", ref: L.group || "A" };
 }
@@ -7626,7 +7656,7 @@ function parsePaletteText(txt) {
   return cols;
 }
 const PAL_MAX = 16;
-const layerPaints = () => LAST ? [...new Set(LAST.layers.filter(L => L.kind !== "outline").map(L => L.color.toLowerCase()))] : [];
+const layerPaints = () => LAST ? [...new Set(LAST.layers.filter(isPaint).map(L => L.color.toLowerCase()))] : [];
 async function deletePalette(name) {
   if (!(await presetCall("DELETE", "/api/presets/palette/" + encodeURIComponent(name)))) return;
   if (PAL_CUR === "u:" + name) showPaletteChoice("");
@@ -8651,14 +8681,15 @@ function openColorPop(btn) {
     ? `<div class="sws">${cols.map(c => `<button type="button" data-c="${c}" class="${c.toLowerCase() === cur ? "cur" : ""}" style="background:${c}" title="${c}"></button>`).join("")}</div>`
     : `<div class="cpnone">${empty}</div>`;
   const pal = palDef(PAL_LAST || PAL_CUR);
-  const inUse = [...new Set(LAST.layers.filter(x => x.kind !== "outline").map(x => x.color.toLowerCase()))];
-  pop.innerHTML = `<strong>Couche ${idx}</strong>${srcRow}
+  const inUse = [...new Set(LAST.layers.filter(isPaint).map(x => x.color.toLowerCase()))];
+  const primer = L && L.kind === "primer";
+  pop.innerHTML = `<strong>${primer ? "Sous-couche" : `Couche ${idx}`}</strong>${srcRow}
     <h4>${pal ? `Palette « ${pal[0]} »` : "Couleurs des couches"}</h4>${row(pal ? pal[1] : inUse, "—")}
     <h4>Teintes de l'image (calculées)</h4>${row((LAST.palette || []).slice(), "—")}
     <h4>Dernières couleurs utilisées</h4>${row(recentColors(), "Aucune pour l'instant")}
     <h4>Couleur personnalisée</h4>
     ${pickerHtml()}
-    <div class="acts"><button type="button" data-act="auto" ${customColor(L) ? "" : "disabled"} title="Revenir à la teinte calculée">Auto (teinte calculée)</button></div>`;
+    <div class="acts"><button type="button" data-act="auto" ${customColor(L) ? "" : "disabled"} title="${primer ? "Revenir au blanc" : "Revenir à la teinte calculée"}">${primer ? "Blanc (par défaut)" : "Auto (teinte calculée)"}</button></div>`;
   setupPicker(pop, cur || "#888888");
   const r = btn.getBoundingClientRect(), w = 236;
   pop.hidden = false;
@@ -8698,6 +8729,7 @@ function customColor(L) {
   if (L && L.sources && L.sources.length) return L.sources.some(s =>
     s.startsWith("details") ? !groupAuto(s.split(":")[1] || "A") : s === "silhouette" ? !!val("line_sil_color")
       : s === "zones" ? !!val("line_zones_color") : !!layerColors()[s.replace("tone", "t")]);
+  if (L && L.kind === "primer") return val("primer_color").toLowerCase() !== "#ffffff";
   return L && (L.kind === "outline" ? !groupAuto(L.group || "A") : !!layerColors()[L.index]);
 }
 function setLayerColor(idx, color, only = "") {
@@ -8719,6 +8751,13 @@ function setLayerColor(idx, color, only = "") {
     syncSilhouetteSource(); updateSummaries(); detectPreview();
     const what = only ? `Pochoir ${idx} (traits), ${srcLabel(only)}` : `Pochoir ${idx} (traits)`;
     status(c ? `${what} : peinture ${c}` : `${what} : couleur automatique`);
+    schedule();
+    return;
+  }
+  if (L && L.kind === "primer") {      // primer: its own setting (Support section)
+    $("primer_color").value = color ? color.toLowerCase() : "#ffffff";
+    if (color) rememberColor(color);
+    status(color ? `Sous-couche : peinture ${color}` : "Sous-couche : blanc");
     schedule();
     return;
   }
@@ -8756,7 +8795,7 @@ function renderOutlineSwatches() {
   const s = zState(), users = groupUsers(s), gs = Object.keys(users).sort();
   box.hidden = !gs.length;
   const cols = ["#1e1e1e", "#ffffff"];
-  if (LAST) LAST.layers.filter(L => L.kind !== "outline").forEach(L => { if (!cols.includes(L.color)) cols.push(L.color); });
+  if (LAST) LAST.layers.filter(isPaint).forEach(L => { if (!cols.includes(L.color)) cols.push(L.color); });
   const exclOn = val("layering") !== "cumulative" && val("stencil_style") !== "line";
   const opt = (v, t, cur) => `<option value="${v}"${cur === v ? " selected" : ""}>${t}</option>`;
   box.innerHTML = gs.map(g => {

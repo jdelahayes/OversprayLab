@@ -84,6 +84,11 @@ support, the cutting mat, the material sheet and the registration marks in every
 at once whether the stencil fits. A warning tells you when the image resolution is too low (or
 uselessly high) for its printed size.
 
+On a dark support, a **primer stencil** (Surface to paint section) is sprayed first, usually in
+white, under everything the layers paint so that the colours stay bright. It is set back from the
+edge of the colours (0.5 mm by default) so that no rim of primer shows past them, leaves the bare
+support alone, has its own bridges, and is exported as layer 0.
+
 ![Layout view with the cutting mat](docs/screenshots/layout.jpg)
 
 ### Preprocessing

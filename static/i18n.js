@@ -405,6 +405,25 @@ try {
     "Largeur du tapis (mm)": "Mat width (mm)", "Hauteur du tapis (mm)": "Mat height (mm)",
     "Largeur de la feuille (mm)": "Sheet width (mm)", "Hauteur de la feuille (mm)": "Sheet height (mm)",
     "Couleur du support": "Support colour", "Mes supports": "My supports", "Nom du support": "Support name", "Nom (ex. Toile 30×40 kraft)": "Name (e.g. Kraft canvas 30×40)",
+    // primer stencil (layer 0)
+    "Sous-couche": "Primer", "sous-couche": "primer", "(sous-couche)": "(primer)", "la sous-couche": "the primer",
+    "Pochoir de sous-couche, pulvérisé en premier": "Primer stencil, sprayed first",
+    "Couleur de la sous-couche": "Primer colour", "Retrait du bord (mm)": "Inset from the edge (mm)",
+    "Aussi sous les pochoirs de traits": "Also under the line stencils",
+    "Sur un support foncé, une sous-couche claire sous les couleurs les garde vives. Elle couvre tout ce que les couches peignent, en retrait de leur bord.":
+      "On a dark support, a light primer under the colours keeps them bright. It covers everything the layers paint, set back from their edge.",
+    "Ajoute un pochoir de sous-couche (couche 0), pulvérisé avant les couleurs : il peint tout ce que les couches peignent, par exemple en blanc pour que les couleurs restent vives sur un support noir. Il a ses propres ponts et se cale comme les autres pochoirs.":
+      "Adds a primer stencil (layer 0), sprayed before the colours: it paints everything the layers paint, for instance in white so that the colours stay bright on a black support. It has its own bridges and is registered like the other stencils.",
+    "Peinture de la sous-couche, en général du blanc. Elle se change aussi depuis sa carte, dans la colonne des pochoirs.":
+      "Paint of the primer, usually white. It can also be changed from its card, in the stencil column.",
+    "La sous-couche s'arrête à cette distance du bord des couleurs : un liseré de sous-couche qui dépasse d'une couleur (calage imparfait, dispersion de la bombe) se voit bien plus qu'un bord de couleur posé sur le support. Les parties plus étroites que deux fois ce retrait n'ont pas de sous-couche.":
+      "The primer stops this far from the edge of the colours: a rim of primer showing past a colour (imperfect registration, spray dispersion) shows far more than a colour edge laid on the support. Parts narrower than twice this inset get no primer.",
+    "Décoché : pas de sous-couche sous les pochoirs de traits, en général foncés. Coché : aussi sous eux, pour des traits clairs.":
+      "Unticked: no primer under the line stencils, usually dark. Ticked: under them too, for light lines.",
+    "Couleur de la sous-couche — cliquer pour changer": "Primer colour — click to change",
+    "Revenir au blanc": "Back to white", "Blanc (par défaut)": "White (default)",
+    "Masquer la sous-couche": "Hide the primer", "Afficher la sous-couche": "Show the primer",
+    "Sous-couche : blanc": "Primer: white",
     "Enregistrer le support : dans le support ★ sélectionné, sinon sous un nouveau nom (format, couleur, marges, feuille, tapis et repères de calage)": "Save the support: into the selected ★ support, otherwise under a new name (format, colour, margins, sheet, mat and registration marks)",
     "Enregistrer le support sous un nouveau nom": "Save the support under a new name",
     "Renommer le support ★ sélectionné": "Rename the selected ★ support", "Supprimer le support ★ sélectionné": "Delete the selected ★ support",
@@ -1418,6 +1437,8 @@ try {
     [/^Couche (\d+) : (#[0-9a-f]{6})$/i, (m, n, h) => `Layer ${n}: ${h}`],
     [/^Couleur de la peinture de la couche (\d+) \((choisie|calculée)\) — cliquer pour changer$/,
       (m, n, k) => `Paint colour of layer ${n} (${k === "choisie" ? "chosen" : "computed"}) — click to change`],
+    [/^Sous-couche : peinture (#[0-9a-f]{6})$/i, (m, h) => `Primer: paint ${h}`],
+    [/^(\d+) × (\d+) mm · sous-couche$/, (m, a, b) => `${a} × ${b} mm · primer`],
     [/^(Masquer|Afficher) la couche (\d+)( \(contours\))?$/, (m, a, n, c) => `${a === "Masquer" ? "Hide" : "Show"} layer ${n}${c ? " (outline)" : ""}`],
     [/^(\d+) tracés · (\d+) nœuds · (\d+) îlots? · (\d+) ponts(?: · (\d+) fusions?)?$/,
       (m, a, b, c, d, e) => `${a} paths · ${b} nodes · ${plural(c, "island")} · ${d} bridges${e ? ` · ${plural(e, "merge")}` : ""}`],

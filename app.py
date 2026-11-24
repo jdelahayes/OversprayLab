@@ -694,7 +694,7 @@ def compute(sess, data):
         warnings.append(f"Contour de coloriage : le masque {SILHOUETTE_MASK_NAMES[p.line_zones_mask]} est vide "
                         f"(onglet Masques) ; limites tracées sur toute l'image")
     # Only the paints changed (and they do not change the cut): same geometry, new colours
-    geom = ({f.name: getattr(p, f.name) for f in fields(p) if f.name not in ("layer_colors", "px_per_mm_auto")},
+    geom = ({f.name: getattr(p, f.name) for f in fields(p) if f.name not in ("layer_colors", "primer_color", "px_per_mm_auto")},
             (sess["prep"], sess.get("mask"), sess.get("silmask"), sess.get("fg"),
              *[m for _, m in sorted((sess.get("zmasks") or {}).items())]))
     old = sess.get("geom")
