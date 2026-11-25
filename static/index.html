@@ -880,6 +880,9 @@
     <div class="hint keep" id="projImage" hidden><span>Image d'origine :</span> <span id="projImageName" data-noi18n></span></div>
     <div class="hint keep" id="projPath" hidden><span>Dossier du projet :</span> <span class="folder" id="projPathName" data-noi18n></span></div>
     <div class="hint keep" id="projNoPath" hidden>Dossier du projet : créé à la première snapshot ou au premier export.</div>
+    <label class="full" for="projNote">Note</label>
+    <textarea id="projNote" rows="4" maxlength="4000" disabled placeholder="Note libre : peintures, support, idées…"
+      title="Note libre sur le projet, enregistrée avec lui (tout de suite si son dossier existe, sinon à la première snapshot ou au premier export)"></textarea>
   </fieldset>
 
   <fieldset>
@@ -4429,12 +4432,17 @@ async function upload(file) {
 // ---- Project name: the image name by default (without extension), changed by clicking it
 // (Projet section); the exported zip is named after it
 let PROJECT_NAME = "", PROJECT_DEFAULT = "", IMG_FILE = "";   // IMG_FILE: original image file name (kept in the project)
+// Free note of the project (Projet section): like the name, it belongs to the project (projet.json),
+// saved at once when its folder exists, otherwise with the first snapshot or export
+let PROJECT_NOTE = "", NOTE_TIMER = null;
 function showProjectName() {
   const d = $("projName");
   d.textContent = PROJECT_NAME || "(aucune image)";
   d.classList.toggle("empty", !SID);
   d.toggleAttribute("data-noi18n", !!SID);       // a user name, never translated
   $("projImage").hidden = !SID || !IMG_FILE; $("projImageName").textContent = IMG_FILE;
+  $("projNote").disabled = !SID;
+  if ($("projNote").value !== PROJECT_NOTE) $("projNote").value = PROJECT_NOTE;
   showProjectPath();
   updateSummaries();
 }
@@ -4468,14 +4476,27 @@ function setupProjectName() {
     else if (e.key === "Escape") { e.preventDefault(); e.stopPropagation(); done(false); d.focus(); }
   });
   inp.addEventListener("blur", () => done(true));
+  const note = $("projNote");
+  note.addEventListener("input", () => {
+    PROJECT_NOTE = note.value;
+    clearTimeout(NOTE_TIMER); NOTE_TIMER = setTimeout(saveNote, 800);
+  });
+  note.addEventListener("blur", saveNote);
   showProjectName();
 }
+function saveNote() {                // written into the project folder, once it exists
+  clearTimeout(NOTE_TIMER); NOTE_TIMER = null;
+  const dir = PROJ.dir;
+  if (dir) snapCall("POST", `/api/projects/${encodeURIComponent(dir)}/note`, { note: PROJECT_NOTE });
+}
 function setSession(j, name) {
+  if (NOTE_TIMER) saveNote();          // note of the former project still being typed
   SID = j.id; RENDER_WARNS = []; WARN_STALE = true;   // warnings of the former image dropped
   PROJ = { dir: null, snapshots: [], current: null, next: "v0" }; SNAP_KEY = null; CALC_KEY = null;
   IMG_FILE = String(j.filename || name || "");
   PROJECT_DEFAULT = IMG_FILE.replace(/\.[^.]+$/, "") || "projet";
   PROJECT_NAME = j.project_name || PROJECT_DEFAULT;
+  PROJECT_NOTE = j.project_note || "";
   showProjectName();
   DIRTY = false; updateCalcBtn();
   IMG = { w: j.width, h: j.height, src: j.original, name, gray: j.gray };
@@ -4847,7 +4868,7 @@ async function replaceSnapshot(id) {
   try {
     if (!(await settle())) return status("Remplacement impossible : le calcul n'a pas abouti", true);
     const dir = PROJ.dir;
-    const j = await snapCall("POST", snapUrl(id) + "/replace", { id: SID, name: PROJECT_NAME, ui: uiState(), lang: I18N.lang });
+    const j = await snapCall("POST", snapUrl(id) + "/replace", { id: SID, name: PROJECT_NAME, note: PROJECT_NOTE, ui: uiState(), lang: I18N.lang });
     if (!j) return;
     PROJ = j; SNAP_KEY = snapKey();
     SNAP_RENDERS.delete(`/api/projects/${encodeURIComponent(dir)}/${id}/render`);
@@ -4879,7 +4900,7 @@ async function createSnapshot() {
   try {
     if (!(await settle())) { status("Snapshot impossible : le calcul n'a pas abouti", true); return false; }
     const r = await fetch("/api/snapshot", { method: "POST", headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ id: SID, name: PROJECT_NAME, label: $("snapLabel").value.trim(), ui: uiState(), lang: I18N.lang }) });
+      body: JSON.stringify({ id: SID, name: PROJECT_NAME, note: PROJECT_NOTE, label: $("snapLabel").value.trim(), ui: uiState(), lang: I18N.lang }) });
     const j = await r.json();
     if (!r.ok) { status(j.error || "Snapshot impossible", true); return false; }
     PROJ = j; SNAP_KEY = snapKey(); $("snapLabel").value = "";

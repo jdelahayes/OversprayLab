@@ -149,6 +149,9 @@ try {
     "Snapshot : lancez d'abord un calcul": "Snapshot: run a computation first", "Projet inconnu": "Unknown project",
     "Image d'origine du projet introuvable": "Original image of the project not found",
     "Dossier de projet incomplet : image d'origine absente": "Incomplete project folder: original image missing",
+    "Note": "Note", "Note libre : peintures, support, idées…": "Free note: paints, support, ideas…",
+    "Note libre sur le projet, enregistrée avec lui (tout de suite si son dossier existe, sinon à la première snapshot ou au premier export)":
+      "Free note on the project, saved with it (at once if its folder exists, otherwise with the first snapshot or export)",
     "Projet": "Project", "Nom du projet": "Project name", "Image d'origine :": "Original image:", "Dossier du projet :": "Project folder:",
     "Dossier du projet : créé à la première snapshot ou au premier export.": "Project folder: created with the first snapshot or the first export.", "(aucune image)": "(no image)",
     "Cliquer pour renommer le projet : il nomme le zip exporté et figure sur la fiche de pulvérisation": "Click to rename the project: it names the exported zip and appears on the spraying sheet",
@@ -1650,7 +1653,8 @@ try {
     if (en !== null && cur !== en) node.data = en;
   }
   function doAttrs(el) {
-    if (skip(el)) return;
+    // a textarea: its text is the user's, its attributes (placeholder, title...) are interface text
+    if (!el || el.closest("[data-noi18n], script, style")) return;
     let o = ORIG_ATTR.get(el);
     if (!o) { o = {}; ORIG_ATTR.set(el, o); }
     for (const a of ATTRS) {

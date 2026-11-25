@@ -1,7 +1,7 @@
 """Project folders and their snapshots, on disk.
 
     <projects>/<project folder>/
-        projet.json              project: id, name, original image
+        projet.json              project: id, name, original image, free note
         original.<ext>           source image as loaded, never reduced, stored once
         snapshots/v<n>/          one self-contained snapshot (written once, never changed: a replacement
                                  is a new folder swapped whole with it)
@@ -169,7 +169,8 @@ def _free_dir(name: str) -> Path:
     return d
 
 
-def create_project(name: str, original: bytes, ext: str, image_name: str | None, pid: str | None = None) -> Path:
+def create_project(name: str, original: bytes, ext: str, image_name: str | None, pid: str | None = None,
+                   note: str = "") -> Path:
     """New project folder (named after the project, suffix _2, _3… if taken) with its original image."""
     ROOT.mkdir(parents=True, exist_ok=True)
     d = _free_dir(name)
@@ -178,8 +179,25 @@ def create_project(name: str, original: bytes, ext: str, image_name: str | None,
     (d / img).write_bytes(original)
     _write_json(d / PROJECT_FILE, {"format": 1, "id": pid or uuid.uuid4().hex, "nom": name, "image": img,
                                    "nom_image": image_name, "sha256": hashlib.sha256(original).hexdigest(),
-                                   "date": now()})
+                                   "date": now(), **({"note": note} if note else {})})
     return d
+
+
+def clean_note(v) -> str:
+    """Free note of a project: text, at most 4000 characters, no control characters but line breaks and tabs."""
+    s = str(v or "").replace("\r\n", "\n").replace("\r", "\n")
+    return re.sub(r"[\x00-\x08\x0b-\x1f\x7f]+", "", s)[:4000]
+
+
+def set_note(d: Path, note: str) -> None:
+    """Free note of the project (Projet section): in projet.json, like the name (not a new version)."""
+    info = project_info(d)
+    if (info.get("note") or "") != note:
+        if note:
+            info["note"] = note
+        else:
+            info.pop("note", None)
+        _write_json(d / PROJECT_FILE, info)
 
 
 def rename_project(d: Path, name: str) -> None:
@@ -313,7 +331,7 @@ def import_folder(files: dict[str, bytes]) -> tuple[Path, dict[str, str]]:
                 break
     if target is None:
         target = create_project(str(info.get("nom") or "projet"), files[img], Path(img).suffix,
-                                info.get("nom_image"), pid or None)
+                                info.get("nom_image"), pid or None, clean_note(info.get("note")))
     # a snapshot is known by its uid (snapshots of earlier versions: by date and label)
     def key_of(meta):
         return meta.get("uid") or (meta.get("date"), str(meta.get("libelle") or meta.get("label") or ""))

@@ -184,6 +184,8 @@ difference (ΔE).
   `projets/` folder; click a thumbnail to go back to it instantly. A modified version can also
   replace an existing snapshot (same name) instead of adding a new one.
 - **Open a project…** reopens recent projects, a project folder or an exported zip.
+- The **Project** section holds the project name and a free **note** (paints, support, ideas…),
+  both kept with the project rather than with each snapshot.
 - **Undo / redo** (Ctrl + Z / Ctrl + Y) covers settings and painted masks.
 - Your own supports, materials, mats, machines and palettes are saved as presets.
 

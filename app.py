@@ -1202,8 +1202,10 @@ def open_snapshot(d, snap):
     if isinstance(out, tuple):
         return out
     sess = SESSIONS[out["id"]]
-    # the name belongs to the project (projet.json, renamed without a new snapshot), not to the snapshot
+    # the name belongs to the project (projet.json, renamed without a new snapshot), not to the snapshot;
+    # so does the free note
     out["project_name"] = project_name(pinfo.get("nom"), out["project_name"])
+    out["project_note"] = projects.clean_note(pinfo.get("note"))
     sess["proj_dir"], sess["snap"] = d, snap
     projects.touch(d)
     out["computed"] = sess.get("last_out") if dump is not None and sess.get("result") is not None else None
@@ -1327,6 +1329,18 @@ def api_project_rename(name):
         return jsonify(error="Nom de projet vide"), 400
     projects.rename_project(d, pname)
     return jsonify(project_state(d, None))
+
+
+@app.post("/api/projects/<name>/note")
+def api_project_note(name):
+    """Free note of the project typed in the interface: saved at once in projet.json (not a new version)."""
+    try:
+        d = projects.project_dir(name)
+    except projects.ProjectError as e:
+        return jsonify(error=str(e)), 404
+    with LOCK:
+        projects.set_note(d, projects.clean_note(request.get_json(force=True).get("note")))
+    return jsonify(ok=True)
 
 
 @app.delete("/api/projects/<name>")
@@ -1462,13 +1476,16 @@ def api_snapshot():
         return err
     name = project_name(data.get("name"), sess["name"])
     label = re.sub(r"[\x00-\x1f]+", " ", str(data.get("label") or "")).strip()[:80]
+    note = projects.clean_note(data.get("note"))
     with LOCK:
         d = sess.get("proj_dir")
         if d is None or not d.is_dir():
-            d = projects.create_project(name, sess["orig_raw"], sess["orig_ext"], sess.get("filename"))
+            d = projects.create_project(name, sess["orig_raw"], sess["orig_ext"], sess.get("filename"), note=note)
             sess["proj_dir"] = d
         else:
             projects.rename_project(d, name)
+            if "note" in data:
+                projects.set_note(d, note)
     snap = projects.write_snapshot(d, *snapshot_content(sess, name, label, data.get("lang")))
     sess["snap"] = snap
     flush_timings(sess)               # timings kept until the project folder existed
@@ -1492,6 +1509,8 @@ def api_snapshot_replace(name, snap):
     pname = project_name(data.get("name"), sess["name"])
     with LOCK:
         projects.rename_project(d, pname)
+        if "note" in data:
+            projects.set_note(d, projects.clean_note(data.get("note")))
     content = snapshot_content(sess, pname, "", data.get("lang"))
     try:
         with LOCK:
