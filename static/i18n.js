@@ -156,7 +156,7 @@ try {
     "Exporter les SVG + projet (.zip)": "Export SVGs + project (.zip)", "Exporter le projet (.zip)": "Export the project (.zip)", "Exporter le projet": "Export the project",
     "Plus proches : donne à chaque couche la couleur de la palette la plus proche de sa teinte réelle dans l'image (deux couches n'ont jamais la même couleur) ; sans palette choisie, prend la palette qui colle le mieux à l'image":
       "Closest: gives each layer the palette colour closest to its real tone in the image (two layers never get the same colour); with no palette chosen, picks the palette that best matches the image",
-    "Auto : revenir aux teintes calculées pour toutes les couches": "Auto: back to the computed tones for all layers",
+    "Auto : revenir aux teintes calculées pour toutes les couches (sauf les couleurs verrouillées)": "Auto: back to the computed tones for all layers (except the locked colours)",
     "Pochoirs SVG + projet rechargeable (image d'origine, masque, réglages)": "SVG stencils + reloadable project (original image, mask, settings)",
     "Exporter le projet : pochoirs SVG + projet rechargeable (image d'origine, masques, réglages et snapshots). Une version courante non enregistrée devient d'abord une snapshot.":
       "Export the project: SVG stencils + reloadable project (original image, masks, settings and snapshots). A current version not saved yet becomes a snapshot first.",
@@ -749,6 +749,13 @@ try {
     "Chargement…": "Loading…", "Ouverture du projet…": "Opening project…", "Détourage du sujet…": "Cutting out the subject…",
     "Sujet détouré": "Subject cut out", "Masque sujet effacé": "Subject mask cleared", "Fond supprimé (sujet peint)": "Background removed (subject painted)",
     "Pochoir de contours activé (masque peint)": "Outline stencil enabled (mask painted)", "Pochoir de contours activé": "Outline stencil enabled", "Couleurs calculées pour toutes les couches": "Computed colours for all layers",
+    "Couleurs calculées pour les couches non verrouillées": "Computed colours for the unlocked layers",
+    "Toutes les couches sont verrouillées (cadenas des couches)": "All the layers are locked (layer padlocks)",
+    "Verrouiller la couleur": "Lock the colour", "Déverrouiller la couleur": "Unlock the colour",
+    "Couleur verrouillée : les palettes, « Autres couleurs », Auto et l'assistant de palette n'y touchent pas — cliquer pour déverrouiller":
+      "Colour locked: the palettes, “Other colours”, Auto and the palette assistant leave it alone — click to unlock",
+    "Verrouiller la couleur : les palettes, « Autres couleurs », Auto et l'assistant de palette n'y toucheront plus":
+      "Lock the colour: the palettes, “Other colours”, Auto and the palette assistant will leave it alone",
     "Calculez d'abord les couches": "Compute the layers first", "Chargez d'abord une image": "Load an image first",
     "Choisissez d'abord un tapis de découpe": "Choose a cutting mat first", "Donnez un nom à la palette": "Give the palette a name",
     "Image chargée — réglages du projet appliqués": "Image loaded — project settings applied",
@@ -1342,6 +1349,13 @@ try {
   const SRC_EN = w => w.replace(/^Teinte (\d+)$/, "Tone $1").replace(/^Détails ([A-Z])$/, "Key details $1")
     .replace(/^Contour de coloriage$/, "Colouring-book outline");
   const MASK_EN = { "contours": "outline", "sujet": "subject", "silhouette": "silhouette", "aplats": "flat areas", "contours (détails clés)": "outline (key details)" };
+  // mask name of a copy: "aplats (couche 2)" = one of the flat masks, "contours (Zone 2)" = the mask of
+  // a key-detail zone (name given by the user: kept as is)
+  const maskNameEn = w => {
+    if (MASK_EN[w]) return MASK_EN[w];
+    const f = w.match(/^aplats \((.+)\)$/), z = w.match(/^contours \((.+)\)$/);
+    return f ? `flat areas (${flatPartEn(f[1])})` : z ? `outline (${z[1]})` : w;
+  };
   const decEN = x => x.replace(/(\d),(\d)/g, "$1.$2");
   const P = [
     [/^(\d+) projets?$/, (m, n) => plural(n, "project")],
@@ -1427,9 +1441,14 @@ try {
     [/^Couche (\d+)( \(contours\))? (#[0-9a-f]{6})$/i, (m, n, c, h) => `Layer ${n}${c ? " (outline)" : ""} ${h}`],
     [/^Couche (\d+) : peinture (#[0-9a-f]{6})$/i, (m, n, h) => `Layer ${n}: paint ${h}`],
     [/^Couche (\d+) : teinte calculée$/, (m, n) => `Layer ${n}: computed tone`],
+    [/^(Couche|Pochoir) (\d+)( \(traits\))? : couleur (verrouillée|déverrouillée)$/,
+      (m, k, n, t, a) => `${k === "Couche" ? "Layer" : "Stencil"} ${n}${t ? " (lines)" : ""}: colour ${a === "verrouillée" ? "locked" : "unlocked"}`],
     [/^Couche (\d+) \(contours\) : peinture (#[0-9a-f]{6})$/i, (m, n, h) => `Layer ${n} (outline): paint ${h}`],
     [/^Couche (\d+) \(contours\) : couleur automatique$/, (m, n) => `Layer ${n} (outline): automatic colour`],
-    [/^Masque (contours|sujet|silhouette|aplats) copié dans le masque (contours|sujet|silhouette|aplats)$/, (m, a, b) => `${MASK_EN[a]} mask copied into the ${MASK_EN[b]} mask`],
+    [/^Masque (contours(?: \(.+\))?|sujet|silhouette|aplats \(.+\)) copié dans le masque (contours(?: \(.+\))?|sujet|silhouette|aplats \(.+\))$/,
+      (m, a, b) => `${maskNameEn(a).replace(/^./, c => c.toUpperCase())} mask copied into the ${maskNameEn(b)} mask`],
+    [/^Masque aplats : (.+)$/, (m, n) => `Flat areas mask: ${n === "Générale" ? "General" : flatNameEn(n)}`],
+    [/^Masque contours : (.+)$/, (m, n) => `Outline mask: ${n}`],
     [/^Silhouette : le masque (sujet|silhouette|contours \(détails clés\)) est vide \(onglet Masques\)$/, (m, a) => `Silhouette: the ${MASK_EN[a]} mask is empty (Masks tab)`],
     [/^Contour de coloriage : le masque (sujet|silhouette|contours \(détails clés\)) est vide \(onglet Masques\) ; limites tracées sur toute l'image$/,
       (m, a) => `Colouring-book outline: the ${MASK_EN[a]} mask is empty (Masks tab); limits drawn over the whole image`],

@@ -232,6 +232,8 @@
   #layerTip[hidden] { display: none; }
   .card .lcreset { padding: 2px 4px; line-height: 0; }
   .card .lcreset .ico { width: 13px; height: 13px; }
+  .card .llock { padding: 2px 4px; line-height: 0; color: var(--muted); }
+  .card .llock[aria-pressed="true"] { color: var(--accent); }
   /* icon buttons (stencil column) */
   .ibtn { display: inline-flex; align-items: center; justify-content: center; padding: 4px 6px; line-height: 0; }
   .ico { display: block; flex: none; }
@@ -1791,10 +1793,6 @@
         <button type="button" id="mClear" class="vt-small">Tout effacer</button>
         <select id="mCopy" aria-label="Copier ce masque dans un autre masque" title="Copie le masque affiché dans un autre masque (son contenu est remplacé)" style="width:auto; flex:none">
           <option value="">Copier vers…</option>
-          <option value="outline">Masque contours</option>
-          <option value="subject">Masque sujet</option>
-          <option value="silhouette">Masque silhouette</option>
-          <option value="flat">Masque aplats</option>
         </select>
       </span>
       <button type="button" class="vt-opt vt-ico mdet" id="optDetect" aria-pressed="false" aria-label="Aperçu de la détection"
@@ -1853,8 +1851,9 @@
       title="Autres couleurs de la palette : chaque clic donne une autre combinaison, de la plus proche de l'image à la plus éloignée (deux couches n'ont jamais la même couleur)"><svg class="ico" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M16 3h5v5"/><path d="M4 20 21 3"/><path d="M21 16v5h-5"/><path d="m15 15 6 6"/><path d="M4 4l5 5"/></svg></button>
     <button type="button" class="ibtn" id="palOrder" aria-pressed="false" aria-label="Garder l'ordre clair → foncé"
       title="Autres couleurs : garder l'ordre clair → foncé (la couche la plus claire reçoit la couleur la plus claire choisie, et ainsi de suite)"><svg class="ico" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="3" width="6" height="5" rx="1" fill="currentColor" fill-opacity=".15"/><rect x="3" y="10" width="6" height="5" rx="1" fill="currentColor" fill-opacity=".5"/><rect x="3" y="17" width="6" height="5" rx="1" fill="currentColor"/><path d="M16 4v16"/><path d="m12.5 16.5 3.5 3.5 3.5-3.5"/></svg></button>
-    <button type="button" class="ibtn" id="colorsAuto" aria-label="Auto" title="Auto : revenir aux teintes calculées pour toutes les couches"><svg class="ico" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 12a9 9 0 1 0 3-6.7L3 8"/><path d="M3 3v5h5"/></svg></button>
+    <button type="button" class="ibtn" id="colorsAuto" aria-label="Auto" title="Auto : revenir aux teintes calculées pour toutes les couches (sauf les couleurs verrouillées)"><svg class="ico" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 12a9 9 0 1 0 3-6.7L3 8"/><path d="M3 3v5h5"/></svg></button>
     <input type="hidden" id="layer_colors" value="">
+    <input type="hidden" id="layer_locks" value="">
     <input type="hidden" id="manual_bridges" value="">
   </div>
   <div class="legend">
@@ -2985,7 +2984,7 @@ async function resetSettings() {
   const d = { ...DEFAULTS };
   $("material").value = d.material; applyMaterial(d.material); delete d.material;
   setVals(d);
-  $("layer_colors").value = ""; showPaletteChoice(""); PAL_LAST = "";
+  $("layer_colors").value = ""; $("layer_locks").value = ""; showPaletteChoice(""); PAL_LAST = "";
   $("manual_bridges").value = "";
   // layer effects (and their stacking options) removed, whatever the captured state held
   $("layer_effects").value = ""; FXOPEN.clear(); renderFx(true);
@@ -4029,9 +4028,11 @@ async function init() {
     if (k === "z" && !e.shiftKey) { e.preventDefault(); historyGo(-1); }
     else if (k === "y" || (k === "z" && e.shiftKey)) { e.preventDefault(); historyGo(1); }
   });
-  $("colorsAuto").onclick = () => {
-    $("layer_colors").value = ""; showPaletteChoice(""); PAL_LAST = "";
-    status("Couleurs calculées pour toutes les couches"); schedule();
+  $("colorsAuto").onclick = () => {            // locked layers keep their colour
+    const locks = layerLocks(), kept = Object.entries(layerColors()).filter(([k]) => locks.has(k));
+    $("layer_colors").value = kept.map(([k, v]) => `${k}=${v}`).join(";");
+    showPaletteChoice(""); PAL_LAST = ""; VARY = null;
+    status(kept.length ? "Couleurs calculées pour les couches non verrouillées" : "Couleurs calculées pour toutes les couches"); schedule();
   };
   setupPalettes();
   $("palNearest").onclick = () => applyNearest(palDef(PAL_CUR || PAL_LAST) ? PAL_CUR || PAL_LAST : "");
@@ -4482,7 +4483,7 @@ function setSession(j, name) {
   $("manual_bridges").value = ""; BR.sel = null; BR.autoSeg = null; BR.draft = null;   // drawn on the former image
   // paints chosen per layer / tone: they matched the tones of the former image (a project
   // opened puts its own back afterwards)
-  $("layer_colors").value = ""; showPaletteChoice(""); PAL_LAST = "";
+  $("layer_colors").value = ""; $("layer_locks").value = ""; showPaletteChoice(""); PAL_LAST = "";
   createMask(); createSubj(); createSil(); createFlat();
   $("crop_ratio").value = "free";
   $("image_scale").value = 100; $("image_pos_x").value = 50; $("image_pos_y").value = 50;
@@ -4499,7 +4500,7 @@ function dropInfo() {
 // The full interface state goes with each computation; the export writes it into …_infos.json
 // ("projet" key), with the original image and the mask. "Open a project" reads the zip back
 // (everything is restored) or only the .json (settings; the image is asked for next).
-const UI_EXTRA = ["material", "support_preset", "orientation", "crop_ratio", "keep_ratio", "align_margin_mm",
+const UI_EXTRA = ["layer_locks", "material", "support_preset", "orientation", "crop_ratio", "keep_ratio", "align_margin_mm",
   "preview_sim", "show_support", "show_mat", "mat_preset", "machine", "show_stock", "show_reg", "stock_preset", "stock_orient", "stock_w_mm", "stock_h_mm"];
 let PENDING_PROJECT = null;
 function uiState() {
@@ -5753,7 +5754,15 @@ async function sendSil() {
 // Copies a mask into another one (its content is replaced). The subject mask gives its cut-out
 // (what is kept) when it was painted roughly; an object selection stays exact in the subject mask.
 async function copyMask(from, to) {
+  // key-detail zones "outline:<zone id>", flat masks "flat:<target id>"
+  const full = k => k === "flat" ? flatKey(FLAT_CUR) : k === "outline" ? zkey(ZONE_CUR) : k;
+  from = full(from); to = full(to);
   if (!to || to === from || !IMG) return;
+  const isZone = k => String(k).startsWith("outline:");
+  const base = k => isFlat(k) ? "flat" : isZone(k) ? "outline" : k;
+  const zoneName = k => (zState().zones.find(z => z.id === k.slice(8)) || { name: k.slice(8) }).name;
+  const name = k => isFlat(k) ? `aplats (${flatLabel(flatId(k)).toLowerCase()})`
+    : isZone(k) ? (zState().zones.length > 1 ? `contours (${zoneName(k)})` : "contours") : MASK_NAMES[k];
   if (!MASK) createMask();
   if (!SUBJ) createSubj();
   if (!SIL) createSil();
@@ -5772,19 +5781,25 @@ async function copyMask(from, to) {
     const d = src.getContext("2d").getImageData(0, 0, W, H).data;
     alpha = i => d[i * 4 + 3] > 127;
   }
-  const [r, g, b] = MASK_COLORS[to].match(/\w\w/g).map(h => parseInt(h, 16));
+  const [r, g, b] = MASK_COLORS[base(to)].match(/\w\w/g).map(h => parseInt(h, 16));
   const ctx = dst.getContext("2d"), out = ctx.createImageData(W, H);
   for (let i = 0; i < W * H; i++) {
     out.data[i * 4] = r; out.data[i * 4 + 1] = g; out.data[i * 4 + 2] = b; out.data[i * 4 + 3] = alpha(i) ? 255 : 0;
   }
   ctx.putImageData(out, 0, 0);
-  const exact = from === "subject" ? true : MASK_OBJ[from];   // a subject cut-out is exact once copied
-  if (to === "subject") SUBJ_EXACT = !!exact; else MASK_OBJ[to] = !!exact;
+  // a subject cut-out is exact once copied
+  const exact = from === "subject" ? true : isZone(from) ? !!ZOBJ[from.slice(8)] : MASK_OBJ[base(from)];
+  if (to === "subject") SUBJ_EXACT = !!exact; else if (isZone(to)) ZOBJ[to.slice(8)] = !!exact; else MASK_OBJ[base(to)] = !!exact;
   SEM_LAST = null;
-  $("maskKind").value = to;                                    // show the copy
+  if (isFlat(to)) {                                            // show the copy
+    $("flat_tolerances").value = JSON.stringify(flatTols());
+    FLAT_CUR = flatId(to); flatTolToField(); flatInfo();
+  }
+  $("maskKind").value = base(to);
+  if (isZone(to)) zoneSelect(to.slice(8));
   render();
   await sendMask(to);
-  status(`Masque ${MASK_NAMES[from]} copié dans le masque ${MASK_NAMES[to]}`);
+  status(`Masque ${name(from)} copié dans le masque ${name(to)}`);
 }
 async function sendMask(kind = maskKind()) {
   if (kind === "subject") return sendSubject();
@@ -6085,7 +6100,14 @@ function maskEditor(st) {
   if (!SUBJ) createSubj();
   if (!SIL) createSil();
   const kind = maskKind(), CV = maskCv(kind);
-  [...$("mCopy").options].forEach(o => { o.hidden = o.value === kind; });
+  // copy targets: the masks, one entry per key-detail zone and per flat mask (general, each layer,
+  // bare support...)
+  const cur = kind === "flat" ? flatKey(FLAT_CUR) : kind === "outline" ? zkey(ZONE_CUR) : kind;
+  $("mCopy").innerHTML = `<option value="">Copier vers…</option>` +
+    [...zState().zones.map(z => [zkey(z.id), `Masque contours : ${z.name}`]),
+     ["subject", "Masque sujet"], ["silhouette", "Masque silhouette"],
+     ...flatTargets().map(t => [flatKey(t.id), `Masque aplats : ${t.label}`])]
+      .filter(([v]) => v !== cur).map(([v, l]) => `<option value="${v}">${escH(l)}</option>`).join("");
   $("mColor").value = MASK_COLORS[kind];
   syncMaskKinds();
   const wrap = document.createElement("div");
@@ -6589,6 +6611,7 @@ function toggleLayer(i) {
 // Icons of the stencil cards (stroke, currentColor)
 const ICO_FLAT = `<svg class="ico" viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 13 11 6l7 7-7 7z" fill="currentColor" fill-opacity=".35"/><path d="M8 3l3 3"/><path d="M19.5 15.5s1.5 2 1.5 3a1.5 1.5 0 0 1-3 0c0-1 1.5-3 1.5-3z" fill="currentColor"/></svg>`;
 const ICO_RESET = `<svg class="ico" viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 12a9 9 0 1 0 3-6.7L3 8"/><path d="M3 3v5h5"/></svg>`;
+const ICO_LOCK = on => `<svg class="ico" viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="5" y="11" width="14" height="10" rx="2"/><path d="${on ? "M8 11V7a4 4 0 0 1 8 0v4" : "M8 11V7a4 4 0 0 1 7.5-2"}"/></svg>`;
 const ICO_INFO = `<svg class="ico" viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="9.5"/><path d="M12 11v6"/><circle cx="12" cy="7.5" r=".6" fill="currentColor"/></svg>`;
 // Layer details (paths, nodes, islands…): hover / focus tooltip of the "i" icon of a card. The text is
 // kept hidden in the card (so that i18n translates it) and copied into a fixed element, which the
@@ -6709,6 +6732,9 @@ function render() {
           ? `<button type="button" class="lcolor" data-idx="${L.index}" style="background:${L.color}" aria-haspopup="dialog" title="Couleur de la sous-couche — cliquer pour changer"></button>(sous-couche)`
           : `<button type="button" class="lcolor" data-idx="${L.index}" style="background:${L.color}" aria-haspopup="dialog" title="Couleur de la peinture de la couche ${L.index}${layerColors()[L.index] ? " (choisie)" : " (calculée)"} — cliquer pour changer"></button>`}${L.kind === "outline" ? `(contours${L.group ? " " + L.group : ""}) ✎` : ""}${customColor(L)
           ? ` <button type="button" class="lcreset" data-idx="${L.index}" title="${L.kind === "primer" ? "Revenir au blanc" : "Revenir à la teinte calculée"}" aria-label="${L.kind === "primer" ? "Revenir au blanc" : "Revenir à la teinte calculée"}">${ICO_RESET}</button>` : ""}
+          ${lockKeys(L).length ? (on => `<button type="button" class="llock" aria-pressed="${on}" aria-label="${on ? "Déverrouiller la couleur" : "Verrouiller la couleur"}" title="${on
+            ? "Couleur verrouillée : les palettes, « Autres couleurs », Auto et l'assistant de palette n'y touchent pas — cliquer pour déverrouiller"
+            : "Verrouiller la couleur : les palettes, « Autres couleurs », Auto et l'assistant de palette n'y toucheront plus"}">${ICO_LOCK(on)}</button>`)(isLocked(L)) : ""}
           ${fxBadge(L)}
           ${L.kind !== "outline" && L.tone != null ? `<button type="button" class="lflat${FLAT_COVS["t" + L.tone] > 0 ? " on" : ""}" data-tone="${L.tone}" title="Peindre un aplat dans cette couche : les zones peintes (ou objets sélectionnés) prennent la couleur de cette couche, les détails francs restent (onglet Masques, masque Aplats)" aria-label="Peindre un aplat dans cette couche">${ICO_FLAT}</button>` : ""}
           <button type="button" class="linfo${L.weak_spots ? " lwarn" : ""}" aria-label="Informations sur la couche">${ICO_INFO}<span class="linfo-body" hidden>
@@ -6751,6 +6777,7 @@ function render() {
       return;
     }
     if (e.target.closest(".lcreset")) { setLayerColor(+e.target.closest(".lcreset").dataset.idx, null); return; }
+    if (e.target.closest(".llock")) { toggleLock(LAST.layers[+c.dataset.i]); return; }
     const i = +c.dataset.i; SEL = (SEL === i) ? null : i; BR.sel = null; BR.autoSeg = null; BR.draft = null; render();
   });
   loadSupportMaps();
@@ -7442,7 +7469,7 @@ const PALETTES = {
 };
 // Colours of palette `key` for the image tones: closest hues, or (ordered) the best choice given by
 // lightness rank (the lightest layer gets the lightest chosen colour..., whatever its hue)
-const paletteFit = (key, tones, ordered) => ordered ? paletteCombos(palDef(key)[1], tones, true)[0] : nearestColors(palDef(key)[1], tones);
+const paletteFit = (stops, tones, ordered) => ordered ? paletteCombos(stops, tones, true)[0] : nearestColors(stops, tones);
 const hexRgb = h => [1, 3, 5].map(i => parseInt(h.slice(i, i + 2), 16));
 const rgbHex = c => "#" + c.map(v => Math.round(v).toString(16).padStart(2, "0")).join("");
 // n colours spread over the palette, lightest to darkest: real palette colours as long as there are
@@ -7493,17 +7520,44 @@ function paletteTargets() {
 }
 const noTargets = () => status(val("stencil_style") === "line"
   ? "Trait seul : la palette s'applique aux limites du coloriage colorées par teinte" : "Calculez d'abord les couches", true);
+// Locked layer colours (padlock of the layer cards): the palette buttons (menu, closest, by values,
+// other colours, Auto) leave them as they are, and the palette assistant opens with them locked.
+// Keys as in layer_colors: layer number, or "t<tone>" for the tones of the line style.
+const layerLocks = () => new Set(String($("layer_locks").value || "").split(";").filter(Boolean));
+const lockKeys = L => val("stencil_style") === "line"
+  ? [...new Set((L.sources || []).filter(s => /^tone\d+$/.test(s)).map(s => "t" + s.slice(4)))]
+  : isPaint(L) && L.tone != null ? [String(L.index)] : [];
+const isLocked = L => { const k = lockKeys(L), s = layerLocks(); return k.length > 0 && k.every(x => s.has(x)); };
+function toggleLock(L) {
+  const s = layerLocks(), keys = lockKeys(L), on = !isLocked(L);
+  keys.forEach(k => on ? s.add(k) : s.delete(k));
+  $("layer_locks").value = [...s].join(";");
+  VARY = null; historySoon(); render();
+  const what = val("stencil_style") === "line" ? `Pochoir ${L.index} (traits)` : `Couche ${L.index}`;
+  status(`${what} : couleur ${on ? "verrouillée" : "déverrouillée"}`);
+}
+// Palette targets the buttons may recolour, and a filter that keeps the colours of the locked ones
+// out of the choice (unless that leaves no colour)
+function paletteFree() {
+  const all = paletteTargets(), locks = layerLocks(), m = layerColors();
+  const colorOf = T => (m[T.index] || (LAST.layers.find(L => L.index === T.index) || {}).color || LAST.palette[T.tone]).toLowerCase();
+  const taken = new Set(all.filter(T => locks.has(String(T.index))).map(colorOf));
+  const avail = stops => { const f = stops.filter(c => !taken.has(c.toLowerCase())); return f.length ? f : stops; };
+  return { all, free: all.filter(T => !locks.has(String(T.index))), taken, avail };
+}
+const allLocked = () => status("Toutes les couches sont verrouillées (cadenas des couches)", true);
 function applyNearest(key, ordered = false) {
   if (!LAST) return status("Calculez d'abord les couches", true);
-  const layers = paletteTargets();
-  if (!layers.length) return noTargets();
+  const { all, free: layers, avail } = paletteFree();
+  if (!all.length) return noTargets();
+  if (!layers.length) return allLocked();
   VARY = null;
   const tones = layers.map(L => LAST.palette[L.tone]);
   let best = null;
   const keys = key ? [key].filter(palDef)
     : [...Object.keys(UP.palette || {}).map(k => "u:" + k), ...Object.keys(PALETTES)].filter(palDef);
   for (const k of keys) {
-    const r = paletteFit(k, tones, ordered);
+    const r = paletteFit(avail(palDef(k)[1]), tones, ordered);
     if (!best || r.mean < best.mean) best = { ...r, k };
   }
   if (!best) return;
@@ -7589,12 +7643,13 @@ function varyColors() {
   if (!LAST) return status("Calculez d'abord les couches", true);
   const key = PAL_CUR || PAL_LAST, def = palDef(key);
   if (!def) return status("Choisissez d'abord une palette (menu Palette de couleurs…)", true);
-  const layers = paletteTargets();
-  if (!layers.length) return noTargets();
+  const { all, free: layers, taken, avail } = paletteFree();
+  if (!all.length) return noTargets();
+  if (!layers.length) return allLocked();
   const tones = layers.map(L => LAST.palette[L.tone]);
   const ordered = $("palOrder").getAttribute("aria-pressed") === "true";
-  const sig = key + "|" + def[1].join(",") + "|" + layers.map(L => L.index + ":" + tones[layers.indexOf(L)]).join(",") + "|" + ordered;
-  if (!VARY || VARY.sig !== sig) VARY = { sig, list: paletteCombos(def[1], tones, ordered), pos: -1 };
+  const sig = key + "|" + def[1].join(",") + "|" + layers.map(L => L.index + ":" + tones[layers.indexOf(L)]).join(",") + "|" + ordered + "|" + [...taken].join(",");
+  if (!VARY || VARY.sig !== sig) VARY = { sig, list: paletteCombos(avail(def[1]), tones, ordered), pos: -1 };
   const m = layerColors(), cur = layers.map(L => (m[L.index] || "").toLowerCase());
   const need = Math.max(1, Math.ceil(layers.length / 2));
   const diff = c => c.cols.reduce((s, x, i) => s + (x !== cur[i]), 0);
@@ -8199,6 +8254,11 @@ function paReadTargets() {
   });
   return PA.targets.map(T => `${T.index}:${T.tone}`).join();
 }
+// Layers locked on their card (padlock): locked in the assistant too, with their current colour
+function paLayerLocks() {
+  const locks = layerLocks();
+  PA.targets.forEach(T => { if (locks.has(String(T.index))) PA.locks[T.index] = T.color.toLowerCase(); });
+}
 // Colours when the window opens: always the first proposal; applying it restores
 // that exact state (automatic colours and palette shown included)
 function paCaptureOpening() {
@@ -8212,6 +8272,7 @@ async function paOpen() {
   if (!PA.S) PA.S = paLoadSettings();
   const sig = paReadTargets();
   if (sig !== PA.sig) { PA.sig = sig; PA.locks = {}; }
+  paLayerLocks();
   PA.near = null; paCaptureOpening();
   PA.back.hidden = false; paMsg("");
   $("paName").value = "";
@@ -8229,7 +8290,7 @@ async function paRefresh() {                 // new computation while the window
   const sig = paReadTargets();
   if (!PA.targets.length) return paClose();
   const same = sig === PA.sig;
-  if (!same) { PA.sig = sig; PA.locks = {}; PA.near = null; paCaptureOpening(); }
+  if (!same) { PA.sig = sig; PA.locks = {}; paLayerLocks(); PA.near = null; paCaptureOpening(); }
   if (await paPrepare()) { if (same) paDrawAll(); else paGenerate(); }
 }
 function paFillPaints() {
