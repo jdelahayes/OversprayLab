@@ -824,6 +824,17 @@
     </div>
   </div>
 </div>
+<div class="modalback" id="nameAsk" hidden>
+  <div class="modal" role="alertdialog" aria-modal="true" aria-labelledby="nameAskTitle" aria-describedby="nameAskText">
+    <h4 id="nameAskTitle">Le projet n'a pas été renommé</h4>
+    <p id="nameAskText">Il porte encore le nom de l'image. La première snapshot crée le dossier du projet, qui gardera ce nom même si vous renommez le projet ensuite : donnez-lui un nom parlant.</p>
+    <input type="text" id="nameAskInput" maxlength="80" aria-label="Nom du projet" style="margin-bottom:10px">
+    <div class="btns">
+      <button type="button" data-a="cancel">Annuler</button>
+      <button type="button" class="primary" data-a="save">Créer la snapshot</button>
+    </div>
+  </div>
+</div>
 <div class="modalback" id="settingsBad" hidden>
   <div class="modal" role="alertdialog" aria-modal="true" aria-labelledby="settingsBadTitle" aria-describedby="settingsBadText">
     <h4 id="settingsBadTitle">Ce JSON n'est pas un fichier infos.json de OversprayLab</h4>
@@ -4465,7 +4476,7 @@ function setupProjectName() {
   const done = ok => {
     if (inp.hidden) return;
     const old = PROJECT_NAME;
-    if (ok) PROJECT_NAME = inp.value.replace(/[<>:"/\\|?*\x00-\x1f]+/g, " ").replace(/\s+/g, " ").trim().replace(/^\.+|\.+$/g, "") || PROJECT_DEFAULT;
+    if (ok) PROJECT_NAME = cleanProjectName(inp.value) || PROJECT_DEFAULT;
     inp.hidden = true; d.hidden = false; showProjectName();
     // a project folder exists: the name is saved at once (projet.json), not with the next snapshot
     const dir = PROJ.dir;
@@ -4487,6 +4498,25 @@ function setupProjectName() {
   });
   note.addEventListener("blur", saveNote);
   showProjectName();
+}
+// project name usable as a file and folder name
+const cleanProjectName = v => String(v || "").replace(/[<>:"/\\|?*\x00-\x1f]+/g, " ").replace(/\s+/g, " ").trim().replace(/^\.+|\.+$/g, "");
+// First snapshot of a project never renamed: its folder takes the name for good (a later rename
+// only changes projet.json), so a name is asked first; the image name offered can be kept.
+// false = the snapshot is given up.
+async function askProjectName() {
+  const inp = $("nameAskInput");
+  inp.value = PROJECT_NAME;
+  const enter = e => { if (e.key === "Enter") { e.preventDefault(); $("nameAsk").querySelector('[data-a="save"]').click(); } };
+  inp.addEventListener("keydown", enter);
+  const answer = askModal("nameAsk", "save");
+  inp.focus(); inp.select();
+  const a = await answer;
+  inp.removeEventListener("keydown", enter);
+  if (a !== "save") return false;
+  const name = cleanProjectName(inp.value);
+  if (name && name !== PROJECT_NAME) { PROJECT_NAME = name; showProjectName(); }
+  return true;
 }
 function saveNote() {                // written into the project folder, once it exists
   clearTimeout(NOTE_TIMER); NOTE_TIMER = null;
@@ -4946,6 +4976,7 @@ async function settle() {
 }
 async function createSnapshot() {
   if (!SID || SNAP_BUSY) return false;
+  if (!PROJ.dir && PROJECT_NAME === PROJECT_DEFAULT && !(await askProjectName())) return false;
   SNAP_BUSY = true; renderSnaps();
   try {
     if (!(await settle())) { status("Snapshot impossible : le calcul n'a pas abouti", true); return false; }

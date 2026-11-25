@@ -145,6 +145,9 @@ try {
     "Aucun projet récent : la première snapshot (ou le premier export) d'un projet le crée dans le dossier des projets.": "No recent project: the first snapshot (or the first export) of a project creates it in the projects folder.",
     "Ouverture de la snapshot…": "Opening the snapshot…",
     "Reprise de la session…": "Resuming the session…",
+    "Le projet n'a pas été renommé": "The project has not been renamed",
+    "Il porte encore le nom de l'image. La première snapshot crée le dossier du projet, qui gardera ce nom même si vous renommez le projet ensuite : donnez-lui un nom parlant.":
+      "It still has the name of the image. The first snapshot creates the project folder, which will keep this name even if you rename the project later: give it a meaningful name.",
     "Session reprise après le rechargement de la page": "Session resumed after reloading the page",
     "Session précédente perdue (serveur redémarré) : rouvrez le projet ou rechargez l'image":
       "Previous session lost (server restarted): reopen the project or load the image again",
