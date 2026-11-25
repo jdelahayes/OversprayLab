@@ -1084,6 +1084,50 @@ def restore_session(info: dict, read, image: tuple[bytes, str], original: tuple[
             "flatmask": flat_b64, "flatmask_coverage": flat_coverage, "flat_layer_masks": flat_layers}
 
 
+@app.post("/api/session/resume")
+def api_session_resume():
+    """Session still held in memory, for a page reloaded (F5): its image, painted masks, project
+    folder and last computation, in the shape of an opened project (the browser keeps its own
+    interface state and puts it back). 404 once the server no longer has it (restarted)."""
+    sid = str(request.get_json(force=True).get("id", ""))
+    sess = SESSIONS.get(sid)
+    if not sess:
+        return jsonify(error="Session introuvable"), 404
+    img = sess["img"]
+    h, w = img.shape[:2]
+
+    def entry(m):
+        if m is None or not m.any():
+            return None, 0.0
+        return "data:image/png;base64," + base64.b64encode(png_bytes(m)).decode(), round(100 * float((m > 0).mean()), 1)
+
+    def several(key):
+        out = {}
+        for zid, m in (sess.get(key) or {}).items():
+            png, cov = entry(m)
+            if png:
+                out[zid] = {"png": png, "coverage": cov}
+        return out
+
+    mask, mask_cov = entry(sess.get("mask"))
+    sil, sil_cov = entry(sess.get("silmask"))
+    flat, flat_cov = entry(sess.get("flatmask"))
+    subject = None
+    if sess.get("subject") is not None:
+        subject = {**subject_info(sess), "png": entry(sess["subject"])[0]}
+    d = sess.get("proj_dir")
+    d = d if d is not None and d.is_dir() else None
+    return jsonify(id=sid, width=w, height=h, gray=pl.is_grayscale(img),
+                   original=png_b64(img), filename=sess.get("filename"), project_name=sess.get("name"),
+                   project_note=projects.clean_note(projects.project_info(d).get("note")) if d else "",
+                   info={"projet": {"interface": sess.get("ui")}},
+                   mask=mask, mask_coverage=mask_cov, zone_masks=several("zmasks"), subject=subject,
+                   silmask=sil, silmask_coverage=sil_cov, flatmask=flat, flatmask_coverage=flat_cov,
+                   flat_layer_masks=several("flatforce"),
+                   project=project_state(d, sess.get("snap") if d else None),
+                   computed=sess.get("last_out") if sess.get("result") is not None else None)
+
+
 def answer(out):
     """JSON answer of restore_session / open_snapshot (or its error)."""
     if isinstance(out, tuple):

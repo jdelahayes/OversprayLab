@@ -3942,6 +3942,7 @@ async function init() {
   $("supportSwatches").addEventListener("click", () => SUPBAR.setDirty(true));
   $("resetAll").onclick = resetSettings;
   window.addEventListener("beforeunload", rememberSettings);
+  window.addEventListener("pagehide", saveResume);
   // sliders: the value is shown live while dragging, the computation starts once the handle is
   // released ("change" also fires after a keyboard step)
   PARAMS.forEach(k => {
@@ -4344,6 +4345,9 @@ async function init() {
     } catch (e) { /* exported without it */ }
     location.href = "/api/export/" + SID + "?lang=" + I18N.lang + "&name=" + encodeURIComponent(PROJECT_NAME);
   };
+  // page reloaded: back to its session ("New project" starts empty)
+  if (fresh) { try { sessionStorage.removeItem(RESUME_KEY); } catch (e) { /* storage unavailable */ } }
+  else await resumeSession();
 }
 
 // ---------------- Preferences (gear button in the header) ----------------
@@ -4712,6 +4716,52 @@ async function openProject(file) {
   } catch (e) { return status("Serveur injoignable : " + e.message, true); }
   await applyOpened(j, `${file.name} (projet)`);
   status(`Projet ouvert : ${file.name}`);
+}
+// ---------------- Page reloaded (F5): back to the session the server still holds ----------------
+// The image, masks and result live in a server session known only by SID: when the page leaves,
+// the state it needs to find it again is kept in sessionStorage (one per tab, so each tab gets
+// its own photo back); the reloaded page asks the server for that session. Server restarted: the
+// current version is reopened from its snapshot when it was saved, otherwise the page starts empty.
+const RESUME_KEY = "overspraylab.resume";
+function saveResume() {
+  if (!SID) return;
+  try {
+    sessionStorage.setItem(RESUME_KEY, JSON.stringify({
+      sid: SID, ui: uiState(), name: PROJECT_NAME, note: PROJECT_NOTE, file: IMG_FILE,
+      upToDate: !!LAST && !DIRTY && CALC_KEY === snapKey(), saved: isSaved(), snapKey: SNAP_KEY,
+      dir: PROJ.dir, snap: PROJ.current, view: VIEW, kind: maskKind(), zone: ZONE_CUR, flat: FLAT_CUR,
+      zobj: { ...ZOBJ }, silObj: !!MASK_OBJ.silhouette, flatObj: !!MASK_OBJ.flat }));
+  } catch (e) { /* storage unavailable: the reloaded page starts empty */ }
+}
+async function resumeSession() {
+  let s = null;
+  try { s = JSON.parse(sessionStorage.getItem(RESUME_KEY) || "null"); sessionStorage.removeItem(RESUME_KEY); } catch (e) { s = null; }
+  if (!s || !s.sid) return;
+  let j = null;
+  try {
+    const r = await fetch("/api/session/resume", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ id: s.sid }) });
+    if (r.ok) j = await r.json();
+  } catch (e) { j = null; }
+  if (!j) {                          // server restarted: back to the last snapshot of the version, if any
+    if (!(s.dir && s.snap)) return status("Session précédente perdue (serveur redémarré) : rouvrez le projet ou rechargez l'image", true);
+    await openSnapshot(s.dir, s.snap);
+    if (!s.saved && SID) status(`Serveur redémarré : snapshot ${s.snap} rouverte, les modifications faites depuis sont perdues`, true);
+    return;
+  }
+  status("Reprise de la session…");
+  j.project_name = s.name || j.project_name;
+  j.project_note = s.note ?? j.project_note;
+  if (s.ui) j.info = { projet: { interface: s.ui } };
+  if (j.computed && !s.upToDate) j.computed = null;        // settings changed since: computed again
+  await applyOpened(j, s.file || j.filename);
+  SNAP_KEY = s.saved ? snapKey() : (s.snapKey ?? null);
+  Object.assign(ZOBJ, s.zobj || {}); MASK_OBJ.silhouette = !!s.silObj; MASK_OBJ.flat = !!s.flatObj;
+  if (s.flat && (FLAT_COVS[s.flat] > 0 || flatTargets().some(t => t.id === s.flat))) flatSelect(s.flat);
+  if (s.zone && zState().zones.some(z => z.id === s.zone)) zoneSelect(s.zone);
+  if (s.view && $("tabs").querySelector(`button[data-v="${s.view}"]`)) VIEW = s.view;
+  if (s.kind && [...$("maskKind").options].some(o => o.value === s.kind)) $("maskKind").value = s.kind;
+  render(); renderSnaps();
+  status("Session reprise après le rechargement de la page");
 }
 // Session opened from a project (zip or snapshot): image, settings, masks; the computed result of
 // a snapshot is shown as it was (no computation), otherwise it is computed.

@@ -104,6 +104,10 @@ Hard-won constraints, verified by the author in Silhouette Studio – do not "cl
   choice), to be dealt with later.
 - The client compares `snapKey()` with the key saved at the last snapshot / opening to know whether
   the current version is saved; display-only options (`VIEW_ONLY`) are not changes.
+- Page reload (F5): `saveResume` (pagehide) keeps the SID and the interface state in sessionStorage
+  (per tab); `resumeSession` asks `/api/session/resume` for the session still in memory, or reopens
+  the version's last snapshot once the server was restarted. Client state that must survive a reload
+  and is not in `uiState()` goes into `saveResume`.
 
 ## Testing in the browser
 

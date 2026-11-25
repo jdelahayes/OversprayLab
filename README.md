@@ -187,6 +187,8 @@ difference (ΔE).
 - The **Project** section holds the project name and a free **note** (paints, support, ideas…),
   both kept with the project rather than with each snapshot.
 - **Undo / redo** (Ctrl + Z / Ctrl + Y) covers settings and painted masks.
+- Reloading the page (F5) gets the current work back (image, masks, settings, result) as long as
+  the server keeps running; after a restart, the last snapshot of the project is reopened.
 - Your own supports, materials, mats, machines and palettes are saved as presets.
 
 ---
