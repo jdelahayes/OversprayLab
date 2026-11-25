@@ -702,13 +702,16 @@ def compute(sess, data):
     recolored = (sess.get("result") is not None and same_masks and pl.colors_only(p) and old[0] == geom[0])
     # Only the manual bridges changed: only the layers whose manual bridges changed are computed
     # again (pl.rebridge), from what the build of the current result kept (sess["rebridge"])
+    # (the paints must be the same too: `geom` leaves them out, and rebridge keeps the colours of the
+    # layers it does not compute again)
     no_manual = lambda g: {k: v for k, v in g.items() if k != "manual_bridges"}
     rb = sess.get("rebridge")
     rebridged = None
     try:
         src_map = (lay.src_rect, (sess["img"].shape[1], sess["img"].shape[0]))
         if (not recolored and same_masks and rb is not None and rb[0] is sess.get("result")
-                and no_manual(old[0]) == no_manual(geom[0])):
+                and no_manual(old[0]) == no_manual(geom[0])
+                and (rb[0].params.layer_colors, rb[0].params.primer_color) == (p.layer_colors, p.primer_color)):
             rebridged = pl.rebridge(sess["result"], p, rb[1])
         if rebridged is not None:
             res, keep = rebridged
