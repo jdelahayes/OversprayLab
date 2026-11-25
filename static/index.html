@@ -8044,7 +8044,9 @@ function setupPaletteAssistant() {
     else if (a === "hueAdd") {
       const h = PA.S.hues.length ? PA.S.hues[PA.S.hues.length - 1] + 120 : 30;
       PA.S.hues.push((h + 360) % 360); PA.S.hueTones.push(null); PA.S.autoHues = false; PA.hueSel = PA.S.hues.length - 1; paChanged();
-    } else if (a === "reset") { PA.S = { ...PalGen.DEFAULTS, ...PalGen.STYLES.fidele, hues: [], hueTones: [] }; PA.locks = {}; paChanged(true); }
+    } else if (a === "reset") {   // the layers locked on their card stay locked
+      PA.S = { ...PalGen.DEFAULTS, ...PalGen.STYLES.fidele, hues: [], hueTones: [] }; PA.locks = {}; paLayerLocks(); paChanged(true);
+    }
   });
   box.addEventListener("dblclick", e => { if (e.target.closest("[data-pick]")) paApply(); });
   back.addEventListener("pointerdown", e => { if (e.target === back) paClose(); });
