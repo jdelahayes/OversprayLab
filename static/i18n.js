@@ -1207,6 +1207,18 @@ try {
     "Nombre de pochoirs (couleurs peintes), sans compter le support nu ni le pochoir de contours.": "Number of stencils (painted colours), not counting the bare support or the outline stencil.",
     "Importance de la teinte face à la clarté pour former les couches (mode couleur). 0 % = clarté seule ; 40 % = réglage d'origine (la clarté domine) ; 100 % = équilibre perceptif ; au-delà, les couleurs différentes sont séparées même à clarté égale. Sans effet en noir et blanc ou avec des seuils manuels.": "Importance of the hue against the lightness when forming the layers (colour mode). 0 % = lightness only; 40 % = original setting (lightness dominates); 100 % = perceptual balance; above, different colours are separated even at equal lightness. No effect in black and white or with manual thresholds.",
     "Couleurs calculées des couches (bouton Auto). Elles sont mesurées sur la photo d'origine, sans le prétraitement. 0 % = moyenne des pixels de chaque ton, souvent terne (les teintes voisines, ombres et reflets se compensent) ; 100 % = même teinte et même clarté, avec la saturation des pixels les plus vifs. Ne change pas la découpe. Sans effet en noir et blanc.": "Computed layer colours (Auto button). They are measured on the original photo, without the preprocessing. 0 % = mean of the pixels of each tone, often dull (neighbouring hues, shadows and highlights average out); 100 % = same hue and lightness, with the saturation of the most vivid pixels. Does not change the cut. No effect in black and white.",
+    "Réglage du détail": "Detail setting", "Expert": "Expert", "Lissage : passes": "Smoothing: passes", "Lissage : force": "Smoothing: strength",
+    "Simplification des formes (mm)": "Shape simplification (mm)", "Surface mini en plus (mm²)": "Extra minimum area (mm²)",
+    "Automatique : un seul curseur, le niveau de détail, règle le lissage, la simplification des formes et la surface mini en plus. Expert : ces réglages sont accessibles un par un (ils partent du niveau de détail actuel).":
+      "Automatic: a single slider, the level of detail, sets the smoothing, the shape simplification and the extra minimum area. Expert: these settings are available one by one (they start from the current level of detail).",
+    "Nombre de passes du lissage qui préserve les bords, avant le calcul des teintes : efface le grain et les petites variations de ton. 0 = pas de lissage.":
+      "Number of passes of the edge-preserving smoothing, before the tones are computed: removes grain and small variations of tone. 0 = no smoothing.",
+    "Force de chaque passe de lissage : plus haut = des écarts de couleur plus grands sont lissés et le lissage porte plus loin. Les bords nets restent.":
+      "Strength of each smoothing pass: higher = larger colour differences are smoothed and the smoothing reaches further. Sharp edges stay.",
+    "Rayon du vote majoritaire qui simplifie les zones de teinte : chaque point prend la teinte la plus présente autour de lui. Plus grand = contours plus arrondis, petites taches absorbées.":
+      "Radius of the majority vote that simplifies the tone zones: each point takes the tone most present around it. Larger = rounder outlines, small spots absorbed.",
+    "Surface ajoutée à la surface mini d'une pièce (matériau) : les pièces et les trous plus petits sont supprimés de chaque couche. 0 = surface mini du matériau seule.":
+      "Area added to the minimum area of a piece (material): smaller pieces and holes are removed from each layer. 0 = minimum area of the material only.",
     "Niveau de détail : bas = formes simples et lisses, haut = plus de petits détails (plus de découpe et de ponts).": "Level of detail: low = simple smooth shapes, high = more small details (more cutting and bridges).",
     "Couleur, noir et blanc, ou automatique (détecté selon l'image).": "Colour, black and white, or automatic (detected from the image).",
     "Cumulatif : chaque pochoir ouvre sa couleur et toutes les plus foncées (moins de raccords). Exclusif : chaque pochoir n'ouvre que sa couleur.": "Cumulative: each stencil opens its colour and all darker ones (fewer joins). Exclusive: each stencil opens only its colour.",
@@ -1411,9 +1423,9 @@ try {
     [/^Pochoir (\d+) \(traits\), (.+) : peinture (#[0-9a-f]{6})$/i, (m, n, w, c) => `Stencil ${n} (lines), ${SRC_EN(w)}: paint ${c}`],
     [/^Pochoir (\d+) \(traits\), (.+) : couleur automatique$/, (m, n, w) => `Stencil ${n} (lines), ${SRC_EN(w)}: automatic colour`],
     [/^Détails ([A-Z])$/, (m, g) => `Key details ${g}`],
-    [/^trait seul · (\d+) teintes? · détail (\d+)(?: · teinte (\d+) %)?(?: · vivacité (\d+) %)?(?: · aplats (\d+))?( · zones d'aplat)?$/, (m, n, d, h, v, f, z) =>
+    [/^trait seul · (\d+) teintes? · détail (\d+|expert)(?: · teinte (\d+) %)?(?: · vivacité (\d+) %)?(?: · aplats (\d+))?( · zones d'aplat)?$/, (m, n, d, h, v, f, z) =>
       `lines only · ${plural(n, "tone")} · detail ${d}${h ? ` · hue ${h} %` : ""}${v ? ` · vividness ${v} %` : ""}${f ? ` · flat areas ${f}` : ""}${z ? " · flat zones" : ""}`],
-    [/^(trait seul · )?(\d+) pochoirs? · détail (\d+)(?: · teinte (\d+) %)?(?: · vivacité (\d+) %)?(?: · aplats (\d+))?( · zones d'aplat)?$/, (m, l, n, d, h, v, f, z) =>
+    [/^(trait seul · )?(\d+) pochoirs? · détail (\d+|expert)(?: · teinte (\d+) %)?(?: · vivacité (\d+) %)?(?: · aplats (\d+))?( · zones d'aplat)?$/, (m, l, n, d, h, v, f, z) =>
       `${l ? "lines only · " : ""}${plural(n, "stencil")} · detail ${d}${h ? ` · hue ${h} %` : ""}${v ? ` · vividness ${v} %` : ""}${f ? ` · flat areas ${f}` : ""}${z ? " · flat zones" : ""}`],
     [/^Zones d'aplat : ([\d.]+) % de l'image — chaque zone séparée prend sa teinte principale \(tolérance (\d+)\)\.$/,
       (m, a, t) => `Flat zones: ${a} % of the image — each separate zone takes its main tone (tolerance ${t}).`],

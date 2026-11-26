@@ -83,6 +83,12 @@ class Params:
     n_layers: int = 3              # number of stencils
     color_mode: str = "auto"       # auto | color | gray
     detail: float = 50.0           # 0 (very simplified) .. 100 (very detailed)
+    # "auto": the four settings below follow `detail` (auto_detail); "expert": each one set by hand
+    detail_mode: str = "auto"
+    smooth_passes: int = 3         # edge-preserving smoothing passes before the tones are computed
+    smooth_strength: float = 50.0  # its strength, 0..100 (bilateral filter: colour 15..70, distance 3..9 px)
+    simplify_mm: float = 0.95      # radius of the majority filter that simplifies the tone zones, mm
+    detail_area_mm2: float = 7.5   # supplement of the minimum area of a piece or hole, mm²
     # weight of the hue (a*, b*) against the luminance when computing the tones (colour mode), %:
     # 0 = luminance only, ~100 = perceptual balance (ΔE76), 40 = historical weighting (default)
     hue_weight: float = 40.0
@@ -255,6 +261,13 @@ class Params:
         v = tols.get(zone, tols.get("auto", self.flat_tolerance)) if isinstance(tols, dict) else self.flat_tolerance
         return float(v)
 
+    def detail_settings(self) -> tuple[int, float, float, float]:
+        """(smoothing passes, smoothing strength 0..1, majority radius in mm, minimum area supplement
+        in mm²): derived from `detail` in auto mode, the expert settings otherwise."""
+        if self.detail_mode == "expert":
+            return self.smooth_passes, self.smooth_strength / 100.0, self.simplify_mm, self.detail_area_mm2
+        return auto_detail(self.detail)
+
     def flat_exempt_tones(self) -> set:
         """Tones whose forced flat zones ignore the detail supplement of the minimum area."""
         return {int(z[1:]) for z in self.flat_exempt.split(",") if z}
@@ -273,6 +286,12 @@ class Params:
                 setattr(p, f.name, v)
         p.n_layers = int(np.clip(p.n_layers, 1, 10))
         p.detail = float(np.clip(p.detail, 0, 100))
+        if p.detail_mode not in ("auto", "expert"):
+            p.detail_mode = "auto"
+        p.smooth_passes = int(np.clip(p.smooth_passes, 0, 6))
+        p.smooth_strength = float(np.clip(p.smooth_strength, 0, 100))
+        p.simplify_mm = float(np.clip(p.simplify_mm, 0, 5))
+        p.detail_area_mm2 = float(np.clip(p.detail_area_mm2, 0, 50))
         p.hue_weight = float(np.clip(p.hue_weight, 0, 300))
         p.color_vividness = float(np.clip(p.color_vividness, 0, 100))
         p.flat_auto = float(np.clip(p.flat_auto, 0, 100))
@@ -845,6 +864,13 @@ def parse_tone_colors(txt: str) -> dict[int, np.ndarray]:
     return out
 
 
+def auto_detail(detail: float) -> tuple[int, float, float, float]:
+    """Settings that follow the level of detail (0..100) in auto mode, see Params.detail_settings
+    (the client copies them into the expert settings: same formulas in index.html, autoDetail)."""
+    f = 1.0 - detail / 100.0
+    return 1 + int(round(f * 3)), f, 0.15 + f * 1.6, f * 15.0
+
+
 def parse_thresholds(txt: str) -> list[float]:
     out = []
     for t in str(txt or "").replace(";", ",").split(","):
@@ -883,14 +909,13 @@ def prepare(img: np.ndarray, p: Params, lay: Layout, fg_src: np.ndarray | None =
             fg = None
 
     gray = is_grayscale(src) if p.color_mode == "auto" else p.color_mode == "gray"
-    d = p.detail / 100.0
+    passes, strength, simplify_mm, _ = p.detail_settings()
 
-    # Edge-preserving smoothing, stronger when detail is low
+    # Edge-preserving smoothing (stronger and repeated when the level of detail is low)
     sm = resized.copy()
-    iters = 1 + int(round((1 - d) * 3))
-    for _ in range(iters):
+    for _ in range(passes):
         check_cancel()
-        sm = cv2.bilateralFilter(sm, 7, 15 + (1 - d) * 55, 3 + (1 - d) * 6)
+        sm = cv2.bilateralFilter(sm, 7, 15 + strength * 55, 3 + strength * 6)
     check_cancel()
 
     k = p.n_layers + (1 if p.skip_support else 0)
@@ -952,7 +977,7 @@ def prepare(img: np.ndarray, p: Params, lay: Layout, fg_src: np.ndarray | None =
         n_lab = len(centers)
 
     # Majority filter (shape simplification)
-    r = (0.15 + (1 - d) * 1.6) * p.px_per_mm
+    r = simplify_mm * p.px_per_mm
     before = labels
     labels = majority_filter(labels, n_lab, r)
     check_cancel()
@@ -3064,7 +3089,7 @@ def build(prep: Prepared, p: Params, outline_region: np.ndarray | None = None,
         d = np.linalg.norm(_lab(prep.palette) - _lab(support), axis=1)
         sup = int(np.argmin(d))
     color_ids = [i for i in range(n_colors) if i != sup]
-    extra_area = (1 - p.detail / 100.0) * 15.0
+    extra_area = p.detail_settings()[3]
     exempts = area_exempt(prep, p, color_ids)    # forced flat zones without the detail supplement
 
     def place(mask: np.ndarray) -> np.ndarray:

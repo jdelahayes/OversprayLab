@@ -105,6 +105,8 @@ measured on the original photo. For a deeper preparation of the source image, se
 
 - **Stencil style**: flat colours (one layer per tone) or **lines only** (a line drawing / colouring book).
 - **Level of detail**, **hue weight** (split colours of similar lightness), **colour vividness**.
+  In **expert** mode the level of detail is replaced by the four settings it drives: smoothing passes and
+  strength before the tones, shape simplification radius, and extra minimum area of a piece.
 - **Flat areas**: poster-like flat layers, automatic or painted zone by zone, optionally forced into a given layer
   (a forced zone can keep its small pieces: minimum piece area without the level-of-detail supplement).
 - **Stacking**: exclusive (each layer paints its own tone) or cumulative (layers overlap, forgiving registration).

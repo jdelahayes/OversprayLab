@@ -35,7 +35,8 @@ app.config["MAX_CONTENT_LENGTH"] = 2 * 1024 * 1024 * 1024
 SESSIONS: dict[str, dict] = {}
 LOCK = threading.Lock()
 
-PREP_KEYS = ("support_w_mm", "support_h_mm", "px_per_mm", "detail", "n_layers", "color_mode", "skip_support",
+# (+ the smoothing and simplification of Params.detail_settings: level of detail or expert settings)
+PREP_KEYS = ("support_w_mm", "support_h_mm", "px_per_mm", "n_layers", "color_mode", "skip_support",
              "pre_auto_levels", "pre_clahe", "pre_gamma", "pre_contrast", "pre_shadows", "pre_highlights",
              "pre_black", "pre_white", "pre_curve", "manual_thresholds", "thresholds", "pre_saturation", "pre_sharpen", "pre_remove_bg", "protect_lines", "hue_weight", "color_vividness",
              "flat_auto", "flat_tolerance", "flat_tolerances")
@@ -675,7 +676,8 @@ def compute(sess, data):
         p.bridges = False
     lay, warnings = pl.resolve_layout(p, sess["img"].shape)
     t0 = time.perf_counter()
-    key = (tuple(getattr(p, k) for k in PREP_KEYS) + (lay.src_rect, tuple(round(v, 3) for v in lay.vis_mm))
+    key = (tuple(getattr(p, k) for k in PREP_KEYS) + p.detail_settings()[:3]
+           + (lay.src_rect, tuple(round(v, 3) for v in lay.vis_mm))
            + ((sess.get("fg_ver", 0),) if p.pre_remove_bg else ()) + (sess.get("flat_ver", 0),))
     if sess.get("prep_key") != key:
         sess["prep"] = pl.prepare(sess["img"], p, lay, sess.get("fg") if p.pre_remove_bg else None,

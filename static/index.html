@@ -1165,8 +1165,23 @@
       <div class="nchips" id="nLayerChips" role="group" aria-label="Nombre de pochoirs"></div>
       <input type="hidden" id="n_layers" value="3">
       <div class="reco" id="reco" hidden></div>
-      <label class="row">Niveau de détail <span class="v" id="detail_v"></span>
+      <label class="row sel" for="detail_mode">Réglage du détail
+        <select id="detail_mode">
+          <option value="auto">Automatique</option>
+          <option value="expert">Expert</option>
+        </select></label>
+      <label class="row" id="detailRow">Niveau de détail <span class="v" id="detail_v"></span>
         <input type="range" id="detail" min="0" max="100" value="50"></label>
+      <div id="detailExpert" hidden>
+        <label class="row">Lissage : passes <span class="v" id="smooth_passes_v"></span>
+          <input type="range" id="smooth_passes" min="0" max="6" step="1" value="3"></label>
+        <label class="row">Lissage : force <span class="v" id="smooth_strength_v"></span>
+          <input type="range" id="smooth_strength" min="0" max="100" step="1" value="50"></label>
+        <label class="row">Simplification des formes (mm) <span class="v" id="simplify_mm_v"></span>
+          <input type="range" id="simplify_mm" min="0" max="3" step="0.01" value="0.95"></label>
+        <label class="row">Surface mini en plus (mm²) <span class="v" id="detail_area_mm2_v"></span>
+          <input type="range" id="detail_area_mm2" min="0" max="30" step="0.05" value="7.5"></label>
+      </div>
     </div>
     <div class="subhead">Couleurs</div>
     <div class="ogroup">
@@ -1896,7 +1911,7 @@ const PARAMS = ["support_w_mm", "support_h_mm", "support_color", "inner_margin_m
   "pre_auto_levels", "pre_clahe", "pre_contrast", "pre_shadows", "pre_highlights", "pre_black", "pre_white", "pre_gamma", "pre_curve",
   "manual_thresholds", "thresholds", "pre_saturation", "pre_sharpen", "pre_remove_bg",
   "layer_colors", "layer_effects", "manual_bridges",
-  "n_layers", "detail", "hue_weight", "color_vividness", "flat_auto", "flat_tolerance", "flat_tolerances", "flat_exempt", "color_mode", "layering", "skip_support", "fill_gaps", "under_darker", "protect_lines",
+  "n_layers", "detail", "detail_mode", "smooth_passes", "smooth_strength", "simplify_mm", "detail_area_mm2", "hue_weight", "color_vividness", "flat_auto", "flat_tolerance", "flat_tolerances", "flat_exempt", "color_mode", "layering", "skip_support", "fill_gaps", "under_darker", "protect_lines",
   "outline", "outline_target", "outline_exclusive", "outline_method", "outline_sensitivity", "outline_width_mm", "outline_min_length_mm", "outline_gap_every_mm", "outline_gap_mm", "outline_gap_jitter", "outline_subject", "outline_subject_mask", "outline_subject_pos", "outline_subject_width_mm", "outline_subject_min_length_mm", "outline_subject_weak", "outline_subject_de", "outline_subject_gap_every_mm", "outline_subject_gap_mm", "outline_subject_gap_jitter", "stencil_style", "line_zones", "line_zones_color", "line_zones_width_mm", "line_zones_min_length_mm", "line_zones_gap_every_mm", "line_zones_gap_mm", "line_zones_gap_jitter", "line_zones_width_max_mm", "line_zones_min_de", "line_zones_min_area_mm2", "line_zones_smooth_mm", "line_zones_pos", "line_zones_mask", "line_zones_frame", "line_sil_color", "outline_auto_color", "outline_color", "outline_zones", "outline_ref", "outline_whole_lines", "outline_line_sens", "outline_close_lines", "outline_channel", "outline_follow_mm", "outline_clahe",
   ...MAT_FIELDS, "merge_amount", "merge_channel_mm", "merge_channels", "merge_islands", "merge_line_islands",
   "tolerance_mm", "smooth_curves", "spray_mm", "px_per_mm", "px_per_mm_auto"];
@@ -2792,7 +2807,7 @@ function setVals(o) {
   if (!$("support_preset").value) { $("support_preset").value = "custom"; syncPresetFromSize(); }   // ★ support absent here
   syncSheetMode(); syncStockPreset(); syncMat();   // state of the fields, sheet, cutting mat and material sheet
   syncPrimer();
-  methodHint(); syncStyle(); renderFx(true); zonesAfterLoad();
+  methodHint(); syncStyle(); syncDetailMode(); renderFx(true); zonesAfterLoad();
   // settings saved before per-mask flat tolerances: "auto" = the loaded flat_tolerance
   if (o && "flat_tolerance" in o && !("flat_tolerances" in o)) $("flat_tolerances").value = JSON.stringify({ auto: +o.flat_tolerance });
   flatTolToField();
@@ -3045,7 +3060,7 @@ function restoreSettings() {
   return true;
 }
 function showValues() {
-  ["n_layers", "detail", "hue_weight", "color_vividness", "flat_auto", "flat_tolerance", "tolerance_mm", "spray_mm", "px_per_mm", "image_scale", "image_pos_x", "image_pos_y", "outline_sensitivity", "outline_clahe", "pre_clahe", "pre_contrast", "pre_shadows", "pre_highlights", "pre_black", "pre_white", "pre_gamma", "pre_saturation", "pre_sharpen", "merge_amount"].forEach(k => {
+  ["n_layers", "detail", "smooth_passes", "smooth_strength", "simplify_mm", "detail_area_mm2", "hue_weight", "color_vividness", "flat_auto", "flat_tolerance", "tolerance_mm", "spray_mm", "px_per_mm", "image_scale", "image_pos_x", "image_pos_y", "outline_sensitivity", "outline_clahe", "pre_clahe", "pre_contrast", "pre_shadows", "pre_highlights", "pre_black", "pre_white", "pre_gamma", "pre_saturation", "pre_sharpen", "merge_amount"].forEach(k => {
     const o = $(k + "_v");
     if (o) o.textContent = k.startsWith("image_") ? (+$(k).value).toFixed(1) : k === "pre_gamma" ? (+$(k).value).toFixed(2) : $(k).value;
   });
@@ -3093,7 +3108,7 @@ const SECTION_SUMMARY = {
     if (val("pre_remove_bg")) a.push("fond supprimé");
     return a.length ? a.join(" · ") : "aucun";
   },
-  "Simplification": () => (val("stencil_style") === "line" ? `trait seul · ${val("n_layers")} teinte${val("n_layers") > 1 ? "s" : ""}` : `${val("n_layers")} pochoir${val("n_layers") > 1 ? "s" : ""}`) + ` · détail ${val("detail")}` +
+  "Simplification": () => (val("stencil_style") === "line" ? `trait seul · ${val("n_layers")} teinte${val("n_layers") > 1 ? "s" : ""}` : `${val("n_layers")} pochoir${val("n_layers") > 1 ? "s" : ""}`) + ` · détail ${val("detail_mode") === "expert" ? "expert" : val("detail")}` +
     (val("hue_weight") !== 40 ? ` · teinte ${val("hue_weight")} %` : "") +
     (val("color_vividness") > 0 ? ` · vivacité ${val("color_vividness")} %` : "") +
     (val("flat_auto") > 0 ? ` · aplats ${val("flat_auto")}` : "") + (!flatEmpty() ? " · zones d'aplat" : ""),
@@ -3242,6 +3257,11 @@ const TIPS = {
   sheet_outline: "Découpe aussi le contour de la feuille (sinon seules les ouvertures et les repères sont découpés).",
   n_layers: "Nombre de pochoirs (couleurs peintes), sans compter le support nu ni le pochoir de contours.",
   detail: "Niveau de détail : bas = formes simples et lisses, haut = plus de petits détails (plus de découpe et de ponts).",
+  detail_mode: "Automatique : un seul curseur, le niveau de détail, règle le lissage, la simplification des formes et la surface mini en plus. Expert : ces réglages sont accessibles un par un (ils partent du niveau de détail actuel).",
+  smooth_passes: "Nombre de passes du lissage qui préserve les bords, avant le calcul des teintes : efface le grain et les petites variations de ton. 0 = pas de lissage.",
+  smooth_strength: "Force de chaque passe de lissage : plus haut = des écarts de couleur plus grands sont lissés et le lissage porte plus loin. Les bords nets restent.",
+  simplify_mm: "Rayon du vote majoritaire qui simplifie les zones de teinte : chaque point prend la teinte la plus présente autour de lui. Plus grand = contours plus arrondis, petites taches absorbées.",
+  detail_area_mm2: "Surface ajoutée à la surface mini d'une pièce (matériau) : les pièces et les trous plus petits sont supprimés de chaque couche. 0 = surface mini du matériau seule.",
   hue_weight: "Importance de la teinte face à la clarté pour former les couches (mode couleur). 0 % = clarté seule ; 40 % = réglage d'origine (la clarté domine) ; 100 % = équilibre perceptif ; au-delà, les couleurs différentes sont séparées même à clarté égale. Sans effet en noir et blanc ou avec des seuils manuels.",
   color_vividness: "Couleurs calculées des couches (bouton Auto). Elles sont mesurées sur la photo d'origine, sans le prétraitement. 0 % = moyenne des pixels de chaque ton, souvent terne (les teintes voisines, ombres et reflets se compensent) ; 100 % = même teinte et même clarté, avec la saturation des pixels les plus vifs. Ne change pas la découpe. Sans effet en noir et blanc.",
   color_mode: "Couleur, noir et blanc, ou automatique (détecté selon l'image).",
@@ -4276,6 +4296,11 @@ async function init() {
   ["outline_method", "outline_subject", "outline_subject_mask", "outline_subject_pos", "outline_subject_width_mm", "outline_subject_min_length_mm", "outline_subject_weak", "outline_subject_de", "outline_subject_gap_every_mm", "outline_subject_gap_mm", "outline_subject_gap_jitter", "outline_gap_every_mm", "outline_gap_mm", "outline_gap_jitter"].forEach(k => $(k).addEventListener("change", detectPreview));
   $("outline_subject_weak").addEventListener("change", syncSilhouetteSource);
   $("stencil_style").addEventListener("change", () => { syncStyle(); detectPreview(); });
+  $("detail_mode").addEventListener("change", () => {
+    // to expert: the settings start from the current level of detail (same result)
+    if (val("detail_mode") === "expert") Object.entries(autoDetail(val("detail"))).forEach(([k, v]) => { $(k).value = v; });
+    syncDetailMode(); showValues();
+  });
   $("line_zones").addEventListener("change", syncSilhouetteSource);
   $("outline").addEventListener("change", syncSilhouetteSource);
   const setHidden = (id, v) => { $(id).value = v; syncSilhouetteSource(); updateSummaries(); detectPreview(); schedule(); };
@@ -5764,6 +5789,16 @@ function syncSilhouetteSource() {
   $("lzMode").value = zc === "" || zc === "tones" ? zc : "custom";
   $("lzColor").hidden = $("lzMode").value !== "custom"; if (zc.startsWith("#")) $("lzColor").value = zc;
   $("lzBox").hidden = !val("line_zones");
+}
+// Level of detail, auto mode: the settings it sets (same formulas as pipeline.auto_detail)
+function autoDetail(detail) {
+  const f = 1 - detail / 100, r = (x, s) => Math.round(x / s) * s;
+  return { smooth_passes: 1 + Math.round(f * 3), smooth_strength: Math.round(f * 100),
+           simplify_mm: +r(0.15 + f * 1.6, 0.01).toFixed(2), detail_area_mm2: +r(f * 15, 0.05).toFixed(2) };
+}
+function syncDetailMode() {
+  const expert = val("detail_mode") === "expert";
+  $("detailRow").hidden = expert; $("detailExpert").hidden = !expert;
 }
 function syncStyle() {
   const line = val("stencil_style") === "line";
