@@ -7,8 +7,10 @@ __pycache__/
 presets_utilisateur.json
 *.tmp
 
-# Exports et fichiers temporaires
-*_pochoirs.zip
+# Imports
+imports/
+
+# Exports
 exports/
 
 # Photos de test personnelles
