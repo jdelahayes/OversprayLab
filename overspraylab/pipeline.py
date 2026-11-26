@@ -108,6 +108,9 @@ class Params:
     # section edit the mask shown); a mask without its own value takes "auto", which takes
     # `flat_tolerance` (settings saved before per-mask tolerances)
     flat_tolerances: str = ""
+    # flat masks forced into a layer ("t<tone>", comma-separated) whose pieces only need the minimum
+    # area of the material, without the supplement of the level of detail (small painted zones kept)
+    flat_exempt: str = ""
     # Outline stencil (key details faded by the airbrush blur)
     outline: bool = False
     outline_method: str = "canny"       # canny (sharp edges) | xdog (drawn line) | ridge (thin lines, centre line)
@@ -252,6 +255,10 @@ class Params:
         v = tols.get(zone, tols.get("auto", self.flat_tolerance)) if isinstance(tols, dict) else self.flat_tolerance
         return float(v)
 
+    def flat_exempt_tones(self) -> set:
+        """Tones whose forced flat zones ignore the detail supplement of the minimum area."""
+        return {int(z[1:]) for z in self.flat_exempt.split(",") if z}
+
     @classmethod
     def from_dict(cls, d: dict) -> "Params":
         p = cls()
@@ -280,6 +287,8 @@ class Params:
         tols.setdefault("auto", p.flat_tolerance)
         p.flat_tolerance = tols["auto"]
         p.flat_tolerances = json.dumps(dict(sorted(tols.items())))
+        p.flat_exempt = ",".join(sorted({z.strip() for z in p.flat_exempt.split(",")
+                                         if re.fullmatch(r"t\d{1,2}", z.strip())}, key=lambda z: int(z[1:])))
         if p.outline_subject_mask not in ("subject", "outline", "silhouette"):
             p.outline_subject_mask = "subject"
         if p.stencil_style not in ("fill", "line"):
@@ -534,12 +543,18 @@ def disk(r: float) -> np.ndarray:
     return cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (2 * r + 1, 2 * r + 1))
 
 
-def remove_small(mask: np.ndarray, min_px: int, keep_border: bool = False) -> np.ndarray:
-    """Removes (white) components with an area < min_px."""
+def remove_small(mask: np.ndarray, min_px: int, keep_border: bool = False,
+                 exempt: np.ndarray | None = None, exempt_px: int = 0) -> np.ndarray:
+    """Removes (white) components with an area < min_px. `exempt` (bool): the components that
+    overlap it only need `exempt_px`."""
     n, lab, stats, _ = cv2.connectedComponentsWithStats(mask, connectivity=8)
     if n <= 1:
         return mask
     keep = stats[:, cv2.CC_STAT_AREA] >= min_px
+    if exempt is not None and exempt_px < min_px:
+        hit = np.zeros(n, bool)
+        hit[np.unique(lab[exempt & (mask > 0)])] = True
+        keep |= hit & (stats[:, cv2.CC_STAT_AREA] >= exempt_px)
     keep[0] = False
     if keep_border:
         h, w = mask.shape
@@ -1287,7 +1302,10 @@ def flatten_zones(labels: np.ndarray, k: int, lab: np.ndarray, zones: np.ndarray
 # 3-4. Layers + cutting constraints
 # --------------------------------------------------------------------------
 
-def clean_mask(mask: np.ndarray, p: Params, extra_area_mm2: float = 0.0) -> np.ndarray:
+def clean_mask(mask: np.ndarray, p: Params, extra_area_mm2: float = 0.0,
+               exempt: tuple | None = None) -> np.ndarray:
+    """Material limits of a layer. `exempt`: (pieces, holes) bool masks or None (see `area_exempt`):
+    the pieces, resp. holes, that overlap them only need `min_area_mm2`, without `extra_area_mm2`."""
     check_cancel()
     ppm = p.px_per_mm
     m = mask
@@ -1300,12 +1318,32 @@ def clean_mask(mask: np.ndarray, p: Params, extra_area_mm2: float = 0.0) -> np.n
     check_cancel()
     amin = int((p.min_area_mm2 + extra_area_mm2) * ppm * ppm)
     if amin > 1:
-        m = remove_small(m, amin)
-        m = 255 - remove_small(255 - m, amin, keep_border=True)
+        a0 = int(p.min_area_mm2 * ppm * ppm)
+        pieces, holes = exempt if exempt is not None else (None, None)
+        m = remove_small(m, amin, exempt=pieces, exempt_px=a0)
+        m = 255 - remove_small(255 - m, amin, keep_border=True, exempt=holes, exempt_px=a0)
     return m
 
 
-def trim_taken(mask: np.ndarray, taken: np.ndarray, p: Params, extra_area_mm2: float = 0.0) -> np.ndarray:
+def area_exempt(prep: "Prepared", p: Params, color_ids: list) -> list:
+    """Per colour layer, the (pieces, holes) of `clean_mask` exempt from the detail supplement of the
+    minimum area: the forced flat zones chosen in `p.flat_exempt`, as pieces of the layers that paint
+    their tone and as holes of the others (a zone forced into a light layer inside a dark one, or
+    into the bare support). None for a layer without any."""
+    forced = prep.flat_forced_zones or {}
+    zones = {t: forced[t] for t in p.flat_exempt_tones() if t in forced}
+    out = []
+    for li, ci in enumerate(color_ids):
+        painted = set(color_ids[li:]) if p.layering == "cumulative" else {ci}
+        mine = [z for t, z in zones.items() if t in painted]
+        other = [z for t, z in zones.items() if t not in painted]
+        out.append(None if not zones else (np.logical_or.reduce(mine) if mine else None,
+                                            np.logical_or.reduce(other) if other else None))
+    return out
+
+
+def trim_taken(mask: np.ndarray, taken: np.ndarray, p: Params, extra_area_mm2: float = 0.0,
+               exempt: tuple | None = None) -> np.ndarray:
     """`mask` without `taken` (bool), then the material limits that only remove opening: the parts
     left thinner than the minimum opening or smaller than the minimum area are removed, only around
     what was taken (unlike clean_mask, never adds opening: what a layer gives up must stay given up)."""
@@ -1319,7 +1357,8 @@ def trim_taken(mask: np.ndarray, taken: np.ndarray, p: Params, extra_area_mm2: f
         t = cv2.morphologyEx(t, cv2.MORPH_OPEN, disk(r_open))
     amin = int((p.min_area_mm2 + extra_area_mm2) * ppm * ppm)
     if amin > 1:
-        t = remove_small(t, amin)
+        t = remove_small(t, amin, exempt=exempt[0] if exempt is not None else None,
+                         exempt_px=int(p.min_area_mm2 * ppm * ppm))
     gone = (m > 0) & (t == 0)
     if gone.any():
         near = cv2.dilate(taken.astype(np.uint8), disk(max(r_open, 1.0) * 2 + 1)) > 0
@@ -1330,12 +1369,13 @@ def trim_taken(mask: np.ndarray, taken: np.ndarray, p: Params, extra_area_mm2: f
 
 
 def exclusive_layers(masks: list, targets: list, p: Params, extra_area_mm2: float = 0.0,
-                     keep: dict | None = None) -> list:
+                     keep: dict | None = None, exempts: list | None = None) -> list:
     """Exclusive stacking: each spot painted by one layer only. A spot several layers paint (the
     material limits closing a narrow gap or filling a small hole of one layer over another one)
     stays with the layer whose tone it is (`targets`), else with the darkest of them; the others
     give it up (trim_taken), except a lighter layer when `p.under_darker` (painted under, hidden by
-    the darker one). `keep`: {layer: spots it keeps anyway} (the Overlap effect, on purpose)."""
+    the darker one). `keep`: {layer: spots it keeps anyway} (the Overlap effect, on purpose).
+    `exempts`: per layer, its exemptions of the minimum area (`area_exempt`)."""
     n = len(masks)
     if n < 2:
         return masks
@@ -1358,7 +1398,7 @@ def exclusive_layers(masks: list, targets: list, p: Params, extra_area_mm2: floa
         if keep and k in keep:
             take &= ~(keep[k] > 0)
         if take.any():
-            out[k] = trim_taken(masks[k], take, p, extra_area_mm2)
+            out[k] = trim_taken(masks[k], take, p, extra_area_mm2, exempts[k] if exempts else None)
     return out
 
 
@@ -3025,6 +3065,7 @@ def build(prep: Prepared, p: Params, outline_region: np.ndarray | None = None,
         sup = int(np.argmin(d))
     color_ids = [i for i in range(n_colors) if i != sup]
     extra_area = (1 - p.detail / 100.0) * 15.0
+    exempts = area_exempt(prep, p, color_ids)    # forced flat zones without the detail supplement
 
     def place(mask: np.ndarray) -> np.ndarray:
         full = np.zeros(sheet_shape, np.uint8)
@@ -3048,7 +3089,8 @@ def build(prep: Prepared, p: Params, outline_region: np.ndarray | None = None,
             t &= prep.fg
         targets.append(np.where(t, 255, 0).astype(np.uint8))
     # the layers are cleaned independently of each other: in parallel
-    cleaned_all = run_threads([(lambda t=t: clean_mask(t, p, extra_area)) for t in targets])
+    cleaned_all = run_threads([(lambda t=t, e=e: clean_mask(t, p, extra_area, e))
+                               for t, e in zip(targets, exempts)])
     if p.fill_gaps and p.layering == "exclusive" and cleaned_all:   # cumulative: the layer below shows
         cleaned_all, targets = fill_gaps(cleaned_all, targets, labels, prep.palette, color_ids, p)
 
@@ -3064,7 +3106,7 @@ def build(prep: Prepared, p: Params, outline_region: np.ndarray | None = None,
                                       fxmod.options(p.layer_effects), fx_under)
     excl = p.layering == "exclusive"
     if excl:                              # each spot painted by one layer only (material limits)
-        cleaned_all = exclusive_layers(cleaned_all, targets, p, extra_area, fx_under)
+        cleaned_all = exclusive_layers(cleaned_all, targets, p, extra_area, fx_under, exempts)
 
     paints = parse_layer_colors(p.layer_colors)
     colors = [paints.get(li + 1, prep.palette[ci]) for li, ci in enumerate(color_ids)]
@@ -3140,7 +3182,7 @@ def build(prep: Prepared, p: Params, outline_region: np.ndarray | None = None,
             line = (clean_mask(stroke, p) > 0) & (cleaned_all[li] > 0)
             for k in range(len(cleaned_all)):
                 if k != li and (cleaned_all[k][line] > 0).any():
-                    cleaned_all[k] = trim_taken(cleaned_all[k], line, p, extra_area)
+                    cleaned_all[k] = trim_taken(cleaned_all[k], line, p, extra_area, exempts[k])
                     targets[k] = np.where(line, np.uint8(0), targets[k])
                     pre_fx[k] = np.where(line, np.uint8(0), pre_fx[k])
 
@@ -3298,7 +3340,7 @@ def build(prep: Prepared, p: Params, outline_region: np.ndarray | None = None,
                 if (img_part & excluded).any() or (cleaned_all[li][excluded] > 0).any():
                     redo.append(li)
             for li in redo:
-                cleaned_all[li] = trim_taken(cleaned_all[li], excluded, p, extra_area)
+                cleaned_all[li] = trim_taken(cleaned_all[li], excluded, p, extra_area, exempts[li])
                 targets[li] = np.where(excluded, np.uint8(0), targets[li])
                 pre_fx[li] = np.where(excluded, np.uint8(0), pre_fx[li])
         todo = list(range(len(color_ids))) if p_first is not None else redo

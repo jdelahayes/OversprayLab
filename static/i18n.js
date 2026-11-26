@@ -371,6 +371,9 @@ try {
       "Opens the Masks tab on the Flat areas mask: paint or click (Object tool) each zone to fill with a single tone (face, background, clothing…). Each separate zone is processed on its own.",
     "Masque aplats": "Flat areas mask",
     "Zone d'aplat forcé": "Forced flat zone",
+    "Garder les petites zones (sans le supplément du niveau de détail)": "Keep small zones (without the level-of-detail supplement)",
+    "Pièces de cet aplat forcé gardées dès la surface mini d'une pièce (matériau), sans le supplément ajouté quand le niveau de détail est bas : les petites zones peintes restent dans la couche au lieu d'être absorbées par les couches voisines":
+      "Pieces of this forced flat area kept from the minimum piece area (material), without the supplement added when the level of detail is low: small painted zones stay in the layer instead of being absorbed by the neighbouring layers",
     "Résolution automatique : enfoncé, la résolution suit les limites du matériau (au moins 6 px sur la plus petite des deux largeurs minimales, ouverture ou bande de matière ; entre 6 et 12 px/mm). Relâché (clic ou curseur bougé), elle reste celle du curseur":
       "Automatic resolution: pressed, the resolution follows the material limits (at least 6 px across the smaller of the two minimum widths, opening or material strip; between 6 and 12 px/mm). Released (click or slider moved), it stays at the slider's value",
     "Résolution réglée à la main": "Resolution set by hand",
@@ -1446,6 +1449,7 @@ try {
     [/^écart à l'original jugé bon \(ΔE ([\d.]+) ≤ ([\d.]+)\)$/, (m, a, b) => `difference from original judged good (ΔE ${a} ≤ ${b})`],
     [/^\(contours( [A-Z])?\) ✎$/, (m, g) => `(outline${g || ""}) ✎`],
     [/^Couche (\d+)( \(contours\))?$/, (m, n, c) => `Layer ${n}${c ? " (outline)" : ""}`],
+    [/^(.+) — petites zones gardées$/, (m, n) => `${trAny(n) ?? n} — small zones kept`],
     [/^(.+) — tolérance (\d+(?:\.\d+)?)$/, (m, n, v) => `${trAny(n) ?? n} — tolerance ${v}`],
     [/^(.+) — tolérance générale$/, (m, n) => `${trAny(n) ?? n} — general tolerance`],
     [/^Couche (\d+)( \(contours\))? (#[0-9a-f]{6})$/i, (m, n, c, h) => `Layer ${n}${c ? " (outline)" : ""} ${h}`],
